@@ -1,0 +1,6 @@
+#pragma once
+
+namespace vkBasalt
+{
+    inline constexpr const char* shippedAntiCheatRulesIni = R"rules(@ANTICHEAT_RULES@)rules";
+}

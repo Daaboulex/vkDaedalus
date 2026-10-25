@@ -1,0 +1,29 @@
+{
+  "package": "vkdaedalus",
+  "upstream": {
+    "type": "none"
+  },
+  "packageFile": "flake.nix",
+  "hashes": [],
+  "verify": {
+    "binary": null,
+    "args": null,
+    "check": "wrapper"
+  },
+  "description": "vkDaedalus: Vulkan post-processing with an in-game overlay, frame generation control and multi-GPU offload",
+  "topics": [
+    "nix",
+    "nixos",
+    "flake",
+    "vkdaedalus",
+    "vkbasalt",
+    "vulkan",
+    "vulkan-layer",
+    "post-processing",
+    "reshade",
+    "wayland",
+    "overlay",
+    "imgui",
+    "gaming"
+  ]
+}

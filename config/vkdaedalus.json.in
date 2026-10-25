@@ -1,0 +1,22 @@
+{
+  "file_format_version" : "1.2.1",
+  "layer" : {
+    "name": "VK_LAYER_VKDAEDALUS_post_processing",
+    "type": "GLOBAL",
+    "library_path": "@ld_lib_dir_vkdaedalus@libvkdaedalus.so",
+    "library_arch": "@library_arch@",
+    "api_version": "@api_version@",
+    "implementation_version": "1",
+    "description": "a post processing layer with overlay UI",
+    "functions": {
+      "vkGetInstanceProcAddr": "vkDaedalus_GetInstanceProcAddr",
+      "vkGetDeviceProcAddr":   "vkDaedalus_GetDeviceProcAddr"
+    },
+    "enable_environment": {
+      "ENABLE_VKDAEDALUS": "1"
+    },
+    "disable_environment": {
+      "DISABLE_VKDAEDALUS": "1"
+    }
+  }
+}

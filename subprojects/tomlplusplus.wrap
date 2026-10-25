@@ -1,0 +1,8 @@
+[wrap-file]
+directory = tomlplusplus-1e8829b793b66ad17011732a146b8077d379b011
+source_url = https://github.com/marzer/tomlplusplus/archive/1e8829b793b66ad17011732a146b8077d379b011.tar.gz
+source_filename = tomlplusplus-1e8829b793b66ad17011732a146b8077d379b011.tar.gz
+source_hash = 8f6131576dbfd77c72d3073ad3969f2bda086961e15937ddb6dc9b4b4238ae01
+
+[provide]
+tomlplusplus = tomlplusplus_dep

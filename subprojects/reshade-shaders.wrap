@@ -1,0 +1,6 @@
+[wrap-file]
+directory = reshade-shaders-fd0022170615ce0d8162d219bff07232fa6dd84f
+source_url = https://github.com/crosire/reshade-shaders/archive/fd0022170615ce0d8162d219bff07232fa6dd84f.tar.gz
+source_filename = reshade-shaders-fd0022170615ce0d8162d219bff07232fa6dd84f.tar.gz
+source_hash = 11126166cc0250dfe2e05b1a5d33b618feb6436290dfadb0177a5f262a3bbff1
+patch_directory = reshade-shaders

@@ -1,0 +1,189 @@
+diff -ruN step17/source/effect_preprocessor.cpp step18/source/effect_preprocessor.cpp
+--- a/source/effect_preprocessor.cpp
++++ b/source/effect_preprocessor.cpp
+@@ -714,35 +714,17 @@
+ 	_output += "_Pragma(\"" + pragma + "\")\n";
+ }
+ 
+-void reshadefx::preprocessor::parse_include()
++std::filesystem::path reshadefx::preprocessor::resolve_include(const std::filesystem::path &source, const std::string &name, const std::vector<std::filesystem::path> &include_paths)
+ {
+-	const location keyword_location = std::move(_token.location);
+-
+-	while (accept(tokenid::identifier))
+-	{
+-		if (!evaluate_identifier_as_macro())
+-		{
+-			error(_token.location, "syntax error: unexpected identifier in #include");
+-			consume_until(tokenid::end_of_line);
+-			return;
+-		}
+-	}
+-
+-	if (!expect(tokenid::string_literal))
+-	{
+-		consume_until(tokenid::end_of_line);
+-		return;
+-	}
+-
+ 	// Shader packs are authored on Windows: their includes use backslashes, sometimes a leading
+ 	// ./, and casing that does not match the file on a case-sensitive filesystem.
+-	std::string include_name_str = _token.literal_as_string;
++	std::string include_name_str = name;
+ 	std::replace(include_name_str.begin(), include_name_str.end(), '\\', '/');
+ 	if (include_name_str.size() > 2 && include_name_str[0] == '.' && include_name_str[1] == '/')
+ 		include_name_str = include_name_str.substr(2);
+ 
+ 	std::filesystem::path file_name = std::filesystem::u8path(include_name_str);
+-	std::filesystem::path file_path = std::filesystem::u8path(_output_location.source);
++	std::filesystem::path file_path = source;
+ 	file_path.replace_filename(file_name);
+ 
+ 	std::error_code ec;
+@@ -752,12 +734,12 @@
+ 		// same pack as the file including it wins; failing that the one nearer the top of a search
+ 		// path wins, because a header sitting deeper is reached by its qualified name.
+ 		const std::filesystem::path current_path =
+-			std::filesystem::absolute(std::filesystem::u8path(_output_location.source), ec);
++			std::filesystem::absolute(source, ec);
+ 		std::filesystem::path best_path;
+ 		size_t best_shared = 0;
+ 		size_t best_depth = 0;
+ 
+-		for (const std::filesystem::path &include_path : _include_paths)
++		for (const std::filesystem::path &include_path : include_paths)
+ 		{
+ 			const std::filesystem::path candidate = include_path / file_name;
+ 			if (!std::filesystem::exists(candidate, ec))
+@@ -809,12 +791,12 @@
+ 			return false;
+ 		};
+ 
+-		std::filesystem::path expected_dir = std::filesystem::u8path(_output_location.source);
++		std::filesystem::path expected_dir = source;
+ 		expected_dir.replace_filename(file_name);
+ 		expected_dir = expected_dir.parent_path();
+ 
+ 		if (!try_case_insensitive(expected_dir))
+-			for (const std::filesystem::path &include_path : _include_paths)
++			for (const std::filesystem::path &include_path : include_paths)
+ 				if (try_case_insensitive((include_path / file_name).parent_path()))
+ 					break;
+ 
+@@ -824,17 +806,44 @@
+ 		if (!std::filesystem::exists(file_path, ec) && file_name.has_parent_path())
+ 		{
+ 			const std::filesystem::path bare_name = file_name.filename();
+-			for (const std::filesystem::path &include_path : _include_paths)
++			for (const std::filesystem::path &include_path : include_paths)
+ 				if (std::filesystem::exists(file_path = include_path / bare_name, ec))
+ 					break;
+ 
+ 			if (!std::filesystem::exists(file_path, ec))
+-				for (const std::filesystem::path &include_path : _include_paths)
++				for (const std::filesystem::path &include_path : include_paths)
+ 					if (try_case_insensitive(include_path))
+ 						break;
+ 		}
+ 	}
+ 
++	return file_path;
++}
++
++void reshadefx::preprocessor::parse_include()
++{
++	const location keyword_location = std::move(_token.location);
++
++	while (accept(tokenid::identifier))
++	{
++		if (!evaluate_identifier_as_macro())
++		{
++			error(_token.location, "syntax error: unexpected identifier in #include");
++			consume_until(tokenid::end_of_line);
++			return;
++		}
++	}
++
++	if (!expect(tokenid::string_literal))
++	{
++		consume_until(tokenid::end_of_line);
++		return;
++	}
++
++	const std::string include_name = _token.literal_as_string;
++	const std::filesystem::path file_path = resolve_include(std::filesystem::u8path(_output_location.source), include_name, _include_paths);
++	_include_resolutions.push_back({ _output_location.source, include_name, file_path.u8string() });
++
+ 	const std::string file_path_string = file_path.u8string();
+ 
+ 	// Detect recursive include and abort to avoid infinite loop
+@@ -854,7 +863,7 @@
+ 	else
+ 	{
+ 		if (!read_file(file_path, input))
+-			return error(keyword_location, "could not open included file '" + file_name.u8string() + '\'');
++			return error(keyword_location, "could not open included file '" + include_name + '\'');
+ 
+ 		_file_cache.emplace(file_path_string, input);
+ 	}
+@@ -1022,19 +1031,15 @@
+ 				if (!expect(tokenid::string_literal))
+ 					return false;
+ 
+-				std::filesystem::path file_name = std::filesystem::u8path(_token.literal_as_string);
+-				std::filesystem::path file_path = std::filesystem::u8path(_output_location.source);
+-				file_path.replace_filename(file_name);
++				const std::string exists_name = _token.literal_as_string;
+ 
+ 				if (has_parentheses && !expect(tokenid::parenthesis_close))
+ 					return false;
+ 
+-				std::error_code ec;
+-				if (!std::filesystem::exists(file_path, ec))
+-					for (const std::filesystem::path &include_path : _include_paths)
+-						if (std::filesystem::exists(file_path = include_path / file_name, ec))
+-							break;
++				const std::filesystem::path file_path = resolve_include(std::filesystem::u8path(_output_location.source), exists_name, _include_paths);
++				_include_resolutions.push_back({ _output_location.source, exists_name, file_path.u8string() });
+ 
++				std::error_code ec;
+ 				rpn[rpn_index++] = { std::filesystem::exists(file_path, ec) ? 1 : 0, false };
+ 				continue;
+ 			}
+diff -ruN step17/source/effect_preprocessor.hpp step18/source/effect_preprocessor.hpp
+--- a/source/effect_preprocessor.hpp
++++ b/source/effect_preprocessor.hpp
+@@ -85,6 +85,26 @@
+ 		std::vector<std::filesystem::path> included_files() const;
+ 
+ 		/// <summary>
++		/// One #include as it was resolved: the file that wrote it, the name it wrote, and the path it led to.
++		/// </summary>
++		struct include_resolution
++		{
++			std::string source;
++			std::string name;
++			std::string path;
++		};
++
++		/// <summary>
++		/// Resolves an #include name written in the file at source against a list of search paths, exactly as #include does.
++		/// </summary>
++		static std::filesystem::path resolve_include(const std::filesystem::path &source, const std::string &name, const std::vector<std::filesystem::path> &include_paths);
++
++		/// <summary>
++		/// Gets every #include this preprocessor resolved, in the order it met them.
++		/// </summary>
++		const std::vector<include_resolution> &include_resolutions() const { return _include_resolutions; }
++
++		/// <summary>
+ 		/// Gets a list of all defines that were used in #ifdef and #ifndef lines.
+ 		/// </summary>
+ 		std::vector<std::pair<std::string, std::string>> used_macro_definitions() const;
+@@ -154,5 +174,6 @@
+ 
+ 		std::vector<std::filesystem::path> _include_paths;
+ 		std::unordered_map<std::string, std::string> _file_cache;
++		std::vector<include_resolution> _include_resolutions;
+ 	};
+ }

@@ -1,0 +1,9 @@
+[wrap-file]
+directory = imgui-64944b4520b30772de8dbf0b37d0311746477a32
+source_url = https://github.com/ocornut/imgui/archive/64944b4520b30772de8dbf0b37d0311746477a32.tar.gz
+source_filename = imgui-64944b4520b30772de8dbf0b37d0311746477a32.tar.gz
+source_hash = e3bff91996d2e333aa60697b17e20c761fbd58c76f7712e2186b9a3215e341cb
+patch_directory = imgui
+
+[provide]
+imgui = imgui_dep

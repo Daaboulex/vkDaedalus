@@ -1,0 +1,10 @@
+[wrap-file]
+directory = reshade-7bf9de8b33bcc76c3177007e65d73c72dd0f34c0
+source_url = https://github.com/crosire/reshade/archive/7bf9de8b33bcc76c3177007e65d73c72dd0f34c0.tar.gz
+source_filename = reshade-7bf9de8b33bcc76c3177007e65d73c72dd0f34c0.tar.gz
+source_hash = e5468725a6b4ef6bfeb3cea9f2cb11173f90f7c8e1d60999d7e7765948810f79
+patch_directory = reshade
+diff_files = reshade/0001-keep-the-layer-deviations-of-the-resync.patch, reshade/0002-make-the-6-7-3-resync-beat-the-compiler-it-replaces.patch, reshade/0003-drop-decorations-left-behind-by-dead-code-stripping.patch, reshade/0004-declare-FragCoord-as-the-float4-it-has-to-be.patch, reshade/0005-resolve-an-include-a-pack-authored-for-a-subdirectory-instal.patch, reshade/0006-prefer-the-header-shipped-by-the-shader-s-own-pack.patch, reshade/0007-carry-a-boolean-varying-across-a-stage-boundary-as-an-intege.patch, reshade/0008-search-the-whole-shader-tree-preferring-the-header-nearer-it.patch, reshade/0009-stop-the-resync-quietly-halving-precision-inside-effects.patch, reshade/0010-brace-the-log10-constant-fully-so-clang-stays-quiet.patch, reshade/0011-per-effect-half-precision-offered-only-where-the-shader-decl.patch, reshade/0012-convert-a-boolean-varying-the-entry-point-returns.patch, reshade/0013-refuse-to-fold-int-min-divided-by-minus-one.patch, reshade/0014-emit-global-scope-code-into-a-discarded-block.patch, reshade/0015-own-the-lexer-so-an-exception-cannot-leak-it.patch, reshade/0016-bind-every-sampler-and-storage-at-its-module-index.patch, reshade/0017-keep-uniforms-with-a-source-in-the-uniform-buffer.patch, reshade/0018-record-how-each-include-resolved-so-a-cache-can-replay-it.patch
+
+[provide]
+reshade-fx = reshade_dep

@@ -1,0 +1,127 @@
+# ReShade shader compatibility
+
+Measured, not estimated. Every `.fx` in the shader packs listed below is compiled
+through this layer's own compile environment and the result recorded in
+`test/shader-corpus-baseline.txt`. The current counts are in the generated
+support table at the bottom of this file -- that table is the source of truth,
+regenerated from the baseline, and this hand-written part deliberately repeats
+no number from it.
+
+Every module the compiler emits is validated with `spirv-val`; a shader whose
+SPIR-V a driver would reject is demoted rather than reported green. Compiling
+is still not the same as rendering correctly -- see "What a green result
+claims" below.
+
+## What was tested
+
+The corpus is every package in ReShade's own official index,
+[`EffectPackages.ini`](https://github.com/crosire/reshade-shaders/blob/list/EffectPackages.ini)
+(`crosire/reshade-shaders`, `list` branch) — not a hand-picked selection. Every listed
+repository is pinned by revision and hash in `test/shader-corpus.lock.json`; the
+pins of 2026-10-05 hold all 44 at their default branch.
+
+Every directory under a pack's `Shaders` directory became an include path, as the
+layer resolves them, so cross-pack includes resolve as they would in a real install.
+
+akgunter/crt-royale-reshade, AlexTuduran/FGFX, AlucardDH/dh-reshade-shaders,
+AnastasiaGals/Ann-ReShade, BarbatosBachiko/Reshade-Shaders,
+BlueSkyDefender/AstrayFX, BlueSkyDefender/Depth3D, brussell1/Shaders,
+CeeJayDK/SweetFX, crosire/reshade-shaders, Daodan317081/reshade-shaders,
+EndlesslyFlowering/ReShade_HDR_shaders, Filoppi/PumboAutoHDR, FransBouma/OtisFX,
+Fubaxiusz/fubax-shaders, GimleLarpes/potatoFX, IAmTreyM/SHADERDECK,
+liuxd17thu/BX-Shade, LordKobra/CobraFX, LordOfLunacy/Insane-Shaders,
+luluco250/FXShaders, martymcmodding/iMMERSE, martymcmodding/METEOR,
+martymcmodding/qUINT, Matsilagi/RSRetroArch, MaxG2D/ReshadeSimpleHDRShaders,
+Mortalitas/GShade-Shaders, nullfrctl/reshade-shaders, originalnicodr/CorgiFX,
+outmode/rendepth-reshade, P0NYSLAYSTATION/Scaling-Shaders, papadanku/CShade,
+prod80/prod80-ReShade-Repository, PthoEastCoast/Ptho-FX, Radegast-FFXIV/Warp-FX,
+retroluxfilm/reshade-vrtoolkit, smolbbsoop/smolbbsoopshaders,
+umar-afzaal/LumeniteFX, vortigern11/vort_Shaders, yplebedev/BFBFX,
+Zenteon/ZenteonFX
+
+## Why a shader can be unsupported
+
+The per-shader reasons for every current failure are listed under
+"Unsupported" in the generated table. They fall into three classes:
+
+**Impossible for a Vulkan layer.** A shader that needs a game addon API (for
+example FFXIV's REST addon) asks for something no Vulkan layer can provide.
+
+**Rejected by ReShade itself.** A shader whose syntax current ReShade also
+refuses (its own `#error` gates, or constructs like branching on a vector that
+only DXC accepts) fails here for the same reason it fails there. `__RESHADE__`
+reports the level this build actually keeps (`src/reshade_fx_version.hpp`), so
+a shader demanding a newer runtime refuses to load and says which version it
+wants -- honest, where reporting a fake version once compiled shaders their
+authors had ruled out.
+
+**Refused with a named requirement.** Atomics addressing storage-image texels
+need typed `R32i`/`R32ui` storage this build does not bind; the compiler error
+is translated into that requirement instead of an unknown-identifier message.
+The translation reads the compiler's ERROR, never the shader source: scanning
+source for tokens refuses shaders that merely mention one in a comment, and
+measured on this corpus that costs working shaders.
+
+## What a green result claims
+
+Compiling to valid SPIR-V is verified for every shader by the corpus. Rendering
+correctly is a stronger claim that needs the shader run against a real game:
+"Supported, untested" marks compiler warnings worth checking in one. Two
+runtime guarantees back rendering: effect textures start zeroed (a missing
+`source` texture samples black, and temporal feedback loops start from zero
+instead of leftover video memory), and effects compute at full precision by
+default even where a shader asks for `half`, which avoids the flicker half
+precision causes in anything that accumulates. Shaders that declare
+reduced-precision math get a per-effect "Half precision" toggle in the overlay
+to opt into 16-bit for speed; it recompiles on the next automatic reload.
+
+## Reproducing this
+
+The corpus is a flake check against a recorded baseline, over packs pinned by
+revision and hash in `test/shader-corpus.lock.json`:
+
+```sh
+nix build .#checks.x86_64-linux.shader-corpus-matches-the-baseline   # or nix flake check
+nix run .#sync-corpus                                                # re-pin every pack, needs network
+cat "$(nix build --no-link --print-out-paths .#shader-corpus-verdicts)" > test/shader-corpus-baseline.txt
+```
+
+The check fetches the pinned packs as fixed-output sources, so it runs in the
+sandbox with no network. Any shader that changes verdict in either direction
+fails it and is printed; the last line records a new baseline once every change
+is explained.
+
+`tools/test_shaders.cpp` shares its compile environment with the layer through
+`src/reshade_fx_env.hpp`, so a result here is a result the layer would reproduce.
+
+<!-- BEGIN GENERATED SUPPORT TABLE -->
+
+Generated by `scripts/shader-support-table.sh` from `test/shader-corpus-baseline.txt`.
+Do not edit by hand.
+
+| state | count | what it means |
+| --- | --- | --- |
+| Supported | 475 | Compiles, and every module it emits passes `spirv-val`. |
+| Supported, untested | 37 | Same, but the compiler raised a warning worth checking in a game. |
+| Unsupported | 4 | Does not compile, or compiles to nothing the layer can run, for the reasons listed below. |
+
+Compiling to valid SPIR-V is verified for every shader here by the corpus.
+Rendering correctly is not: that needs the shader run against a real game,
+and a shader reading depth needs the depth buffer wired to show anything.
+
+### Supported, untested (37)
+
+ATMOSPHERE,AdaptiveTint BX_XChannelCurve,CRTCX CRTHyllian,CRTcgwg ColorIsolation2,CoolRetroTerminal Deconverge,DrawOverlay FILMDECK,JPEG LeiFX_OA,NTSC_XOT Phosphor,Pong RadiantGI,RemoveTint SnowScape,Stats cBloom,cBlurH cBlurV,cDots cFlow,cLetterBox cMotionBlur,cMotionStabilization cShares,cSpace dh_uber_rt,kDatamosh mdapt,scanlines-abs vt220,vt220_frame vt220_night
+
+### Unsupported (4)
+
+- `BX_XIV_ChromakeyPlus` needs the REST addon in Final Fantasy XIV under DirectX 11. A Vulkan layer cannot provide it.
+- `KeepUI` compiles to nothing until its KeepUIType preprocessor value names a mode, which it picks itself only in Final Fantasy XIV and The Sims 4.
+- `Template` from the dev pack declares no technique, so there is nothing to run; the SweetFX one of the same name is supported.
+- `smolbbsoop_HDR_Converter` declares only an empty error technique on an SDR back buffer, the one the corpus compiles for; it is meant for an HDR swapchain.
+
+### Supported (475)
+
+3DFX,3DToElse 4xBRZ,AO ASCII,AdaptiveColorGrading AdaptiveFog,AdaptiveTonemapper AdvancedAutoHDR,Anaglyph_to_SBS_or_TAB ArcaneBloom,AreaCopy AreaDiscard,ArtifactColors ArtisticVignette,AspectRatio AspectRatioComposition,AspectRatioMultiGrid AspectRatioSuite,BAYER BETA_ZenRCAO,BX_ToyCurveTool BaBa_DLAA-T,BaBa_Deband BaBa_FakeHDR,BaBa_Flow BaBa_Flow_Lite,BaBa_GI BaBa_Launcher,BaBa_MiAO BaBa_NeoSSAO,BaBa_Outline BaBa_PHDR,BaBa_SSR BaBa_SSR_Lite,BaBa_Sharpen_NIS BaBa_Sharpen_Neural,BaBa_Sharpen_Residual BaBa_VividTone,BaBa_XeGTAO BasicCRT,BeforeAfter Bessel_Bloom,BilateralCS BilateralComic,BloomingHDR Border,BulgePinch Bumpmapping,CA CAS,CEOG CMAA_2,CMYK CRT,CRT-Frutbunn CRT-NewPixie,CRT-Yee64 CRT-Yeetron,CRTAperture CRTCaligari,CRTEasymode CRTFakeLottes,CRTGeom CRTGeomMOD,CRTKurg CRTLottes,CRTLottes2 CRTPi,CRTPotatoCool CRTPotatoWarm,CRTRefresh CRTSim,CRT_Lottes CRT_Yee64,CRT_Yeetron CanvasFog,CanvasMask Cartoon,Cathode CathodeRayTube,Censor Checkerboard,ChromaSubSampling Chromakey,ChromaticAberration Chromaticity,ChromaticitySimplified CinematicDOF,Clarity Clarity2,CobraMask ColShift,ColorInversion ColorIsolation,ColorLab ColorMAME,ColorMask ColorMatrix,ColorMod ColorSort_CS,ColorToAlpha ColorfulPoster,Comic Compare,Composition Composition,ContrastSharpening ContrastStretch,ConvertColorSpace CrossProcess,CubeLUT1D CubeLUT3D,Cursor CurvedMonitor,Curves DH_UI_TextDetect,DINN DINN,DINN DLAA_Plus,DOSGame DPX,Daltonize Deband,Deblur DeepFry,Defocus Dehaze,DepthAlpha DepthDarkness,DepthHaze DepthSharpen,DepthSharpenStaticDof Depth_Cues,Depth_Tool Dimension_Plus,DirectionalDepthBlur DisplayDepth,DisplayMod Dither,DownsampleSSAA DropShadow,Droste Drunk,EGAfilter Emboss,Emphasize ExtendedLevels,EyeAdaption FGFXEnergyConservativeFilmGrain,FGFXFastCascadedSeparableBlur16X FGFXLargeScalePerceptualObscuranceIrradiance,FSR1_2X FXAA,FakeHDR FastSharpen,FilmGrain FilmicAnamorphSharpen,FilmicSharpen Fisheye,Fisheye Flair,Flashlight FlexibleCA,Flip Flipbook,FocalDOF FramerateLimiter,FreezeShot Frequency_CS,GAUSSIAN GI,GTU GaussianBloom,GaussianBlurCS GlobalAlpha,GloomAO GoldenRatio,GrainSpread Gravity,Gravity_CS Greyscale,GuestCRT HDRBloom,HDRMotionBlur HDRSaturation,Halation Halftone,Heightfog HexLensFlare,HotsamplingHelper HueFX,Image ImageAdjustment,ImageSharpening Interlaced,Interlacing LUT,LUTTools Layer,LensDistort Letterbox,LevelIO Levels,LiftGammaGain LightPersistance,Limbo_Mod LiquidLens,LocalContrast LocalContrastCS,LumaLines LumaSharpen,MAMEPostProc MBMB,MCAmber MCGreen,MCOrange MMJCelShader,MagicBorder MagicHDR,MagnifyingGlass MartysMods_CHROMATICABERRATION,MartysMods_FILMGRAIN MartysMods_FLOYDSTEINBERG,MartysMods_HALFTONE MartysMods_LAUNCHPAD,MartysMods_LOCALLAPLACIAN MartysMods_LONGEXPOSURE,MartysMods_MXAO MartysMods_NVSHARPEN,MartysMods_SCENEWEAVER MartysMods_SHARPEN,MartysMods_SMAA MartysMods_SOLARIS,MartysMods_TODDYHANCER MaskGlowAdvanced,MattiasCRT MeshEdges,MetaCRT MinimalColorGrading,MonitorGamma Monochrome,MotionFocus Mouse,MultiFX MultiLUT,MultiTonePoster N64_3Point,NFAA NTSCCustom,NTSC_RetroArch NTSC_RetroArch_NoScanlines,NeoBloom NormalMap,Nostalgia Oilify,OrtonBloom Overlay,PAL PD80_01A_RT_Correct_Contrast,PD80_01B_RT_Correct_Color PD80_01_Color_Gamut,PD80_02_Bloom PD80_02_Bonus_LUT_pack,PD80_02_Cinetools_LUT PD80_02_LUT_Creator,PD80_03_Color_Space_Curves PD80_03_Curved_Levels,PD80_03_Filmic_Adaptation PD80_03_Levels,PD80_03_Shadows_Midtones_Highlights PD80_04_BlacknWhite,PD80_04_Color_Balance PD80_04_Color_Gradients,PD80_04_Color_Isolation PD80_04_Color_Temperature,PD80_04_Contrast_Brightness_Saturation PD80_04_Magical_Rectangle,PD80_04_Saturation_Limit PD80_04_Selective_Color,PD80_04_Selective_Color_v2 PD80_04_Technicolor,PD80_05_Sharpening PD80_06_Chromatic_Aberration,PD80_06_Depth_Slicer PD80_06_Film_Grain,PD80_06_Luma_Fade PD80_06_Posterize_Pixelate,PPFX_Bloom PPFX_Godrays,PPFX_SSDO PS1Dither,PandaFX PatternShading,PerfectPerspective_Cinema PerfectPerspective_Dual,PerfectPerspective_Fisheye PiecewiseFilmicTonemap,Pirate_Bloom Pirate_Depth_DOF,Pirate_Depth_GI Pirate_FXAA,PixelShifter Polynomial_Barrel_Distortion_for_HMDs,PowerVR2 Prism,R57_PAL R57_PAL_NEW,RGBLCD RadialSlitScan,ReVeil RealLongExposure,Reinhard Rendepth,Resizer RetroCRT,RetroFog RetroTV,RetroTint Ripple,SCurve SMAA,Sepia SharpContrast,SimpleBloom SimpleGrain,Sketch SkySave,SlitScan SmartDeNoise,SmartNoise Smart_Sharp,SplicedRadials Splitscreen,Spotlight StageDepth,StageDepthPlus StageDepthPlus_WithDepthBufferMod,SunsetFilter SuperDepth3D,SuperDepth3D_WoWvx SurfaceBlur,Swirl TVCRTPixels,Technicolor Technicolor,Technicolor2 Template,Temporal_AA ThreeColorGradient,TiltShift TinyPlanet,Tonemap TrackingRays,Trails TripleMonitor,UIDetect UIMask,UIMaskCreator UniqFX_ConditionalUIMask,UniqFX_Demake UniqFX_DepthBlur,UniqFX_FakeBumpMap UnrealLens,Unsharp VHS,VHSPro VHS_RA,VRS_Map VRToolkit,Vectorscope VerticalPreviewer,Vibrance Vignette,VirtualNose VirtualResolution,WatchDogs Wave,Waveform WhitepointFixer,WinUaeMaskGlow ZebraLines,ZenWork Zenteon_ATA,Zenteon_FilmGrain Zenteon_Framework,Zenteon_LocalContrast Zenteon_Motion,Zenteon_PaletteMap Zenteon_SSAO_History,Zenteon_Sharpen Zenteon_TurboGI,Zenteon_XenonBloom ZigZag,anamorpho blur,cAutoExposure cCAS,cCheckerBoard cDLAA,cEnsor cFXAA,cGhost cLayer,cLens cLipse,cNoiseBlur cNormalize,cQuantize cRCAS,cSolidColor cThreshold,cTransform cmyk_halftone_dot,crt-nes-mini crt-royale,dh_Lain dh_ahoh,dh_ambient_remove dh_anime,dh_canvas dh_pastel_bug,dh_sync dh_uber_mask,dh_uber_motion dh_undither,dh_uniformity_correction faithful_composite_decode,faithful_composite_encode faithful_ntsc,hyperblur kContour,kMirror lcd-grid,lilium__blue_noise_dithering lilium__cas_hdr,lilium__filmgrain lilium__hdr_and_sdr_analysis,lilium__hdr_black_floor_fix lilium__hdr_brightness_adjustment,lilium__inverse_tone_mapping lilium__map_sdr_into_hdr,lilium__rcas_hdr lilium__sdr_trc_fix,lilium__test_pattern_generator lilium__tone_mapping,lumenite_AnamorphicBloom lumenite_Kernel,lumenite_LSAO lumenite_QuantAO,lumenite_QuantMotion lumenite_RTAO,lumenite_SSSR lumenite_TRAA,nGlide_3DFX ntsc,pCamera pColorNoise,pColors pPalettePosterize,qUINT_bloom qUINT_deband,qUINT_dof qUINT_lightroom,qUINT_mxao qUINT_sharp,qUINT_ssr scanlines-fract,sgenpt-mix shades_TFAA,smolbbsoop_RadialBlur vort_Motion,vort_Static zfast_crt
+
+<!-- END GENERATED SUPPORT TABLE -->

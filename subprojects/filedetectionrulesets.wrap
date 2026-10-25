@@ -1,0 +1,6 @@
+[wrap-file]
+directory = FileDetectionRuleSets-243cf741921d2c8fd6b844f83831edf4692cf788
+source_url = https://github.com/SteamDatabase/FileDetectionRuleSets/archive/243cf741921d2c8fd6b844f83831edf4692cf788.tar.gz
+source_filename = FileDetectionRuleSets-243cf741921d2c8fd6b844f83831edf4692cf788.tar.gz
+source_hash = 7591103362ac97a3eb84c09df4ecd07c0abe41e574276044123a0c78f6478c60
+patch_directory = filedetectionrulesets

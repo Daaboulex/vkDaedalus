@@ -1,0 +1,19 @@
+name: Maintenance
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  maintenance:
+    uses: Daaboulex/nix-packaging-standard/.github/workflows/package-maintenance.yml@release
+    with:
+      cadence: ${{ vars.MAINTENANCE_CADENCE || 'weekly' }}

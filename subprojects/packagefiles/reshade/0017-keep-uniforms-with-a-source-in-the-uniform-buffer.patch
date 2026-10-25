@@ -1,0 +1,13 @@
+diff -ruN step16/source/effect_codegen_spirv.cpp step17/source/effect_codegen_spirv.cpp
+--- a/source/effect_codegen_spirv.cpp
++++ b/source/effect_codegen_spirv.cpp
+@@ -1065,7 +1065,8 @@
+ 	}
+ 	id   define_uniform(const location &, uniform &info) override
+ 	{
+-		if (_uniforms_to_spec_constants && info.has_initializer_value)
++		if (_uniforms_to_spec_constants && info.has_initializer_value &&
++			std::none_of(info.annotations.begin(), info.annotations.end(), [](const annotation &a) { return a.name == "source"; }))
+ 		{
+ 			const id res = emit_constant(info.type, info.initializer_value, true);
+ 
