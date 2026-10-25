@@ -1,0 +1,45 @@
+#include "framebuffer.hpp"
+#include "logger.hpp"
+
+namespace vkBasalt
+{
+    std::vector<VkFramebuffer>
+    createFramebuffers(LogicalDevice* pLogicalDevice, VkRenderPass renderPass, VkExtent2D& extent, std::vector<std::vector<VkImageView>> imageViews)
+    {
+        if (imageViews.empty() || imageViews[0].empty())
+        {
+            Logger::warn("createFramebuffers: empty imageViews");
+            return {};
+        }
+        std::vector<VkFramebuffer> framebuffers(imageViews[0].size());
+        std::vector<VkImageView>   perFrameImageViews;
+        for (uint32_t i = 0; i < imageViews[0].size(); i++)
+        {
+            for (auto& iv : imageViews)
+            {
+                perFrameImageViews.push_back(iv[i]);
+            }
+
+            VkFramebufferCreateInfo framebufferCreateInfo;
+            framebufferCreateInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferCreateInfo.pNext           = nullptr;
+            framebufferCreateInfo.flags           = 0;
+            framebufferCreateInfo.renderPass      = renderPass;
+            framebufferCreateInfo.attachmentCount = perFrameImageViews.size();
+            framebufferCreateInfo.pAttachments    = perFrameImageViews.data();
+            framebufferCreateInfo.width           = extent.width;
+            framebufferCreateInfo.height          = extent.height;
+            framebufferCreateInfo.layers          = 1;
+
+            VkResult result = pLogicalDevice->vkd.CreateFramebuffer(pLogicalDevice->device, &framebufferCreateInfo, nullptr, &(framebuffers[i]));
+            if (result != VK_SUCCESS)
+            {
+                for (uint32_t created = 0; created < i; created++)
+                    pLogicalDevice->vkd.DestroyFramebuffer(pLogicalDevice->device, framebuffers[created], nullptr);
+                ASSERT_VULKAN(result);
+            }
+            perFrameImageViews.clear();
+        }
+        return framebuffers;
+    }
+}

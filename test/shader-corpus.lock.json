@@ -1,0 +1,274 @@
+{
+  "index": {
+    "owner": "crosire",
+    "repo": "reshade-shaders",
+    "rev": "43db9ad00584ff215f3baeb1fc5abba02b30f007",
+    "hash": "sha256-WM204+SvS135kdFCMU6019xL5JTNZ9TBqIxY+VhQa8o="
+  },
+  "packs": [
+    {
+      "owner": "akgunter",
+      "repo": "crt-royale-reshade",
+      "rev": "7ca7f7cbb7e7d016ca1756d0855879c3b7d0cc05",
+      "hash": "sha256-6pjAWXRbT9TSqpTg8bKWua/RJ4PAXKA9+dkPEpVuEoE="
+    },
+    {
+      "owner": "AlexTuduran",
+      "repo": "FGFX",
+      "rev": "dc5c60e6a2928983277fde979d255dea5b92bb84",
+      "hash": "sha256-FS4q7NNgnrcovlNTX3c4kYMlsIRhLOmfRWkdH7ayoDk="
+    },
+    {
+      "owner": "AlucardDH",
+      "repo": "dh-reshade-shaders",
+      "rev": "0783b8fde77df48412d79070be7de4bc3743b898",
+      "hash": "sha256-Dlml1zLy2BF5UWXq6ojhaoenCULjE4woN0xunLPIJiY="
+    },
+    {
+      "owner": "AnastasiaGals",
+      "repo": "Ann-ReShade",
+      "rev": "4aa95ee758ea0b984da93fe72788343b36a3e9b8",
+      "hash": "sha256-EG5YkEk0h24kuNIhQljGCA2taOSB5WOP1LwQmT6Bp7c="
+    },
+    {
+      "owner": "BarbatosBachiko",
+      "repo": "Reshade-Shaders",
+      "rev": "1adf127d81fc0fdb9941bfb32a93fb46cc594770",
+      "hash": "sha256-+h5YrcehnORRJhTvXclvxPOFUzemTjGWL2Pws3OP+gE="
+    },
+    {
+      "owner": "BlueSkyDefender",
+      "repo": "AstrayFX",
+      "rev": "59bae8b33e34f37a8e521e666864085ccbf08535",
+      "hash": "sha256-Lgm6QqNnL9sdJ8fCuBguezW7WScYcdmpEnxMChCpjko="
+    },
+    {
+      "owner": "BlueSkyDefender",
+      "repo": "Depth3D",
+      "rev": "d52d9fc5767a2562c9df1183010388f82c3b80e2",
+      "hash": "sha256-SZI7FWY6iAk9ZZZfBC46XlhmxCPIpf+BgIKFYmc5/9s="
+    },
+    {
+      "owner": "brussell1",
+      "repo": "Shaders",
+      "rev": "3869218ea004d4d7d5c596fbb6179e2d38c0cc55",
+      "hash": "sha256-RjgB+cM2VSk6dhoelv1YReKgcrW0iq0Ua7NXmV0QipY="
+    },
+    {
+      "owner": "CeeJayDK",
+      "repo": "SweetFX",
+      "rev": "93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361",
+      "hash": "sha256-7swuvINU8FvzT6SHj1U7av6H7p7Dxh5h0el7K7yUluE="
+    },
+    {
+      "owner": "crosire",
+      "repo": "reshade-shaders",
+      "rev": "fd0022170615ce0d8162d219bff07232fa6dd84f",
+      "hash": "sha256-etLUys7rIxZzEdvT6Kmj593+G/UaJWpHdSSnfMZWZTg="
+    },
+    {
+      "owner": "Daodan317081",
+      "repo": "reshade-shaders",
+      "rev": "f01ddb6f3dce6a8fb75ffb9fee878a1489edfc16",
+      "hash": "sha256-69jgQfuoV7pObUdSFCwDJzvWR8ijAX9W8TzJR+yIl44="
+    },
+    {
+      "owner": "dwojtasik",
+      "repo": "UniqFX",
+      "rev": "a957f17d876859ef513df2c0732a1d7e1d98eb6e",
+      "hash": "sha256-ZwTXMgjsr0jZBHpD8IzJj5n5Kfubkk8seJ/wWGiVlpg="
+    },
+    {
+      "owner": "EndlesslyFlowering",
+      "repo": "ReShade_HDR_shaders",
+      "rev": "b1ada21b27666aa0703c6f9b9d83c389e92063a1",
+      "hash": "sha256-ROZq1+eemm8+Vc/k6/8wYBGCR5cPye5O6YbtwGr/MN4="
+    },
+    {
+      "owner": "Filoppi",
+      "repo": "PumboAutoHDR",
+      "rev": "915ae162c7dc134a1835355507e2bf0a3fc2bd4e",
+      "hash": "sha256-I28FLyMEihLhE7ydRZjbkGnWFYHF3vh8cyCNBuEld8k="
+    },
+    {
+      "owner": "FransBouma",
+      "repo": "OtisFX",
+      "rev": "193aa0bf07ee82fbd5f142b5b813b19c5d169745",
+      "hash": "sha256-vP9on1fXVuP5zrEUU3tPNlTkftI7V84YPLebdNk2Yo0="
+    },
+    {
+      "owner": "Fubaxiusz",
+      "repo": "fubax-shaders",
+      "rev": "d902cc2e8216f10801019b02b09f7bd55449fd79",
+      "hash": "sha256-901Nia6BVBeioUlMEy9FphX+SShEsWjhg63xSSMMjBc="
+    },
+    {
+      "owner": "GimleLarpes",
+      "repo": "potatoFX",
+      "rev": "f55a022121688ce9e0d4534f676f1300f14dcb90",
+      "hash": "sha256-z0R0erjzBlfScaBX6IZE/0zQPU8eHph6fAp9fV/acLU="
+    },
+    {
+      "owner": "IAmTreyM",
+      "repo": "SHADERDECK",
+      "rev": "0a5eb37b1881c25f30c938c8b3f07a44406fff60",
+      "hash": "sha256-8duF5BZHFU8+s1w9lCyfeTr0Ev6ssuCWy8S7tT/ktaE="
+    },
+    {
+      "owner": "JakobPCoder",
+      "repo": "Reshade-Shades",
+      "rev": "d5378b1e13d6f06cd5e2d8b4ec08105f7bba313c",
+      "hash": "sha256-kiGnSNyxBRr7ht4RG8FCOwJmgVan4P0AD38sHslIxBU="
+    },
+    {
+      "owner": "liuxd17thu",
+      "repo": "BX-Shade",
+      "rev": "40f293d99bddca1518422551070d2157d60c3a30",
+      "hash": "sha256-jhWIMTWbAGyC0WR34Bp5SM4beMC0W8CxmaZbYOCB40Y="
+    },
+    {
+      "owner": "LordKobra",
+      "repo": "CobraFX",
+      "rev": "bf9295a7bb8ad1bc375aefc83ea447536b322e9a",
+      "hash": "sha256-vbmP2/aM28cxPL6IwkFKm6sbtMOyodvlLwySm3F7T0c="
+    },
+    {
+      "owner": "LordOfLunacy",
+      "repo": "Insane-Shaders",
+      "rev": "19397d503e2fbf1ad2cbedb35fbf2ee84a32e3ec",
+      "hash": "sha256-2tP0huDz+DBe9GusI2levldx4ilSapePjjiUCEGqOn8="
+    },
+    {
+      "owner": "luluco250",
+      "repo": "FXShaders",
+      "rev": "76365e35c48e30170985ca371e67d8daf8eb9a98",
+      "hash": "sha256-Ig8LyICXeo60Xq+4AfVh9FV904pMBPoQ0beUSLi48hY="
+    },
+    {
+      "owner": "martymcmodding",
+      "repo": "iMMERSE",
+      "rev": "f57d3afa1ebe5d1fd6152d4f6fb9a2e75bd1d1cb",
+      "hash": "sha256-xw92HIZVQx1H2h9/PYIPt5v7ew+NnxIf8lYcPM0PjVs="
+    },
+    {
+      "owner": "martymcmodding",
+      "repo": "METEOR",
+      "rev": "d5f372384823b0c518f0480a611b1699c6836dda",
+      "hash": "sha256-bLyXmq8IplA08ogRqxB5L/FZcl1aAd6RVbMCcve2W4o="
+    },
+    {
+      "owner": "martymcmodding",
+      "repo": "qUINT",
+      "rev": "98fed77b26669202027f575a6d8f590426c21ebd",
+      "hash": "sha256-nPraJgxDm1N9FIhrv0msI3B3it8uyzk6YoX25WY27gE="
+    },
+    {
+      "owner": "Matsilagi",
+      "repo": "RSRetroArch",
+      "rev": "73dc21fcc9f1e1d6e4bf0f1c5c95b882078d474d",
+      "hash": "sha256-FPbTlDvqilfHTAUDMAuLOu5JrMdW5yyIv3XoB4terSw="
+    },
+    {
+      "owner": "MaxG2D",
+      "repo": "ReshadeSimpleHDRShaders",
+      "rev": "c65253488d323a849f52c9495c197823b5c590f5",
+      "hash": "sha256-DvSNXndWwigyZDWNqrj0g/1/Y47DRslvP22fUtzwSWY="
+    },
+    {
+      "owner": "Mortalitas",
+      "repo": "GShade-Shaders",
+      "rev": "99abfa46d4b2ccd3810f7c09ccd776974eead9bc",
+      "hash": "sha256-LF3W8CB+S7Do/vLbLT4muifwxo1Ih3ii8gQDn/tmEKc="
+    },
+    {
+      "owner": "nullfrctl",
+      "repo": "reshade-shaders",
+      "rev": "3291901b39693b310fa4bf286dcc4e0495759021",
+      "hash": "sha256-WQTb4UJnZ9QUfFmlA+JZ+s/UCbmu0HNNoWkqDo/uuMY="
+    },
+    {
+      "owner": "originalnicodr",
+      "repo": "CorgiFX",
+      "rev": "c4cfbf9dd37f41bdd776688b6cc4c8157ce8e5c0",
+      "hash": "sha256-smW+A16epcpnYtp9rDe/T2VYGeo+Vr/yMiUu73QXxw0="
+    },
+    {
+      "owner": "outmode",
+      "repo": "rendepth-reshade",
+      "rev": "7b80c5e2dfac74d4ec1cdcbc016ac8b6c2dc104d",
+      "hash": "sha256-OOwrr2uni0BqvvPLQd8QEVgihBXTVwvxaTFA8VLLm3w="
+    },
+    {
+      "owner": "P0NYSLAYSTATION",
+      "repo": "Scaling-Shaders",
+      "rev": "272ab2d1d481fe3ab6c80b0871e36e04b730c1fe",
+      "hash": "sha256-oI/0H5YzeEIydgIfXhSz6gAwMlqUCA9JVxXi32XWy4E="
+    },
+    {
+      "owner": "papadanku",
+      "repo": "CShade",
+      "rev": "86b40b4d30fdbf458cbfad1f8c4c0466cc97e529",
+      "hash": "sha256-YNVJX4fvSyNo3FqAQEs6Ke+vwyNRQXH1aarCn6inaT4="
+    },
+    {
+      "owner": "prod80",
+      "repo": "prod80-ReShade-Repository",
+      "rev": "1c2ed5b093b03c558bfa6aea45c2087052e99554",
+      "hash": "sha256-EM9WxpbN0tUB9yjZFwWtY1l8um7jvMfC2eenEl2amF8="
+    },
+    {
+      "owner": "PthoEastCoast",
+      "repo": "Ptho-FX",
+      "rev": "b82b9551cc44d8682c43bbf71fdeced3645e1b28",
+      "hash": "sha256-ckiMsqM9Lm3nD8MvtTaKApyC/pZ6XVbvVLc+/nRWG04="
+    },
+    {
+      "owner": "Radegast-FFXIV",
+      "repo": "Warp-FX",
+      "rev": "ceb4cfe48b688126b891920259fe11745dd0ac32",
+      "hash": "sha256-de5M8/zhHQzro1/nN8KBE0Vu2tfocVoqux8r2T8GKVQ="
+    },
+    {
+      "owner": "retroluxfilm",
+      "repo": "reshade-vrtoolkit",
+      "rev": "4b62eb19623b6926040d5c17bb0ea9e9b9918c95",
+      "hash": "sha256-JigRukqmdcLhq6FflZoeXT84zq+JB74LGPrro9ixOEo="
+    },
+    {
+      "owner": "smolbbsoop",
+      "repo": "smolbbsoopshaders",
+      "rev": "0237ff4f268e6c4495788ca1409cf38e2b63e589",
+      "hash": "sha256-ib/r2cLEqIT9qH8839Rc3zl2VvJ9Xs7MwyyKBWk4Iec="
+    },
+    {
+      "owner": "umar-afzaal",
+      "repo": "LumeniteFX",
+      "rev": "f8cbbb4eccfcb7adf0d74bb358ba349272e3c1e9",
+      "hash": "sha256-ky20mAVhGkU3E4VD023VK+cdd4ybZZJDNqqF3GQDhts="
+    },
+    {
+      "owner": "vertver",
+      "repo": "verfx",
+      "rev": "8468c50db286454e38b04dae7a6d3c144e9fe434",
+      "hash": "sha256-AjVFJudAIhaoneWSKJRLKslCi3mUDXuLjxY+Jaut0FI="
+    },
+    {
+      "owner": "vortigern11",
+      "repo": "vort_Shaders",
+      "rev": "b410b9f0c0fbb83c8cb42164aaf1655fab386f4a",
+      "hash": "sha256-8Xf5RJbhacrpylZRwnrmgmP/06BqM/ulN/YLE+4uJ9g="
+    },
+    {
+      "owner": "yplebedev",
+      "repo": "BFBFX",
+      "rev": "51bf5d91d4bdaef677e3a47c0e8e29cee95e510b",
+      "hash": "sha256-ktmonIiY2CbHF6GTJ9WXCgKY7UUOpd4AhIt83I2BJzU="
+    },
+    {
+      "owner": "Zenteon",
+      "repo": "ZenteonFX",
+      "rev": "9fe75bdbaddc84ea5aab5d58fee83a2b9659f771",
+      "hash": "sha256-rxrfR3obAhoNEkX3kjRjiEGsoXzazizEclXSnZGXNk0="
+    }
+  ]
+}

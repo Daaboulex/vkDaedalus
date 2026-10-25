@@ -1,0 +1,49 @@
+diff -ruN step15/source/effect_codegen_spirv.cpp step16/source/effect_codegen_spirv.cpp
+--- a/source/effect_codegen_spirv.cpp
++++ b/source/effect_codegen_spirv.cpp
+@@ -471,7 +471,7 @@
+ 		}
+ 
+ 		// All annotation instructions
+-		for (spirv_instruction inst : _annotations.instructions)
++		for (const spirv_instruction &inst : _annotations.instructions)
+ 		{
+ 			if (inst.op == spv::OpDecorate)
+ 			{
+@@ -480,18 +480,6 @@
+ 					continue;
+ 				if (std::find(ids_in_removed_functions.begin(), ids_in_removed_functions.end(), inst.operands[0]) != ids_in_removed_functions.end())
+ 					continue;
+-
+-				// Replace bindings
+-				if (inst.operands[1] == spv::DecorationBinding)
+-				{
+-					if (const auto referenced_sampler_it = std::find(entry_point->referenced_samplers.begin(), entry_point->referenced_samplers.end(), inst.operands[0]);
+-						referenced_sampler_it != entry_point->referenced_samplers.end())
+-						inst.operands[2] = static_cast<uint32_t>(referenced_sampler_it - entry_point->referenced_samplers.begin());
+-					else
+-					if (const auto referenced_storage_it = std::find(entry_point->referenced_storages.begin(), entry_point->referenced_storages.end(), inst.operands[0]);
+-						referenced_storage_it != entry_point->referenced_storages.end())
+-						inst.operands[2] = static_cast<uint32_t>(referenced_storage_it - entry_point->referenced_storages.begin());
+-				}
+ 			}
+ 
+ 			inst.write(spirv);
+@@ -1053,7 +1041,7 @@
+ 	{
+ 		const id res = info.id = define_variable(loc, info.type, info.unique_name.c_str(), spv::StorageClassUniformConstant);
+ 
+-		// Default to a binding index equivalent to the entry in the sampler list (this is later overwritten in 'finalize_code_for_entry_point' to a more optimal placement)
++		// The binding is the index in the sampler list in every entry point, which is how the layer binds its descriptor set
+ 		const uint32_t default_binding = static_cast<uint32_t>(_module.samplers.size());
+ 		add_decoration(res, spv::DecorationBinding, { default_binding });
+ 		add_decoration(res, spv::DecorationDescriptorSet, { 1 });
+@@ -1066,7 +1054,7 @@
+ 	{
+ 		const id res = info.id = define_variable(loc, info.type, info.unique_name.c_str(), spv::StorageClassUniformConstant, format_to_image_format(tex_info.format));
+ 
+-		// Default to a binding index equivalent to the entry in the storage list (this is later overwritten in 'finalize_code_for_entry_point' to a more optimal placement)
++		// The binding is the index in the storage list in every entry point, which is how the layer binds its descriptor set
+ 		const uint32_t default_binding = static_cast<uint32_t>(_module.storages.size());
+ 		add_decoration(res, spv::DecorationBinding, { default_binding });
+ 		add_decoration(res, spv::DecorationDescriptorSet, { 2 });

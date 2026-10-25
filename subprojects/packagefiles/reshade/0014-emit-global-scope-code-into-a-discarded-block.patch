@@ -1,0 +1,13 @@
+diff -ruN step13/source/effect_codegen_spirv.cpp step14/source/effect_codegen_spirv.cpp
+--- a/source/effect_codegen_spirv.cpp
++++ b/source/effect_codegen_spirv.cpp
+@@ -214,7 +214,8 @@
+ 
+ 	std::vector<function_blocks> _functions_blocks;
+ 	std::unordered_map<id, spirv_basic_block> _block_data;
+-	spirv_basic_block *_current_block_data = nullptr;
++	spirv_basic_block _discarded_global_code;
++	spirv_basic_block *_current_block_data = &_discarded_global_code;
+ 
+ 	spv::Id _glsl_ext = 0;
+ 	spv::Id _global_ubo_type = 0;

@@ -1,0 +1,9 @@
+[wrap-file]
+directory = imgui-filebrowser-47a1884524d6a3df5d99f70ecc82e1ed0ccd26cf
+source_url = https://github.com/AirGuanZ/imgui-filebrowser/archive/47a1884524d6a3df5d99f70ecc82e1ed0ccd26cf.tar.gz
+source_filename = imgui-filebrowser-47a1884524d6a3df5d99f70ecc82e1ed0ccd26cf.tar.gz
+source_hash = 7499669c2e8302f276419fb67ab450aa8c7e7f516a44461d57a3eeb1bf134fac
+patch_directory = imgui-filebrowser
+
+[provide]
+imgui-filebrowser = imgui_filebrowser_dep

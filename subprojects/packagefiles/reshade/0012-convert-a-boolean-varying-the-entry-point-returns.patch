@@ -1,0 +1,24 @@
+diff -ruN step11/source/effect_codegen_spirv.cpp step12/source/effect_codegen_spirv.cpp
+--- a/source/effect_codegen_spirv.cpp
++++ b/source/effect_codegen_spirv.cpp
+@@ -1616,18 +1616,14 @@
+ 						.add(call_result)
+ 						.add(member_index);
+ 
+-				add_instruction_without_result(spv::OpStore)
+-					.add(result_var)
+-					.add(member_result);
++				store_varying(result_var, member.type, member_result);
+ 			}
+ 		}
+ 		else if (!func.return_type.is_void())
+ 		{
+ 			const spv::Id result_var = create_varying_variable(func.return_type, func.return_semantic, spv::StorageClassOutput);
+ 
+-			add_instruction_without_result(spv::OpStore)
+-				.add(result_var)
+-				.add(call_result);
++			store_varying(result_var, func.return_type, call_result);
+ 		}
+ 
+ 		// Add code to flip the output vertically

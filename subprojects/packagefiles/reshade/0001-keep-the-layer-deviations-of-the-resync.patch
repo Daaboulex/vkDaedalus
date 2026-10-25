@@ -1,0 +1,407 @@
+diff -ruN step0/source/effect_codegen_spirv.cpp step1/source/effect_codegen_spirv.cpp
+--- a/source/effect_codegen_spirv.cpp
++++ b/source/effect_codegen_spirv.cpp
+@@ -6,6 +6,11 @@
+ #include "effect_parser.hpp"
+ #include "effect_codegen.hpp"
+ #include <cassert>
++#include <stdexcept>
++#include <string>
++#undef assert
++#define assert(expr) ((expr) ? (void)0 : throw std::runtime_error("SPIR-V codegen assertion failed: " #expr " at " __FILE__ ":" + std::to_string(__LINE__)))
++
+ #include <cstring> // std::memcmp
+ #include <charconv> // std::from_chars
+ #include <algorithm> // std::find_if, std::max, std::sort
+@@ -2280,6 +2285,42 @@
+ 
+ 		return inst;
+ 	}
++	// Vulkan permits the non-constant Offset image operand only on a gather, so for a sample the
++	// offset is folded into the coordinate instead, normalised by the queried texel size.
++	spv::Id fold_offset_into_coords(const expression &sampler_exp, spv::Id coords, spv::Id offset, unsigned int components)
++	{
++		add_capability(spv::CapabilityImageQuery);
++
++		const type int_type = { type::t_int, components, 1 };
++		const type float_type = { type::t_float, components, 1 };
++
++		constant lod_data = {};
++		const spv::Id lod = emit_constant({ type::t_int, 1, 1 }, lod_data);
++
++		const spv::Id image = add_instruction(spv::OpImage, convert_image_type(sampler_exp.type))
++			.add(sampler_exp.base)
++			.result;
++		const spv::Id size = add_instruction(spv::OpImageQuerySizeLod, convert_type(int_type))
++			.add(image)
++			.add(lod)
++			.result;
++		const spv::Id size_float = add_instruction(spv::OpConvertSToF, convert_type(float_type))
++			.add(size)
++			.result;
++		const spv::Id offset_float = add_instruction(spv::OpConvertSToF, convert_type(float_type))
++			.add(offset)
++			.result;
++		const spv::Id delta = add_instruction(spv::OpFDiv, convert_type(float_type))
++			.add(offset_float)
++			.add(size_float)
++			.result;
++
++		return add_instruction(spv::OpFAdd, convert_type(float_type))
++			.add(coords)
++			.add(delta)
++			.result;
++	}
++
+ 	id   emit_call_intrinsic(const location &loc, id intrinsic, const type &res_type, const std::vector<expression> &args) override
+ 	{
+ #ifndef NDEBUG
+diff -ruN step0/source/effect_expression.cpp step1/source/effect_expression.cpp
+--- a/source/effect_expression.cpp
++++ b/source/effect_expression.cpp
+@@ -6,6 +6,11 @@
+ #include "effect_expression.hpp"
+ #include <cmath> // std::fmod
+ #include <cassert>
++#include <stdexcept>
++#include <string>
++#undef assert
++#define assert(expr) ((expr) ? (void)0 : throw std::runtime_error("expression assertion failed: " #expr " at " __FILE__ ":" + std::to_string(__LINE__)))
++
+ #include <cstring> // std::memcpy, std::memset
+ #include <algorithm> // std::max, std::min
+ 
+diff -ruN step0/source/effect_lexer.cpp step1/source/effect_lexer.cpp
+--- a/source/effect_lexer.cpp
++++ b/source/effect_lexer.cpp
+@@ -5,6 +5,11 @@
+ 
+ #include "effect_lexer.hpp"
+ #include <cassert>
++#include <stdexcept>
++#include <string>
++#undef assert
++#define assert(expr) ((expr) ? (void)0 : throw std::runtime_error("lexer assertion failed: " #expr " at " __FILE__ ":" + std::to_string(__LINE__)))
++
+ #include <charconv> // std::from_chars
+ #include <string_view>
+ #include <unordered_map> // Used for static lookup tables
+diff -ruN step0/source/effect_parser_exp.cpp step1/source/effect_parser_exp.cpp
+--- a/source/effect_parser_exp.cpp
++++ b/source/effect_parser_exp.cpp
+@@ -7,6 +7,11 @@
+ #include "effect_parser.hpp"
+ #include "effect_codegen.hpp"
+ #include <cassert>
++#include <stdexcept>
++#include <string>
++#undef assert
++#define assert(expr) ((expr) ? (void)0 : throw std::runtime_error("expression parser assertion failed: " #expr " at " __FILE__ ":" + std::to_string(__LINE__)))
++
+ #include <iterator> // std::back_inserter
+ #include <algorithm> // std::find_if, std::lower_bound, std::set_union
+ 
+diff -ruN step0/source/effect_parser_stmt.cpp step1/source/effect_parser_stmt.cpp
+--- a/source/effect_parser_stmt.cpp
++++ b/source/effect_parser_stmt.cpp
+@@ -9,6 +9,11 @@
+ #include <limits>
+ #include <cctype> // std::toupper
+ #include <cassert>
++#include <stdexcept>
++#include <string>
++#undef assert
++#define assert(expr) ((expr) ? (void)0 : throw std::runtime_error("statement parser assertion failed: " #expr " at " __FILE__ ":" + std::to_string(__LINE__)))
++
+ #include <iterator> // std::back_inserter
+ #include <algorithm> // std::max, std::replace, std::transform
+ #include <string_view>
+diff -ruN step0/source/effect_preprocessor.cpp step1/source/effect_preprocessor.cpp
+--- a/source/effect_preprocessor.cpp
++++ b/source/effect_preprocessor.cpp
+@@ -8,6 +8,11 @@
+ #include <limits>
+ #include <cstdio> // fclose, fopen, fread, fseek
+ #include <cassert>
++#include <stdexcept>
++#include <string>
++#undef assert
++#define assert(expr) ((expr) ? (void)0 : throw std::runtime_error("preprocessor assertion failed: " #expr " at " __FILE__ ":" + std::to_string(__LINE__)))
++
+ #include <algorithm> // std::find_if
+ 
+ #ifndef _WIN32
+@@ -729,7 +734,14 @@
+ 		return;
+ 	}
+ 
+-	std::filesystem::path file_name = std::filesystem::u8path(_token.literal_as_string);
++	// Shader packs are authored on Windows: their includes use backslashes, sometimes a leading
++	// ./, and casing that does not match the file on a case-sensitive filesystem.
++	std::string include_name_str = _token.literal_as_string;
++	std::replace(include_name_str.begin(), include_name_str.end(), '\\', '/');
++	if (include_name_str.size() > 2 && include_name_str[0] == '.' && include_name_str[1] == '/')
++		include_name_str = include_name_str.substr(2);
++
++	std::filesystem::path file_name = std::filesystem::u8path(include_name_str);
+ 	std::filesystem::path file_path = std::filesystem::u8path(_output_location.source);
+ 	file_path.replace_filename(file_name);
+ 
+@@ -739,6 +751,40 @@
+ 			if (std::filesystem::exists(file_path = include_path / file_name, ec))
+ 				break;
+ 
++	if (!std::filesystem::exists(file_path, ec))
++	{
++		const std::string target_filename = file_name.filename().string();
++		std::string target_lower = target_filename;
++		std::transform(target_lower.begin(), target_lower.end(), target_lower.begin(), ::tolower);
++
++		const auto try_case_insensitive = [&](const std::filesystem::path &search_dir) -> bool {
++			if (!std::filesystem::is_directory(search_dir, ec))
++				return false;
++			for (const auto &entry : std::filesystem::directory_iterator(search_dir, ec))
++			{
++				if (!entry.is_regular_file(ec))
++					continue;
++				std::string candidate_lower = entry.path().filename().string();
++				std::transform(candidate_lower.begin(), candidate_lower.end(), candidate_lower.begin(), ::tolower);
++				if (candidate_lower == target_lower)
++				{
++					file_path = entry.path();
++					return true;
++				}
++			}
++			return false;
++		};
++
++		std::filesystem::path expected_dir = std::filesystem::u8path(_output_location.source);
++		expected_dir.replace_filename(file_name);
++		expected_dir = expected_dir.parent_path();
++
++		if (!try_case_insensitive(expected_dir))
++			for (const std::filesystem::path &include_path : _include_paths)
++				if (try_case_insensitive((include_path / file_name).parent_path()))
++					break;
++	}
++
+ 	const std::string file_path_string = file_path.u8string();
+ 
+ 	// Detect recursive include and abort to avoid infinite loop
+@@ -999,6 +1045,9 @@
+ 
+ 		if (rpn_index >= STACK_SIZE)
+ 			return error(_token.location, "expression evaluator ran out of stack space"), false;
++
++		if (rpn_index >= STACK_SIZE)
++			return error(_token.location, "expression evaluator ran out of stack space"), false;
+ 
+ 		rpn[rpn_index++] = { op, true };
+ 	}
+diff -ruN step0/source/effect_symbol_table.cpp step1/source/effect_symbol_table.cpp
+--- a/source/effect_symbol_table.cpp
++++ b/source/effect_symbol_table.cpp
+@@ -5,6 +5,11 @@
+ 
+ #include "effect_symbol_table.hpp"
+ #include <cassert>
++#include <stdexcept>
++#include <string>
++#undef assert
++#define assert(expr) ((expr) ? (void)0 : throw std::runtime_error("symbol table assertion failed: " #expr " at " __FILE__ ":" + std::to_string(__LINE__)))
++
+ #include <malloc.h> // alloca
+ #include <algorithm> // std::upper_bound, std::sort
+ #include <functional> // std::greater
+diff -ruN step0/source/effect_symbol_table_intrinsics.inl step1/source/effect_symbol_table_intrinsics.inl
+--- a/source/effect_symbol_table_intrinsics.inl
++++ b/source/effect_symbol_table_intrinsics.inl
+@@ -1958,11 +1958,18 @@
+ 	type res_vector_type = res_type;
+ 	res_vector_type.rows = 4;
+ 
+-	const spv::Id res = add_instruction(spv::OpImageSampleImplicitLod, convert_type(res_vector_type))
+-		.add(args[0].base)
+-		.add(args[1].base)
+-		.add(args[2].is_constant ? spv::ImageOperandsConstOffsetMask : spv::ImageOperandsOffsetMask)
+-		.add(args[2].base);
++	const spv::Id sample_coords = args[2].is_constant
++		? args[1].base
++		: fold_offset_into_coords(args[0], args[1].base, args[2].base, res_type.rows == 1 ? 1 : 2);
++
++	spirv_instruction &sample_inst = add_instruction(spv::OpImageSampleImplicitLod, convert_type(res_vector_type))
++		.add(args[0].base)
++		.add(sample_coords)
++		.add(args[2].is_constant ? spv::ImageOperandsConstOffsetMask : 0)
++		;
++	if (args[2].is_constant)
++		sample_inst.add(args[2].base);
++	const spv::Id res = sample_inst.result;
+ 	if (res_type.rows == 1)
+ 		return
+ 		add_instruction(spv::OpCompositeExtract, convert_type(res_type))
+@@ -2054,11 +2061,18 @@
+ 	type res_vector_type = res_type;
+ 	res_vector_type.rows = 4;
+ 
+-	const spv::Id res = add_instruction(spv::OpImageSampleImplicitLod, convert_type(res_vector_type))
+-		.add(args[0].base)
+-		.add(args[1].base)
+-		.add(args[2].is_constant ? spv::ImageOperandsConstOffsetMask : spv::ImageOperandsOffsetMask)
+-		.add(args[2].base);
++	const spv::Id sample_coords = args[2].is_constant
++		? args[1].base
++		: fold_offset_into_coords(args[0], args[1].base, args[2].base, res_type.rows == 1 ? 1 : 2);
++
++	spirv_instruction &sample_inst = add_instruction(spv::OpImageSampleImplicitLod, convert_type(res_vector_type))
++		.add(args[0].base)
++		.add(sample_coords)
++		.add(args[2].is_constant ? spv::ImageOperandsConstOffsetMask : 0)
++		;
++	if (args[2].is_constant)
++		sample_inst.add(args[2].base);
++	const spv::Id res = sample_inst.result;
+ 	if (res_type.rows == 1)
+ 		return
+ 		add_instruction(spv::OpCompositeExtract, convert_type(res_type))
+@@ -2150,11 +2164,18 @@
+ 	type res_vector_type = res_type;
+ 	res_vector_type.rows = 4;
+ 
+-	const spv::Id res = add_instruction(spv::OpImageSampleImplicitLod, convert_type(res_vector_type))
+-		.add(args[0].base)
+-		.add(args[1].base)
+-		.add(args[2].is_constant ? spv::ImageOperandsConstOffsetMask : spv::ImageOperandsOffsetMask)
+-		.add(args[2].base);
++	const spv::Id sample_coords = args[2].is_constant
++		? args[1].base
++		: fold_offset_into_coords(args[0], args[1].base, args[2].base, res_type.rows == 1 ? 1 : 2);
++
++	spirv_instruction &sample_inst = add_instruction(spv::OpImageSampleImplicitLod, convert_type(res_vector_type))
++		.add(args[0].base)
++		.add(sample_coords)
++		.add(args[2].is_constant ? spv::ImageOperandsConstOffsetMask : 0)
++		;
++	if (args[2].is_constant)
++		sample_inst.add(args[2].base);
++	const spv::Id res = sample_inst.result;
+ 	if (res_type.rows == 1)
+ 		return
+ 		add_instruction(spv::OpCompositeExtract, convert_type(res_type))
+@@ -2234,13 +2255,16 @@
+ 	type res_vector_type = res_type;
+ 	res_vector_type.rows = 4;
+ 
+-	const spv::Id res = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
++	spirv_instruction &sample_inst = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
+ 		.add(args[0].base)
+ 		.add(args[1].base)
+-		.add(spv::ImageOperandsGradMask | (args[4].is_constant ? spv::ImageOperandsConstOffsetMask : spv::ImageOperandsOffsetMask))
++		.add(spv::ImageOperandsGradMask | (args[4].is_constant ? spv::ImageOperandsConstOffsetMask : 0))
+ 		.add(args[2].base)
+ 		.add(args[3].base)
+-		.add(args[4].base);
++		;
++	if (args[4].is_constant)
++		sample_inst.add(args[4].base);
++	const spv::Id res = sample_inst.result;
+ 	if (res_type.rows == 1)
+ 		return
+ 		add_instruction(spv::OpCompositeExtract, convert_type(res_type))
+@@ -2320,13 +2344,16 @@
+ 	type res_vector_type = res_type;
+ 	res_vector_type.rows = 4;
+ 
+-	const spv::Id res = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
++	spirv_instruction &sample_inst = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
+ 		.add(args[0].base)
+ 		.add(args[1].base)
+-		.add(spv::ImageOperandsGradMask | (args[4].is_constant ? spv::ImageOperandsConstOffsetMask : spv::ImageOperandsOffsetMask))
++		.add(spv::ImageOperandsGradMask | (args[4].is_constant ? spv::ImageOperandsConstOffsetMask : 0))
+ 		.add(args[2].base)
+ 		.add(args[3].base)
+-		.add(args[4].base);
++		;
++	if (args[4].is_constant)
++		sample_inst.add(args[4].base);
++	const spv::Id res = sample_inst.result;
+ 	if (res_type.rows == 1)
+ 		return
+ 		add_instruction(spv::OpCompositeExtract, convert_type(res_type))
+@@ -2406,13 +2433,16 @@
+ 	type res_vector_type = res_type;
+ 	res_vector_type.rows = 4;
+ 
+-	const spv::Id res = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
++	spirv_instruction &sample_inst = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
+ 		.add(args[0].base)
+ 		.add(args[1].base)
+-		.add(spv::ImageOperandsGradMask | (args[4].is_constant ? spv::ImageOperandsConstOffsetMask : spv::ImageOperandsOffsetMask))
++		.add(spv::ImageOperandsGradMask | (args[4].is_constant ? spv::ImageOperandsConstOffsetMask : 0))
+ 		.add(args[2].base)
+ 		.add(args[3].base)
+-		.add(args[4].base);
++		;
++	if (args[4].is_constant)
++		sample_inst.add(args[4].base);
++	const spv::Id res = sample_inst.result;
+ 	if (res_type.rows == 1)
+ 		return
+ 		add_instruction(spv::OpCompositeExtract, convert_type(res_type))
+@@ -2518,12 +2548,15 @@
+ 	type res_vector_type = res_type;
+ 	res_vector_type.rows = 4;
+ 
+-	const spv::Id res = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
++	spirv_instruction &sample_inst = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
+ 		.add(args[0].base)
+ 		.add(x)
+-		.add(spv::ImageOperandsLodMask | (args[2].is_constant ? spv::ImageOperandsConstOffsetMask : spv::ImageOperandsOffsetMask))
++		.add(spv::ImageOperandsLodMask | (args[2].is_constant ? spv::ImageOperandsConstOffsetMask : 0))
+ 		.add(lod)
+-		.add(args[2].base);
++		;
++	if (args[2].is_constant)
++		sample_inst.add(args[2].base);
++	const spv::Id res = sample_inst.result;
+ 	if (res_type.rows == 1)
+ 		return
+ 		add_instruction(spv::OpCompositeExtract, convert_type(res_type))
+@@ -2633,12 +2666,15 @@
+ 	type res_vector_type = res_type;
+ 	res_vector_type.rows = 4;
+ 
+-	const spv::Id res = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
++	spirv_instruction &sample_inst = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
+ 		.add(args[0].base)
+ 		.add(xy)
+-		.add(spv::ImageOperandsLodMask | (args[2].is_constant ? spv::ImageOperandsConstOffsetMask : spv::ImageOperandsOffsetMask))
++		.add(spv::ImageOperandsLodMask | (args[2].is_constant ? spv::ImageOperandsConstOffsetMask : 0))
+ 		.add(lod)
+-		.add(args[2].base);
++		;
++	if (args[2].is_constant)
++		sample_inst.add(args[2].base);
++	const spv::Id res = sample_inst.result;
+ 	if (res_type.rows == 1)
+ 		return
+ 		add_instruction(spv::OpCompositeExtract, convert_type(res_type))
+@@ -2750,12 +2786,15 @@
+ 	type res_vector_type = res_type;
+ 	res_vector_type.rows = 4;
+ 
+-	const spv::Id res = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
++	spirv_instruction &sample_inst = add_instruction(spv::OpImageSampleExplicitLod, convert_type(res_vector_type))
+ 		.add(args[0].base)
+ 		.add(xyz)
+-		.add(spv::ImageOperandsLodMask | (args[2].is_constant ? spv::ImageOperandsConstOffsetMask : spv::ImageOperandsOffsetMask))
++		.add(spv::ImageOperandsLodMask | (args[2].is_constant ? spv::ImageOperandsConstOffsetMask : 0))
+ 		.add(lod)
+-		.add(args[2].base);
++		;
++	if (args[2].is_constant)
++		sample_inst.add(args[2].base);
++	const spv::Id res = sample_inst.result;
+ 	if (res_type.rows == 1)
+ 		return
+ 		add_instruction(spv::OpCompositeExtract, convert_type(res_type))

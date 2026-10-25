@@ -1,0 +1,21 @@
+diff -ruN step12/source/effect_expression.cpp step13/source/effect_expression.cpp
+--- a/source/effect_expression.cpp
++++ b/source/effect_expression.cpp
+@@ -482,7 +482,7 @@
+ 		else if (type.is_signed()) {
+ 			for (unsigned int i = 0; i < type.components(); ++i)
+ 				// Integer modulo with zero on the other hand is not defined, so do not fold this expression in that case
+-				if (rhs.as_int[i] == 0)
++				if (rhs.as_int[i] == 0 || (rhs.as_int[i] == -1 && constant.as_int[i] == std::numeric_limits<int>::min()))
+ 					return false;
+ 				else
+ 					constant.as_int[i] %= rhs.as_int[i];
+@@ -528,7 +528,7 @@
+ 		else if (type.is_signed()) {
+ 			for (unsigned int i = 0; i < type.components(); ++i)
+ 				// Integer division by zero on the other hand is not defined, so do not fold this expression in that case
+-				if (rhs.as_int[i] == 0)
++				if (rhs.as_int[i] == 0 || (rhs.as_int[i] == -1 && constant.as_int[i] == std::numeric_limits<int>::min()))
+ 					return false;
+ 				else
+ 					constant.as_int[i] /= rhs.as_int[i];

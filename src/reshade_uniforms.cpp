@@ -1,0 +1,530 @@
+#include "reshade_uniforms.hpp"
+
+#include <cstring>
+#include <ctime>
+#include <cstdlib>
+#include <cmath>
+#include <random>
+#include <utility>
+
+#include <algorithm>
+#include <atomic>
+
+#include "logger.hpp"
+#include "mouse_input.hpp"
+#include "wayland_display.hpp"
+#include "keyboard_input.hpp"
+#include "reshade_input_map.hpp"
+#include "reshade_uniform_storage.hpp"
+#include "effects/effect_registry.hpp"
+#include "effects/params/effect_param.hpp"
+
+namespace vkBasalt
+{
+    static thread_local std::mt19937 tlRng{std::random_device{}()};
+
+    void enumerateReshadeUniforms(reshadefx::effect_module module)
+    {
+        for (auto& uniform : module.uniforms)
+        {
+            auto it = std::find_if(uniform.annotations.begin(), uniform.annotations.end(), [](const auto& a) {
+                          return a.name == "source";
+                      });
+            if (it == uniform.annotations.end())
+            {
+                Logger::debug("uniform without source annotation (offset: " + std::to_string(uniform.offset) + ")");
+                continue;
+            }
+            Logger::debug(it->value.string_data);
+            Logger::debug("size: " + std::to_string(uniform.size));
+            Logger::debug("offset: " + std::to_string(uniform.offset));
+        }
+    }
+
+    std::vector<std::shared_ptr<ReshadeUniform>> createReshadeUniforms(
+        reshadefx::effect_module module, EffectRegistry* effectRegistry,
+        const std::string& effectName, bool liveUniforms)
+    {
+        std::vector<std::shared_ptr<ReshadeUniform>> uniforms;
+        for (auto& uniform : module.uniforms)
+        {
+            auto it = std::find_if(uniform.annotations.begin(), uniform.annotations.end(), [](const auto& a) {
+                           return a.name == "source";
+                       });
+            if (it == uniform.annotations.end())
+            {
+                if (liveUniforms || !uniform.has_initializer_value)
+                    uniforms.push_back(std::make_shared<ParameterUniform>(
+                        uniform, effectRegistry, effectName));
+                continue;
+            }
+            auto source = it->value.string_data;
+            if (source == "frametime")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new FrameTimeUniform(uniform)));
+            }
+            else if (source == "framecount")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new FrameCountUniform(uniform)));
+            }
+            else if (source == "date")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new DateUniform(uniform)));
+            }
+            else if (source == "timer")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new TimerUniform(uniform)));
+            }
+            else if (source == "pingpong")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new PingPongUniform(uniform)));
+            }
+            else if (source == "random")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new RandomUniform(uniform)));
+            }
+            else if (source == "key")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new KeyUniform(uniform)));
+            }
+            else if (source == "mousebutton")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new MouseButtonUniform(uniform)));
+            }
+            else if (source == "mousepoint")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new MousePointUniform(uniform)));
+            }
+            else if (source == "mousedelta")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new MouseDeltaUniform(uniform)));
+            }
+            else if (source == "bufready_depth")
+            {
+                uniforms.push_back(std::shared_ptr<ReshadeUniform>(new DepthUniform(uniform)));
+            }
+            else
+            {
+                Logger::warn("effect " + effectName + ": uniform " + uniform.name + " asks for source \"" + source
+                             + "\", which this layer does not provide, so nothing writes it");
+            }
+        }
+        return uniforms;
+    }
+
+    ParameterUniform::ParameterUniform(
+        reshadefx::uniform uniformInfo, EffectRegistry* effectRegistry,
+        std::string effectName)
+        : ReshadeUniform(std::move(uniformInfo)), effectRegistry(effectRegistry), effectName(std::move(effectName))
+    {
+    }
+
+    void ParameterUniform::update(void* mappedBuffer, size_t bufferSize)
+    {
+        if (mappedBuffer == nullptr)
+            return;
+
+        if (effectRegistry == nullptr)
+        {
+            writeReshadeUniformInitializer(mappedBuffer, bufferSize, uniformInfo);
+            return;
+        }
+
+        uint32_t words[16] = {};
+        size_t wordCount = 0;
+        if (effectRegistry->readParameterWords(
+                effectName, uniformInfo.name,
+                cachedRegistryRevision, cachedParam,
+                words, std::size(words), wordCount))
+        {
+            writeReshadeUniformWords(
+                mappedBuffer, bufferSize,
+                uniformInfo, words, wordCount);
+        }
+        else
+        {
+            writeReshadeUniformInitializer(mappedBuffer, bufferSize, uniformInfo);
+        }
+    }
+
+    namespace
+    {
+        struct SharedMouse
+        {
+            MouseState current;
+            MouseState previous;
+            bool       primed = false;
+        };
+        SharedMouse sharedMouse;
+
+        KeyMode modeFromAnnotation(const reshadefx::uniform& uniformInfo)
+        {
+            auto mode =
+                std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "mode"; });
+            if (mode == uniformInfo.annotations.end())
+                return KeyMode::held;
+            if (mode->value.string_data == "press")
+                return KeyMode::press;
+            if (mode->value.string_data == "toggle")
+                return KeyMode::toggle;
+            return KeyMode::held;
+        }
+
+        int keycodeFromAnnotation(const reshadefx::uniform& uniformInfo)
+        {
+            auto keycode =
+                std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "keycode"; });
+            if (keycode == uniformInfo.annotations.end())
+                return 0;
+            return keycode->type.is_floating_point() ? static_cast<int>(keycode->value.as_float[0]) : keycode->value.as_int[0];
+        }
+
+    }
+
+    namespace
+    {
+        std::atomic<int> mouseReaders{0};
+    }
+
+    MouseReader::MouseReader()
+    {
+        mouseReaders.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    MouseReader::~MouseReader()
+    {
+        mouseReaders.fetch_sub(1, std::memory_order_relaxed);
+    }
+
+    bool effectsReadMouse(bool effectsRun)
+    {
+        return effectsRun && mouseReaders.load(std::memory_order_relaxed) > 0;
+    }
+
+    void beginReshadeInputFrame(bool readMouse)
+    {
+        if (!readMouse)
+        {
+            sharedMouse.primed = false;
+            return;
+        }
+        MouseState now = getMouseState();
+        if (!sharedMouse.primed)
+        {
+            sharedMouse.previous = now;
+            sharedMouse.primed   = true;
+        }
+        else
+        {
+            sharedMouse.previous = sharedMouse.current;
+        }
+        sharedMouse.current = now;
+    }
+
+    FrameTimeUniform::FrameTimeUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "frametime")
+        {
+            Logger::err("Tried to create a FrameTimeUniform from a non frametime uniform_info");
+        }
+        lastFrame = std::chrono::high_resolution_clock::now();
+    }
+    void FrameTimeUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        auto                                     currentFrame = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<float, std::milli> duration     = currentFrame - lastFrame;
+        lastFrame                                             = currentFrame;
+        float frametime                                       = duration.count();
+        writeValues(mapedBuffer, bufferSize, &frametime, 1);
+    }
+    FrameTimeUniform::~FrameTimeUniform()
+    {
+    }
+
+    FrameCountUniform::FrameCountUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "framecount")
+        {
+            Logger::err("Tried to create a FrameCountUniform from a non framecount uniform_info");
+        }
+    }
+    void FrameCountUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        writeValues(mapedBuffer, bufferSize, &count, 1);
+        count++;
+    }
+    FrameCountUniform::~FrameCountUniform()
+    {
+    }
+
+    DateUniform::DateUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "date")
+        {
+            Logger::err("Tried to create a DateUniform from a non date uniform_info");
+        }
+    }
+    void DateUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        static thread_local std::time_t lastSecond = 0;
+        static thread_local float cachedDate[4] = {};
+
+        auto        now  = std::chrono::system_clock::now();
+        std::time_t nowC = std::chrono::system_clock::to_time_t(now);
+
+        if (nowC != lastSecond)
+        {
+            lastSecond = nowC;
+            struct tm currentTimeBuf;
+            localtime_r(&nowC, &currentTimeBuf);
+            cachedDate[0] = 1900.0f + static_cast<float>(currentTimeBuf.tm_year);
+            cachedDate[1] = 1.0f + static_cast<float>(currentTimeBuf.tm_mon);
+            cachedDate[2] = static_cast<float>(currentTimeBuf.tm_mday);
+            cachedDate[3] = static_cast<float>((currentTimeBuf.tm_hour * 60 + currentTimeBuf.tm_min) * 60 + currentTimeBuf.tm_sec);
+        }
+
+        writeValues(mapedBuffer, bufferSize, cachedDate, 4);
+    }
+    DateUniform::~DateUniform()
+    {
+    }
+
+    TimerUniform::TimerUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "timer")
+        {
+            Logger::err("Tried to create a TimerUniform from a non timer uniform_info");
+        }
+        start  = std::chrono::high_resolution_clock::now();
+    }
+    void TimerUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        auto                                     currentFrame = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<float, std::milli> duration     = currentFrame - start;
+        float                                    timer        = duration.count();
+        writeValues(mapedBuffer, bufferSize, &timer, 1);
+    }
+    TimerUniform::~TimerUniform()
+    {
+    }
+
+    PingPongUniform::PingPongUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "pingpong")
+        {
+            Logger::err("Tried to create a PingPongUniform from a non pingpong uniform_info");
+        }
+        if (auto minAnnotation =
+                std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "min"; });
+            minAnnotation != uniformInfo.annotations.end())
+        {
+            min = minAnnotation->type.is_floating_point() ? minAnnotation->value.as_float[0] : static_cast<float>(minAnnotation->value.as_int[0]);
+        }
+        if (auto maxAnnotation =
+                std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "max"; });
+            maxAnnotation != uniformInfo.annotations.end())
+        {
+            max = maxAnnotation->type.is_floating_point() ? maxAnnotation->value.as_float[0] : static_cast<float>(maxAnnotation->value.as_int[0]);
+        }
+        if (auto smoothingAnnotation =
+                std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "smoothing"; });
+            smoothingAnnotation != uniformInfo.annotations.end())
+        {
+            smoothing = smoothingAnnotation->type.is_floating_point() ? smoothingAnnotation->value.as_float[0]
+                                                                      : static_cast<float>(smoothingAnnotation->value.as_int[0]);
+        }
+        if (auto stepAnnotation =
+                std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "step"; });
+            stepAnnotation != uniformInfo.annotations.end())
+        {
+            stepMin =
+                stepAnnotation->type.is_floating_point() ? stepAnnotation->value.as_float[0] : static_cast<float>(stepAnnotation->value.as_int[0]);
+            stepMax =
+                stepAnnotation->type.is_floating_point() ? stepAnnotation->value.as_float[1] : static_cast<float>(stepAnnotation->value.as_int[1]);
+        }
+
+        lastFrame = std::chrono::high_resolution_clock::now();
+
+    }
+    void PingPongUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        auto currentFrame = std::chrono::high_resolution_clock::now();
+
+        std::chrono::duration<float, std::ratio<1>> frameTime = currentFrame - lastFrame;
+
+        float increment = stepMax == 0 ? stepMin : (stepMin + std::fmod(static_cast<float>(tlRng()), stepMax - stepMin + 1.0f));
+        if (currentValue[1] >= 0)
+        {
+            increment = std::max(increment - std::max(0.0f, smoothing - (max - currentValue[0])), 0.05f);
+            increment *= frameTime.count();
+
+            if ((currentValue[0] += increment) >= max)
+            {
+                currentValue[0] = max, currentValue[1] = -1.0f;
+            }
+        }
+        else
+        {
+            increment = std::max(increment - std::max(0.0f, smoothing - (currentValue[0] - min)), 0.05f);
+            increment *= frameTime.count();
+
+            if ((currentValue[0] -= increment) <= min)
+            {
+                currentValue[0] = min, currentValue[1] = 1.0f;
+            }
+        }
+        writeValues(mapedBuffer, bufferSize, currentValue, 2);
+    }
+    PingPongUniform::~PingPongUniform()
+    {
+    }
+
+    RandomUniform::RandomUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "random")
+        {
+            Logger::err("Tried to create a RandomUniform from a non random uniform_info");
+        }
+        if (auto minAnnotation =
+                std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "min"; });
+            minAnnotation != uniformInfo.annotations.end())
+        {
+            min = minAnnotation->type.is_integral() ? minAnnotation->value.as_int[0] : static_cast<int>(minAnnotation->value.as_float[0]);
+        }
+        if (auto maxAnnotation =
+                std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "max"; });
+            maxAnnotation != uniformInfo.annotations.end())
+        {
+            max = maxAnnotation->type.is_integral() ? maxAnnotation->value.as_int[0] : static_cast<int>(maxAnnotation->value.as_float[0]);
+        }
+    }
+    void RandomUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        if (min > max) std::swap(min, max);
+        std::uniform_int_distribution<int32_t> dist(min, max);
+        int32_t value = dist(tlRng);
+        writeValues(mapedBuffer, bufferSize, &value, 1);
+    }
+    RandomUniform::~RandomUniform()
+    {
+    }
+
+    KeyUniform::KeyUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "key")
+        {
+            Logger::err("Tried to create a KeyUniform from a non key uniform_info");
+        }
+        mode   = modeFromAnnotation(uniformInfo);
+        keysym = keysymForVirtualKey(keycodeFromAnnotation(uniformInfo));
+        if (!keysym)
+            Logger::warn("ReShade key uniform requests virtual-key " + std::to_string(keycodeFromAnnotation(uniformInfo))
+                         + ", which has no keysym mapping -- it will read as not pressed");
+    }
+    void KeyUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        VkBool32 keyDown = keysym ? (VkBool32) applyKeyMode(mode, isKeyPressed(keysym), wasDown, toggled) : VK_FALSE;
+        writeValues(mapedBuffer, bufferSize, &keyDown, 1);
+    }
+    KeyUniform::~KeyUniform()
+    {
+    }
+
+    MouseButtonUniform::MouseButtonUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "mousebutton")
+        {
+            Logger::err("Tried to create a MouseButtonUniform from a non mousebutton uniform_info");
+        }
+        mode   = modeFromAnnotation(uniformInfo);
+        button = keycodeFromAnnotation(uniformInfo);
+    }
+    void MouseButtonUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        bool isDown = false;
+        switch (button)
+        {
+            case 0: isDown = sharedMouse.current.leftButton; break;
+            case 1: isDown = sharedMouse.current.rightButton; break;
+            case 2: isDown = sharedMouse.current.middleButton; break;
+            default: isDown = false; break;
+        }
+
+        VkBool32 keyDown = (VkBool32) applyKeyMode(mode, isDown, wasDown, toggled);
+        writeValues(mapedBuffer, bufferSize, &keyDown, 1);
+    }
+    MouseButtonUniform::~MouseButtonUniform()
+    {
+    }
+
+    MousePointUniform::MousePointUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "mousepoint")
+        {
+            Logger::err("Tried to create a MousePointUniform from a non mousepoint uniform_info");
+        }
+    }
+    void MousePointUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        float point[2] = {static_cast<float>(sharedMouse.current.x), static_cast<float>(sharedMouse.current.y)};
+        writeValues(mapedBuffer, bufferSize, point, 2);
+    }
+    MousePointUniform::~MousePointUniform()
+    {
+    }
+
+    MouseDeltaUniform::MouseDeltaUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "mousedelta")
+        {
+            Logger::err("Tried to create a MouseDeltaUniform from a non mousedelta uniform_info");
+        }
+    }
+    void MouseDeltaUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        float delta[2] = {static_cast<float>(sharedMouse.current.x - sharedMouse.previous.x),
+                          static_cast<float>(sharedMouse.current.y - sharedMouse.previous.y)};
+        writeValues(mapedBuffer, bufferSize, delta, 2);
+    }
+    MouseDeltaUniform::~MouseDeltaUniform()
+    {
+    }
+
+    DepthUniform::DepthUniform(reshadefx::uniform uniformInfo)
+        : ReshadeUniform(uniformInfo)
+    {
+        auto source = std::find_if(uniformInfo.annotations.begin(), uniformInfo.annotations.end(), [](const auto& a) { return a.name == "source"; });
+        if (source->value.string_data != "bufready_depth")
+        {
+            Logger::err("Tried to create a DepthUniform from a non bufready_depth uniform_info");
+        }
+    }
+    void DepthUniform::update(void* mapedBuffer, size_t bufferSize)
+    {
+        VkBool32 hasDepth = depthAvailable ? VK_TRUE : VK_FALSE;
+        writeValues(mapedBuffer, bufferSize, &hasDepth, 1);
+    }
+    DepthUniform::~DepthUniform()
+    {
+    }
+}

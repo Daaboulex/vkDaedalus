@@ -1,0 +1,30 @@
+diff -ruN step14/source/effect_parser_stmt.cpp step15/source/effect_parser_stmt.cpp
+--- a/source/effect_parser_stmt.cpp
++++ b/source/effect_parser_stmt.cpp
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "effect_lexer.hpp"
++#include <memory>
+ #include "effect_parser.hpp"
+ #include "effect_codegen.hpp"
+ #include <limits>
+@@ -31,7 +32,8 @@
+ 
+ bool reshadefx::parser::parse(std::string source, codegen *backend)
+ {
+-	_lexer = new lexer(std::move(source));
++	const std::unique_ptr<lexer> lexer_owner = std::make_unique<lexer>(std::move(source));
++	_lexer = lexer_owner.get();
+ 	_codegen = backend;
+ 
+ 	consume();
+@@ -53,7 +55,7 @@
+ 		}
+ 	}
+ 
+-	delete _lexer;
++	_lexer = nullptr;
+ 
+ 	if (parse_success)
+ 	{

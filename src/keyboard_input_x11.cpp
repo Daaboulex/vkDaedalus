@@ -1,0 +1,241 @@
+#include "keyboard_input_x11.hpp"
+#include "game_input_hook.hpp"
+
+#include "logger.hpp"
+
+#include <X11/Xlib.h>
+#include <X11/keysym.h>
+#include <X11/XKBlib.h>
+#include <X11/extensions/XInput2.h>
+
+#include <chrono>
+#include <memory>
+#include <functional>
+
+#include <unistd.h>
+#include <cstring>
+
+namespace vkBasalt
+{
+    static Display* kbDisplay = nullptr;
+    static int xiOpcode = 0;
+    static bool xiInitialized = false;
+    static std::string typedCharsAccumulator;
+    static std::string lastKeyNameAccumulator;
+    static bool backspacePressed = false;
+    static bool deletePressed = false;
+    static bool enterPressed = false;
+    static bool leftPressed = false;
+    static bool rightPressed = false;
+    static bool homePressed = false;
+    static bool endPressed = false;
+    static bool tabPressed = false;
+
+    static void initKeyboardX11()
+    {
+        if (kbDisplay)
+            return;
+
+        const char* disVar = getenv("DISPLAY");
+        if (!disVar || !*disVar)
+            return;
+
+        kbDisplay = XOpenDisplay(disVar);
+        if (!kbDisplay)
+            return;
+        markOverlayX11Display(kbDisplay);
+
+        int event, error;
+        if (XQueryExtension(kbDisplay, "XInputExtension", &xiOpcode, &event, &error))
+        {
+            setGameXInputOpcode(xiOpcode);
+            int major = 2, minor = 0;
+            if (XIQueryVersion(kbDisplay, &major, &minor) == Success)
+            {
+                unsigned char mask[XIMaskLen(XI_RawKeyPress)] = {0};
+                XISetMask(mask, XI_RawKeyPress);
+
+                XIEventMask eventMask = {XIAllMasterDevices, sizeof(mask), mask};
+                XISelectEvents(kbDisplay, DefaultRootWindow(kbDisplay), &eventMask, 1);
+                xiInitialized = true;
+            }
+        }
+    }
+
+    bool isKeyPressedX11(uint32_t ks)
+    {
+        static int usesX11 = -1;
+
+        static std::unique_ptr<Display, std::function<void(Display*)>> display;
+
+        if (usesX11 < 0)
+        {
+            const char* disVar = getenv("DISPLAY");
+            if (!disVar || !std::strcmp(disVar, ""))
+            {
+                usesX11 = 0;
+                Logger::debug("no X11 support");
+            }
+            else
+            {
+                Display* opened = XOpenDisplay(disVar);
+                if (!opened)
+                {
+                    usesX11 = 0;
+                    Logger::warn("X11: DISPLAY is set but the server is unreachable -- overlay key input unavailable");
+                }
+                else
+                {
+                    markOverlayX11Display(opened);
+                    display = std::unique_ptr<Display, std::function<void(Display*)>>(opened, [](Display* d) { XCloseDisplay(d); });
+                    usesX11 = 1;
+                    Logger::debug("X11 support");
+                }
+            }
+        }
+
+        if (!usesX11)
+        {
+            return false;
+        }
+
+        constexpr auto keymapRoundTripSharedWithinAFrame = std::chrono::milliseconds(2);
+        static char keysSnapshot[32];
+        static std::chrono::steady_clock::time_point lastQuery{};
+        auto now = std::chrono::steady_clock::now();
+        if (now - lastQuery >= keymapRoundTripSharedWithinAFrame)
+        {
+            XQueryKeymap(display.get(), keysSnapshot);
+            lastQuery = now;
+        }
+
+        KeyCode kc2 = XKeysymToKeycode(display.get(), (KeySym) ks);
+
+        return !!(keysSnapshot[kc2 >> 3] & (1 << (kc2 & 7)));
+    }
+
+    static void processKeycode(KeyCode keycode, unsigned int state)
+    {
+        KeySym keysym = XkbKeycodeToKeysym(kbDisplay, keycode, 0, 0);
+
+        if (keysym != XK_Shift_L && keysym != XK_Shift_R &&
+            keysym != XK_Control_L && keysym != XK_Control_R &&
+            keysym != XK_Alt_L && keysym != XK_Alt_R &&
+            keysym != XK_Super_L && keysym != XK_Super_R)
+        {
+            const char* keyName = XKeysymToString(keysym);
+            if (keyName)
+                lastKeyNameAccumulator = keyName;
+        }
+
+        if (keysym == XK_BackSpace) backspacePressed = true;
+        else if (keysym == XK_Delete) deletePressed = true;
+        else if (keysym == XK_Return || keysym == XK_KP_Enter) enterPressed = true;
+        else if (keysym == XK_Left) leftPressed = true;
+        else if (keysym == XK_Right) rightPressed = true;
+        else if (keysym == XK_Home) homePressed = true;
+        else if (keysym == XK_End) endPressed = true;
+        else if (keysym == XK_Tab || keysym == XK_ISO_Left_Tab) tabPressed = true;
+        else
+        {
+            bool shifted = (state & ShiftMask) != 0;
+            if (!shifted)
+            {
+                char keys[32];
+                XQueryKeymap(kbDisplay, keys);
+                shifted = (keys[XKeysymToKeycode(kbDisplay, XK_Shift_L) >> 3] & (1 << (XKeysymToKeycode(kbDisplay, XK_Shift_L) & 7))) ||
+                          (keys[XKeysymToKeycode(kbDisplay, XK_Shift_R) >> 3] & (1 << (XKeysymToKeycode(kbDisplay, XK_Shift_R) & 7)));
+            }
+
+            KeySym actualSym = XkbKeycodeToKeysym(kbDisplay, keycode, 0, shifted ? 1 : 0);
+            if (actualSym >= 0x20 && actualSym <= 0x7E)
+            {
+                typedCharsAccumulator += (char)actualSym;
+            }
+        }
+    }
+
+    void setX11TypingEvents(bool on)
+    {
+        if (on)
+            initKeyboardX11();
+        if (!kbDisplay || !xiInitialized)
+            return;
+        unsigned char mask[XIMaskLen(XI_RawKeyPress)] = {0};
+        if (on)
+            XISetMask(mask, XI_RawKeyPress);
+        XIEventMask eventMask = {XIAllMasterDevices, sizeof(mask), mask};
+        XISelectEvents(kbDisplay, DefaultRootWindow(kbDisplay), &eventMask, 1);
+        XFlush(kbDisplay);
+    }
+
+    std::string x11ResourceString()
+    {
+        initKeyboardX11();
+        if (!kbDisplay)
+            return "";
+        const char* resources = XResourceManagerString(kbDisplay);
+        return resources != nullptr ? resources : "";
+    }
+
+    KeyboardState getKeyboardStateX11()
+    {
+        KeyboardState state;
+
+        initKeyboardX11();
+        if (!kbDisplay || !xiInitialized)
+            return state;
+
+        while (XPending(kbDisplay) > 0)
+        {
+            XEvent ev;
+            XNextEvent(kbDisplay, &ev);
+
+            if (ev.type == KeyPress)
+            {
+                processKeycode(ev.xkey.keycode, ev.xkey.state);
+            }
+            else if (ev.xcookie.type == GenericEvent && ev.xcookie.extension == xiOpcode &&
+                XGetEventData(kbDisplay, &ev.xcookie))
+            {
+                if (ev.xcookie.evtype == XI_RawKeyPress)
+                {
+                    XIRawEvent* rawEvent = (XIRawEvent*)ev.xcookie.data;
+                    processKeycode(rawEvent->detail, 0);
+                }
+                XFreeEventData(kbDisplay, &ev.xcookie);
+            }
+        }
+
+        state.typedChars = std::move(typedCharsAccumulator);
+        state.lastKeyName = std::move(lastKeyNameAccumulator);
+        state.backspace = backspacePressed;
+        state.del = deletePressed;
+        state.enter = enterPressed;
+        state.left = leftPressed;
+        state.right = rightPressed;
+        state.home = homePressed;
+        state.end = endPressed;
+        state.tab = tabPressed;
+
+        typedCharsAccumulator.clear();
+        lastKeyNameAccumulator.clear();
+        backspacePressed = false;
+        deletePressed = false;
+        enterPressed = false;
+        leftPressed = false;
+        rightPressed = false;
+        homePressed = false;
+        endPressed = false;
+        tabPressed = false;
+
+        return state;
+    }
+
+    void* getKeyboardDisplay()
+    {
+        initKeyboardX11();
+        return kbDisplay;
+    }
+
+}

@@ -1,0 +1,17 @@
+{
+  "file_format_version": "1.1.2",
+  "layer": {
+    "name": "VK_LAYER_DAABOULEX_vkdaedalus_before_lsfgvk",
+    "type": "GLOBAL",
+    "api_version": "1.0.0",
+    "implementation_version": "1",
+    "description": "vkDaedalus's effects run on the game's own frames before lsfg-vk generates frames from them",
+    "component_layers": [
+      "VK_LAYER_VKDAEDALUS_post_processing",
+      "VK_LAYER_LSFGVK_frame_generation"
+    ],
+    "disable_environment": {
+      "VKDAEDALUS_AFTER_LSFGVK": "1"
+    }
+  }
+}

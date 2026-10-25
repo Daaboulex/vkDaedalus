@@ -1,0 +1,6 @@
+[wrap-file]
+directory = barlow-dc2940e2e04ef4ec96c07e23e0f02aefbddd343b
+source_url = https://github.com/jpt/barlow/archive/dc2940e2e04ef4ec96c07e23e0f02aefbddd343b.tar.gz
+source_filename = barlow-dc2940e2e04ef4ec96c07e23e0f02aefbddd343b.tar.gz
+source_hash = d5dbeca8716e5ee31d798b73998dcf37d000eca8752a129fc4179373e72019cc
+patch_directory = barlow

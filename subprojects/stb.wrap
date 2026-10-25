@@ -1,0 +1,9 @@
+[wrap-file]
+directory = stb-2c980bb59875b0d32144a71867fbdebb2f77cd20
+source_url = https://github.com/nothings/stb/archive/2c980bb59875b0d32144a71867fbdebb2f77cd20.tar.gz
+source_filename = stb-2c980bb59875b0d32144a71867fbdebb2f77cd20.tar.gz
+source_hash = 9a955b1b49a4410088a2e0ee2a9c057c3c907d0c1d75454144cb980aca0ba515
+patch_directory = stb
+
+[provide]
+stb = stb_dep
