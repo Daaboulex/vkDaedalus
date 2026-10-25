@@ -12,6 +12,8 @@ lsfg-vk frame generation per game, runs effects on a second GPU and shows what i
 
 In Steam, set a game's launch options to `vkdaedalus-run %command%`, start the game and press `End`.
 
+![The overlay over a running game, card by card](docs/screenshots/tour.gif)
+
 | Effects | Add effects | Frame generation |
 |---|---|---|
 | ![The Effects page](docs/screenshots/ui-01-effects.png) | ![Adding effects](docs/screenshots/ui-05-add-effects.png) | ![The Frame generation page](docs/screenshots/fg-04-values.png) |
@@ -125,6 +127,7 @@ nixpkgs.overlays = [ inputs.vkdaedalus.overlays.default ];
 | [Safe Anti-Cheat](docs/safe-anti-cheat.md) | what it turns off and what it cannot do |
 | [Limitations](docs/limitations.md) | known limits and what applies only at the next start |
 | [How it works](docs/how-it-works.md) | the frame, input, layer order, a second GPU, failures |
+| [Performance](docs/performance.md) | what a frame costs with vkDaedalus, measured per GPU, and FPS counters under frame generation |
 | [Development](docs/development.md) | building and testing |
 | [TESTING.md](TESTING.md), [LATENCY.md](LATENCY.md), [SHADER-COMPATIBILITY.md](SHADER-COMPATIBILITY.md) | what is tested, every timing formula, every shader pack's result |
 

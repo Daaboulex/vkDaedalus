@@ -411,6 +411,53 @@
             meta.description = "Pin every pack in ReShade's official shader index to its current revision and hash";
           };
 
+          apps.study = {
+            type = "app";
+            program = lib.getExe (
+              pkgs.writeShellApplication {
+                name = "study";
+                runtimeInputs = [
+                  pkgs.gawk
+                  pkgs.coreutils
+                  pkgs.gnugrep
+                  pkgs.diffutils
+                ];
+                text = builtins.readFile ./scripts/study.sh;
+              }
+            );
+            meta.description = "Collect a live run's measurements into docs/performance.tsv and write its tables into docs/performance.md";
+          };
+
+          apps.tour-gif = {
+            type = "app";
+            program = lib.getExe (
+              pkgs.writeShellApplication {
+                name = "tour-gif";
+                runtimeInputs = [ pkgs.imagemagick ];
+                text = builtins.readFile ./scripts/tour-gif.sh;
+              }
+            );
+            meta.description = "Make docs/screenshots/tour.gif from a live run's gallery";
+          };
+
+          checks.performance-matches-its-data =
+            pkgs.runCommand "performance-matches-its-data"
+              {
+                nativeBuildInputs = [
+                  pkgs.gawk
+                  pkgs.diffutils
+                ];
+              }
+              ''
+                bash ${./scripts/study.sh} check ${./docs/performance.tsv} ${./docs/performance.md}
+                awk -F'\t' 'NR == 1 { $4 = $4 " drifted" } { print }' OFS='\t' ${./docs/performance.tsv} > drifted.tsv
+                if bash ${./scripts/study.sh} check drifted.tsv ${./docs/performance.md} > drift.log; then
+                  echo "the study check passed a data file it no longer matches, so it checks nothing"
+                  exit 1
+                fi
+                touch $out
+              '';
+
           checks.shader-corpus-matches-the-baseline =
             pkgs.runCommand "shader-corpus-matches-the-baseline" { }
               ''
