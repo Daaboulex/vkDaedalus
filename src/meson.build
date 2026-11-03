@@ -179,7 +179,7 @@ shared_library(meson.project_name().to_lower(),
     link_with: [keyboard_input_x11_lib, mouse_input_lib, input_blocker_lib,
                 wayland_input_common_lib, keyboard_input_wayland_lib, mouse_input_wayland_lib],
     include_directories : [vkBasalt_include_path, overlay_inc, effects_inc, effects_builtin_inc, effects_params_inc],
-    dependencies : [x11_dep, x11_xcb_dep, xi_dep, wayland_client_dep, xkbcommon_dep, reshade_dep, dl_dep, stb_dep, imgui_dep, imgui_filebrowser_dep, tomlplusplus_dep],
+    dependencies : [x11_dep, x11_xcb_dep, xi_dep, wayland_client_dep, xkbcommon_dep, reshade_dep, dl_dep, stb_dep, stb_image_resize_dep, imgui_dep, imgui_filebrowser_dep, tomlplusplus_dep],
     gnu_symbol_visibility: 'hidden',
     install : true,
     install_dir : lib_dir)
