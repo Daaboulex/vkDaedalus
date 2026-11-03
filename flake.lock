@@ -229,6 +229,7 @@
         "reshade": "reshade",
         "reshade-shaders": "reshade-shaders",
         "stb": "stb",
+        "stb_image_resize": "stb_image_resize",
         "std": "std",
         "tomlplusplus": "tomlplusplus"
       }
@@ -236,16 +237,32 @@
     "stb": {
       "flake": false,
       "locked": {
-        "lastModified": 1785652929,
-        "narHash": "sha256-vA5RZLte4gf5/NkbWT3VNzGVD04kyVTHPeEZwxNnxi0=",
+        "lastModified": 1793560844,
+        "narHash": "sha256-zli97qi6TiXrkpuGCknKjn9vQKaw0Sc1XahJF2du2ps=",
         "owner": "nothings",
         "repo": "stb",
-        "rev": "2c980bb59875b0d32144a71867fbdebb2f77cd20",
+        "rev": "d14d46f6b44456eb88beac58cba833a4135d4c89",
         "type": "github"
       },
       "original": {
         "owner": "nothings",
         "repo": "stb",
+        "type": "github"
+      }
+    },
+    "stb_image_resize": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793569804,
+        "narHash": "sha256-sOhvbEc/U8+X0Ivxbvrd3+kd0/MCaU3KhAWDfLNkLSY=",
+        "owner": "nothings",
+        "repo": "stb_image_resize",
+        "rev": "703100c5f8a0b75b4861e401db567f1d82d545b8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nothings",
+        "repo": "stb_image_resize",
         "type": "github"
       }
     },

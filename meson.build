@@ -16,6 +16,7 @@ library_arch = cpp.sizeof('void*') == 8 ? '64' : '32'
 vkBasalt_include_path = ''
 
 stb_dep = subproject('stb').get_variable('stb_dep')
+stb_image_resize_dep = subproject('stb_image_resize').get_variable('stb_image_resize_dep')
 imgui_dep = subproject('imgui').get_variable('imgui_dep')
 imgui_filebrowser_dep = subproject('imgui-filebrowser').get_variable('imgui_filebrowser_dep')
 reshade_dep = subproject('reshade').get_variable('reshade_dep')
@@ -256,7 +257,7 @@ if get_option('with_so')
     reshade_texture_utils_test = executable('reshade-texture-utils-test',
         'test/reshade_texture_utils_test.cpp', 'src/stb_image_resize2.c',
         include_directories : include_directories('src'),
-        dependencies : [stb_dep, reshade_dep])
+        dependencies : [stb_image_resize_dep, reshade_dep])
     test('reshade-texture-utils', reshade_texture_utils_test)
 
     effect_timing_test = executable('effect-timing-test',

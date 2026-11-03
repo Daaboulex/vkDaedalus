@@ -17,6 +17,10 @@
       url = "github:nothings/stb";
       flake = false;
     };
+    stb_image_resize = {
+      url = "github:nothings/stb_image_resize";
+      flake = false;
+    };
     imgui = {
       url = "github:ocornut/imgui/docking";
       flake = false;
