@@ -108,11 +108,11 @@
     "imgui": {
       "flake": false,
       "locked": {
-        "lastModified": 1790343514,
-        "narHash": "sha256-YYKWTk5JdpHU3kzv/Cm8WV9eRtzgqGw5N6mKcAnTrfY=",
+        "lastModified": 1793902012,
+        "narHash": "sha256-CidDAEhvKAC3tnR2vjdPBKY3OxshSubb8oLJZyuhCyc=",
         "owner": "ocornut",
         "repo": "imgui",
-        "rev": "64944b4520b30772de8dbf0b37d0311746477a32",
+        "rev": "5c7c293a66d7a659d4e6a1abdf18291ce004c07e",
         "type": "github"
       },
       "original": {

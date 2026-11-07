@@ -767,7 +767,7 @@ namespace vkBasalt
             list->DrawList->PushClipRect(list->Pos, ImVec2(list->Pos.x + list->Size.x, list->Pos.y + list->Size.y), true);
             const bool   opened     = ui::disclosureOpen("effect");
             list->DrawList->AddRectFilled(panelMin, panelMax, ImGui::GetColorU32(ui::mix(palette.row, ui::mix(palette.row, palette.accent, 0.07f), rowHover)),
-                                          ui::px(opened ? ui::Size::surface : ui::Size::radius), opened ? ImDrawFlags_RoundCornersTop : ImDrawFlags_RoundCornersAll);
+                                          ui::px(opened ? ui::Size::surface : ui::Size::radius), opened ? ImDrawFlags_RoundTop : ImDrawFlags_RoundAll);
             if (isDragging && dragSourceIndex != i && rowHovered)
             {
                 dragTargetIndex = i;

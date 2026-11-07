@@ -29,7 +29,7 @@ namespace vkBasalt::ui
             float              rowBottom   = 0.0f;
             float              pad         = 0.0f;
             float              bleed       = 0.0f;
-            ImDrawFlags        corners     = ImDrawFlags_RoundCornersAll;
+            ImDrawFlags        corners     = ImDrawFlags_RoundAll;
             int                rows        = 0;
         };
         std::array<Panel, 4> panels;
@@ -1134,12 +1134,12 @@ namespace vkBasalt::ui
 
     void beginPanel()
     {
-        openPanel(0.0f, px(panelPad), ImDrawFlags_RoundCornersAll);
+        openPanel(0.0f, px(panelPad), ImDrawFlags_RoundAll);
     }
 
     void beginPanelUnder(float inset)
     {
-        openPanel(inset, inset, ImDrawFlags_RoundCornersBottom);
+        openPanel(inset, inset, ImDrawFlags_RoundBottom);
     }
 
     void panelRow(float designHeight)
@@ -1275,9 +1275,9 @@ namespace vkBasalt::ui
                 if (part.value <= 0.0)
                     continue;
                 const float          segment = usable * static_cast<float>(part.value / total);
-                const ImDrawFlags    corners = (drawn == 0 ? ImDrawFlags_RoundCornersLeft : ImDrawFlags_None) | (drawn + 1 == shown ? ImDrawFlags_RoundCornersRight : ImDrawFlags_None);
+                const ImDrawFlags    corners = (drawn == 0 ? ImDrawFlags_RoundLeft : ImDrawFlags_None) | (drawn + 1 == shown ? ImDrawFlags_RoundRight : ImDrawFlags_None);
                 list->AddRectFilled(ImVec2(x, at.y), ImVec2(x + segment, at.y + h), u32(part.colour), corners == ImDrawFlags_None ? 0.0f : h * 0.5f,
-                                    corners == ImDrawFlags_None ? ImDrawFlags_RoundCornersNone : corners);
+                                    corners == ImDrawFlags_None ? ImDrawFlags_RoundNone : corners);
                 x += segment + gap;
                 drawn++;
             }
