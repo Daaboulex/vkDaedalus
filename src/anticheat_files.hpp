@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
+#include <future>
 #include <optional>
 #include <regex>
 #include <string>
@@ -27,6 +29,13 @@ namespace vkBasalt
         std::vector<std::string>   refused;
     };
 
+    struct AntiCheatScan
+    {
+        std::optional<ShippedAntiCheat> found;
+        size_t                          scanned = 0;
+        bool                            stopped = false;
+    };
+
     AntiCheatRules                  parseAntiCheatRules(std::string_view ini);
     const AntiCheatRules&           shippedAntiCheatRules();
     std::string                     gameFolderFor(const std::string& executable);
@@ -34,7 +43,9 @@ namespace vkBasalt
     std::string                     winePrefixOfThisProcess();
     std::string                     programExecutable(std::string& problem);
     bool                            inSystemPlace(const std::string& path);
-    std::optional<ShippedAntiCheat> findShippedAntiCheat(const std::string& folder, const std::vector<AntiCheatRule>& rules, size_t entryLimit,
-                                                         size_t& scanned);
-    std::optional<ShippedAntiCheat> detectShippedAntiCheat();
+    AntiCheatScan                   findShippedAntiCheat(const std::string& folder, const std::vector<AntiCheatRule>& rules, size_t entryLimit,
+                                                         const std::function<bool()>& stop);
+    std::string                     safeAntiCheatLockFor(const std::string& folder, const std::function<bool()>& stop);
+    std::shared_future<std::string> checkFolderForAntiCheat(const std::string& folder);
+    std::shared_future<std::string> checkForShippedAntiCheat();
 }

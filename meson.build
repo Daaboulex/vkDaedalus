@@ -289,7 +289,8 @@ if get_option('with_so')
 
     anticheat_files_test = executable('anticheat-files-test',
         'test/anticheat_files_test.cpp', 'src/anticheat_files.cpp', 'src/config_serializer.cpp', 'src/logger.cpp',
-        include_directories : include_directories('src'))
+        include_directories : include_directories('src'),
+        dependencies : [dependency('threads')])
     test('anticheat-files', anticheat_files_test, args : [meson.current_build_dir() / 'test-anticheat-files'])
 
     conflicting_layer_stand_in = shared_library('vkbasalt', 'test/conflicting-layer/stand_in.c', install : false)
@@ -331,12 +332,14 @@ if get_option('with_so')
 
     program_scope_test = executable('program-scope-test',
         'test/program_scope_test.cpp', 'src/program_scope.cpp', 'src/anticheat_files.cpp', 'src/config_serializer.cpp', 'src/logger.cpp',
-        include_directories : include_directories('src'))
+        include_directories : include_directories('src'),
+        dependencies : [dependency('threads')])
     test('program-scope', program_scope_test, args : [meson.current_build_dir() / 'test-program-scope-config'])
 
     active_profile_test = executable('active-profile-test',
         'test/active_profile_test.cpp', 'src/program_scope.cpp', 'src/anticheat_files.cpp', 'src/config_serializer.cpp', 'src/logger.cpp',
-        include_directories : include_directories('src'))
+        include_directories : include_directories('src'),
+        dependencies : [dependency('threads')])
     test('active-profile', active_profile_test,
         args : [meson.current_build_dir() / 'test-active-profile-config'])
 

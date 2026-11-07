@@ -240,12 +240,14 @@ namespace vkBasalt
     {
         const GameSettings gs = safeAntiCheatSource.empty() ? GameSettings{} : ConfigSerializer::loadGameSettingsFile(safeAntiCheatSource);
         settingsManager.setSafeAntiCheat(gs.safeAntiCheat);
+        if (gs.safeAntiCheat)
+        {
+            Logger::info("Safe Anti-Cheat is on: depth capture off, effects that read depth left out");
+            return;
+        }
         const std::string& lock = settingsManager.getSafeAntiCheatLock();
         if (!lock.empty())
-            Logger::info("Safe Anti-Cheat is locked on, since " + lock
-                         + (gs.safeAntiCheat ? "" : "; " + safeAntiCheatSource + " says false, which is ignored"));
-        else if (gs.safeAntiCheat)
-            Logger::info("Safe Anti-Cheat is on: depth capture off, effects that read depth left out");
+            Logger::info("Safe Anti-Cheat is locked on, since " + lock + "; " + safeAntiCheatSource + " says false, which is ignored");
         else
             Logger::info("Safe Anti-Cheat is off for this game, as " + safeAntiCheatSource + " says");
     }
@@ -349,8 +351,7 @@ namespace vkBasalt
             pConfig = pBaseConfig;
         }
 
-        if (const std::optional<ShippedAntiCheat> shipped = detectShippedAntiCheat())
-            settingsManager.lockSafeAntiCheat(shipped->name + " ships with this game (" + shipped->file + ")");
+        settingsManager.setSafeAntiCheatLock(checkForShippedAntiCheat());
         const bool configNamedByUser = envConfig && *envConfig;
         safeAntiCheatSource = configNamedByUser ? currentConfigPath : ConfigSerializer::getGamePath(detectedGameName);
         readSafeAntiCheat();

@@ -6,10 +6,12 @@
 #include <climits>
 #include <cstdlib>
 #include <filesystem>
+#include <system_error>
 
 #include <unistd.h>
 
 #include "anticheat_rules.hpp"
+#include "background_work.hpp"
 #include "config_serializer.hpp"
 #include "logger.hpp"
 
@@ -77,8 +79,8 @@ namespace vkBasalt
 
     const AntiCheatRules& shippedAntiCheatRules()
     {
-        static const AntiCheatRules rules = parseAntiCheatRules(shippedAntiCheatRulesIni);
-        return rules;
+        static const AntiCheatRules* const rules = new AntiCheatRules(parseAntiCheatRules(shippedAntiCheatRulesIni));
+        return *rules;
     }
 
     std::string gameFolderFor(const std::string& executable)
@@ -121,18 +123,23 @@ namespace vkBasalt
         return ec ? "" : real.string();
     }
 
-    std::optional<ShippedAntiCheat> findShippedAntiCheat(const std::string& folder, const std::vector<AntiCheatRule>& rules, size_t entryLimit,
-                                                         size_t& scanned)
+    AntiCheatScan findShippedAntiCheat(const std::string& folder, const std::vector<AntiCheatRule>& rules, size_t entryLimit,
+                                       const std::function<bool()>& stop)
     {
-        scanned = 0;
+        AntiCheatScan   scan;
         std::error_code ec;
         const std::string root = std::filesystem::path(folder).generic_string();
         std::filesystem::recursive_directory_iterator entry(folder, std::filesystem::directory_options::skip_permission_denied, ec);
         const std::filesystem::recursive_directory_iterator done;
         for (; !ec && entry != done; entry.increment(ec))
         {
-            if (++scanned > entryLimit)
-                return std::nullopt;
+            if (stop())
+            {
+                scan.stopped = true;
+                return scan;
+            }
+            if (++scan.scanned > entryLimit)
+                return scan;
             std::string relative = entry->path().generic_string();
             relative             = relative.size() > root.size() ? relative.substr(root.size() + (root.back() == '/' ? 0 : 1)) : relative;
             std::error_code typeError;
@@ -140,9 +147,12 @@ namespace vkBasalt
                 relative += '/';
             for (const AntiCheatRule& rule : rules)
                 if (std::regex_search(relative, rule.pattern))
-                    return ShippedAntiCheat{rule.name, relative};
+                {
+                    scan.found = ShippedAntiCheat{rule.name, relative};
+                    return scan;
+                }
         }
-        return std::nullopt;
+        return scan;
     }
 
     std::string winePrefixOfThisProcess()
@@ -181,34 +191,66 @@ namespace vkBasalt
         return false;
     }
 
-    std::optional<ShippedAntiCheat> detectShippedAntiCheat()
+    std::string safeAntiCheatLockFor(const std::string& folder, const std::function<bool()>& stop)
     {
-        std::string       problem;
-        const std::string executable = programExecutable(problem);
+        const AntiCheatRules& rules = shippedAntiCheatRules();
+        if (!rules.refused.empty())
+            Logger::err(std::to_string(rules.refused.size()) + " anti-cheat file rules could not be read, first: " + rules.refused.front());
+        const AntiCheatScan scan = findShippedAntiCheat(folder, rules.rules, entryLimitForGames, stop);
+        if (scan.stopped)
+            return "the anti-cheat check of " + folder + " stopped before it finished";
+        if (scan.found)
+        {
+            Logger::info(scan.found->name + " ships with this game (" + folder + "/" + scan.found->file + ")");
+            return scan.found->name + " ships with this game (" + scan.found->file + ")";
+        }
+        if (scan.scanned > entryLimitForGames)
+            Logger::info("the game folder " + folder + " holds more than " + std::to_string(entryLimitForGames)
+                         + " entries, so the anti-cheat check stopped without a finding");
+        else
+            Logger::debug("no anti-cheat file in " + folder + " (" + std::to_string(scan.scanned) + " entries)");
+        return "";
+    }
+
+    std::shared_future<std::string> checkForShippedAntiCheat()
+    {
+        std::promise<std::string> answered;
+        std::string               problem;
+        const std::string         executable = programExecutable(problem);
         if (executable.empty())
         {
             Logger::warn(problem + ", so no game folder is checked for an anti-cheat");
-            return std::nullopt;
+            answered.set_value("");
+            return answered.get_future().share();
         }
         if (inSystemPlace(executable))
         {
             Logger::debug(executable + " is a system program, so no game folder is checked for an anti-cheat");
-            return std::nullopt;
+            answered.set_value("");
+            return answered.get_future().share();
         }
 
-        const AntiCheatRules& rules = shippedAntiCheatRules();
-        if (!rules.refused.empty())
-            Logger::err(std::to_string(rules.refused.size()) + " anti-cheat file rules could not be read, first: " + rules.refused.front());
-        const std::string folder  = gameFolderFor(executable);
-        size_t            scanned = 0;
-        const auto        found   = findShippedAntiCheat(folder, rules.rules, entryLimitForGames, scanned);
-        if (found)
-            Logger::info(found->name + " ships with this game (" + folder + "/" + found->file + ")");
-        else if (scanned > entryLimitForGames)
-            Logger::info("the game folder " + folder + " holds more than " + std::to_string(entryLimitForGames)
-                         + " entries, so the anti-cheat check stopped without a finding");
-        else
-            Logger::debug("no anti-cheat file in " + folder + " (" + std::to_string(scanned) + " entries)");
-        return found;
+        return checkFolderForAntiCheat(gameFolderFor(executable));
+    }
+
+    std::shared_future<std::string> checkFolderForAntiCheat(const std::string& folder)
+    {
+        try
+        {
+            BackgroundWork& work = BackgroundWork::instance();
+            return std::async(std::launch::async,
+                              [folder, &work] {
+                                  const BackgroundWork::Running running(work);
+                                  return safeAntiCheatLockFor(folder, [&running] { return running.stopped(); });
+                              })
+                .share();
+        }
+        catch (const std::system_error& e)
+        {
+            Logger::warn(std::string("no thread could start for the anti-cheat check, so the game waits for it: ") + e.what());
+            std::promise<std::string> answered;
+            answered.set_value(safeAntiCheatLockFor(folder, [] { return false; }));
+            return answered.get_future().share();
+        }
     }
 }

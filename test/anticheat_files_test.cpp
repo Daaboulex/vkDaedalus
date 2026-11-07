@@ -1,15 +1,20 @@
 #include "anticheat_files.hpp"
 #include "config_serializer.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <string>
+
+#include <sys/wait.h>
 
 namespace fs = std::filesystem;
 using namespace vkBasalt;
 
-static int failures = 0;
+static int                             failures = 0;
+static std::shared_future<std::string> checkLeftRunning;
 
 static void expect(bool condition, const std::string& what)
 {
@@ -25,15 +30,27 @@ static void touch(const fs::path& file)
     std::ofstream(file) << "x";
 }
 
+static bool never()
+{
+    return false;
+}
+
 static std::string found(const fs::path& folder, size_t limit = 100000)
 {
-    size_t     scanned = 0;
-    const auto hit     = findShippedAntiCheat(folder.string(), shippedAntiCheatRules().rules, limit, scanned);
-    return hit ? hit->name + " " + hit->file : "";
+    const AntiCheatScan scan = findShippedAntiCheat(folder.string(), shippedAntiCheatRules().rules, limit, never);
+    return scan.found ? scan.found->name + " " + scan.found->file : "";
 }
 
 int main(int argc, char** argv)
 {
+    if (argc == 3 && std::string(argv[1]) == "--exit-while-checking")
+    {
+        checkLeftRunning   = checkFolderForAntiCheat(argv[2]);
+        const bool running = checkLeftRunning.wait_for(std::chrono::milliseconds(200)) == std::future_status::timeout;
+        std::printf("%s\n", running ? "checking at exit" : "finished before exit");
+        std::fflush(stdout);
+        return 0;
+    }
     if (argc != 2)
     {
         std::printf("usage: anticheat-files-test <scratch folder>\n");
@@ -59,9 +76,34 @@ int main(int argc, char** argv)
     touch(scratch / "deep" / "a.txt");
     touch(scratch / "deep" / "b.txt");
     touch(scratch / "deep" / "z" / "EasyAntiCheat_x64.dll");
-    size_t scanned = 0;
-    expect(!findShippedAntiCheat((scratch / "deep").string(), rules.rules, 1, scanned) && scanned > 1,
-           "a scan stops at its entry limit and says so");
+    const AntiCheatScan limited = findShippedAntiCheat((scratch / "deep").string(), rules.rules, 1, never);
+    expect(!limited.found && !limited.stopped && limited.scanned > 1, "a scan stops at its entry limit and says so");
+
+    expect(safeAntiCheatLockFor((scratch / "eac").string(), never) == "EasyAntiCheat ships with this game (EasyAntiCheat/EasyAntiCheat_x64.dll)",
+           "a shipped anti-cheat locks Safe Anti-Cheat on, naming its file, got: " + safeAntiCheatLockFor((scratch / "eac").string(), never));
+    expect(safeAntiCheatLockFor((scratch / "clean").string(), never).empty(), "a clean game folder leaves Safe Anti-Cheat unlocked");
+    const std::string stopped = safeAntiCheatLockFor((scratch / "clean").string(), [] { return true; });
+    expect(!stopped.empty(), "a check stopped before it finished locks Safe Anti-Cheat on rather than calling the folder clean");
+
+    expect(checkFolderForAntiCheat((scratch / "eac").string()).get() == safeAntiCheatLockFor((scratch / "eac").string(), never),
+           "the check on its own thread gives the lock the check in place gives");
+    for (int folder = 0; folder < 20; folder++)
+        for (int file = 0; file < 1000; file++)
+            touch(scratch / "large" / ("content_folder_with_a_long_name_" + std::to_string(folder)) / ("texture_asset_with_a_long_name_" + std::to_string(file) + ".dds"));
+    const std::string exitCommand = fs::read_symlink("/proc/self/exe").string() + " --exit-while-checking '" + (scratch / "large").string() + "' 2>&1";
+    FILE*             child       = popen(exitCommand.c_str(), "r");
+    expect(child != nullptr, "the program that exits while the check runs could not start");
+    if (child)
+    {
+        std::string said;
+        char        line[256];
+        while (std::fgets(line, sizeof(line), child))
+            said += line;
+        const int status = pclose(child);
+        expect(said.find("checking at exit") != std::string::npos, "the check had finished before the program exited, so nothing was proven: " + said);
+        expect(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+               "a program exiting while the anti-cheat check runs must exit cleanly, got status " + std::to_string(status) + ": " + said);
+    }
 
     expect(gameFolderFor("/lib/steamapps/common/Game/bin/x64/game.exe") == "/lib/steamapps/common/Game",
            "a Steam game's folder is the one under steamapps/common, got " + gameFolderFor("/lib/steamapps/common/Game/bin/x64/game.exe"));

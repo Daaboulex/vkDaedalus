@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <cctype>
+#include <future>
 #include <string>
 #include <vector>
 
@@ -90,13 +91,13 @@ namespace vkBasalt
         void setHudItems(const std::string& value) { settings.hudItems = value; }
         void setPalette(const std::string& value) { settings.palette = value; }
         void setLogLevel(const std::string& value) { settings.logLevel = value; }
-        void setSafeAntiCheat(bool value) { safeAntiCheat = value || !safeAntiCheatLock.empty(); }
-        void lockSafeAntiCheat(const std::string& reason)
+        void setSafeAntiCheat(bool value) { safeAntiCheat = value || !getSafeAntiCheatLock().empty(); }
+        void setSafeAntiCheatLock(std::shared_future<std::string> reason) { safeAntiCheatLock = std::move(reason); }
+        const std::string& getSafeAntiCheatLock() const
         {
-            safeAntiCheatLock = reason;
-            safeAntiCheat     = true;
+            static const std::string unlocked;
+            return safeAntiCheatLock.valid() ? safeAntiCheatLock.get() : unlocked;
         }
-        const std::string& getSafeAntiCheatLock() const { return safeAntiCheatLock; }
 
         const VkBasaltSettings& getSettings() const { return settings; }
 
@@ -104,7 +105,7 @@ namespace vkBasalt
         VkBasaltSettings settings;
         bool initialized = false;
         bool safeAntiCheat = true;
-        std::string safeAntiCheatLock;
+        std::shared_future<std::string> safeAntiCheatLock;
     };
 
     extern SettingsManager settingsManager;

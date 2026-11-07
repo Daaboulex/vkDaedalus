@@ -1541,6 +1541,24 @@
             touch $out
           '';
 
+          checks.safe-anti-cheat-on-never-waits-for-the-folder-check =
+            pkgs.runCommand "safe-anti-cheat-on-never-waits-for-the-folder-check" { }
+              ''
+                read=$(sed -n '/^    void readSafeAntiCheat()$/,/^    }$/p' ${./src/basalt.cpp})
+                [ -n "$read" ] || { echo "readSafeAntiCheat is gone"; exit 1; }
+                order=$(awk '/if \(gs\.safeAntiCheat\)/ && !o { o = NR } /return;/ && o && !r { r = NR } /getSafeAntiCheatLock\(\)/ && !l { l = NR } END { print (o && r && l && o < r && r < l) ? "after" : "before" }' <<< "$read")
+                [ "$order" = after ] \
+                  || { echo "readSafeAntiCheat reads the anti-cheat folder check before it returns for a game whose Safe Anti-Cheat is on, so every such game waits for the check at start"; exit 1; }
+                status=0
+                readers=$(grep -n 'getSafeAntiCheatLock()' ${./src/basalt.cpp}) || status=$?
+                [ "$status" -le 1 ] || { echo "the scan for readers of the folder check failed with $status"; exit 1; }
+                [ "$(grep -c . <<< "$readers")" -eq 1 ] \
+                  || { echo "basalt.cpp reads the anti-cheat folder check outside readSafeAntiCheat, where the start waits for it: $readers"; exit 1; }
+                grep -qF 'safeAntiCheat = value || !getSafeAntiCheatLock().empty();' ${./src/settings_manager.hpp} \
+                  || { echo "setSafeAntiCheat asks the folder check before the value, so turning Safe Anti-Cheat on waits for the check"; exit 1; }
+                touch $out
+              '';
+
           checks.refusals-never-disable-an-effect = pkgs.runCommand "refusals-never-disable-an-effect" { } ''
             for kind in SafeAntiCheatRefusal DeviceRefusal DepthOnOtherGpuRefusal ChainRefusal; do
               refusal=$(sed -n "/catch (const $kind& e)/,/^ *}$/p" ${./src/basalt.cpp})
