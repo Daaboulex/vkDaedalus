@@ -1,8 +1,8 @@
 [wrap-file]
-directory = stb-d14d46f6b44456eb88beac58cba833a4135d4c89
-source_url = https://github.com/nothings/stb/archive/d14d46f6b44456eb88beac58cba833a4135d4c89.tar.gz
-source_filename = stb-d14d46f6b44456eb88beac58cba833a4135d4c89.tar.gz
-source_hash = 1b59a668a789a28a8fd4e01ff1413eec7eaeb28688bafdc66ec7068f4e7095e1
+directory = stb-4e9b368bfc071e97206ea5c6adba68dd0cbf8897
+source_url = https://github.com/nothings/stb/archive/4e9b368bfc071e97206ea5c6adba68dd0cbf8897.tar.gz
+source_filename = stb-4e9b368bfc071e97206ea5c6adba68dd0cbf8897.tar.gz
+source_hash = e60706ab084e0cae35ee7282deb4a7f283e4a28be1896d097437205da01a0683
 patch_directory = stb
 
 [provide]
