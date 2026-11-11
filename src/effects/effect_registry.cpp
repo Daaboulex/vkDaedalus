@@ -6,6 +6,7 @@
 #include <cstring>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 #include "reshade_compile_defines.hpp"
 #include "reshade_parser.hpp"
@@ -170,11 +171,9 @@ namespace vkBasalt
             {
                 std::string effectPath = findEffectPath(name, pConfig);
                 if (effectPath.empty())
-                {
-                    Logger::err("EffectRegistry: could not find effect file for: " + name);
-                    continue;
-                }
-                initReshadeEffect(name, effectPath);
+                    initMissingEffect(name, name);
+                else
+                    initReshadeEffect(name, effectPath);
             }
 
             if (!effects.empty() && disabledSet.count(name))
@@ -237,6 +236,23 @@ namespace vkBasalt
             }
         }
 
+        effects.push_back(std::move(config));
+    }
+
+    void EffectRegistry::initMissingEffect(const std::string& instanceName, const std::string& effectType)
+    {
+        const bool        typeIsPath = std::filesystem::path(effectType).has_parent_path();
+        const std::string saved      = typeIsPath ? effectType : pConfig->getOption<std::string>(instanceName, "");
+        EffectConfig      config;
+        config.instanceName = instanceName;
+        config.filePath     = saved;
+        config.baseType     = typeIsPath ? std::filesystem::path(effectType).stem().string() : effectType;
+        config.type         = EffectType::ReShade;
+        config.gpu          = rowGpuFromConfig(instanceName, pConfig);
+        config.fileMissing  = true;
+        config.compileError = (saved.empty() ? std::string("no file is saved for it") : "its file " + saved + " is not there") + ", and no "
+                              + config.baseType + ".fx is in reshadeIncludePath or a shader folder";
+        Logger::warn(instanceName + " stays out of the chain until its effects reload: " + config.compileError);
         effects.push_back(std::move(config));
     }
 
@@ -637,8 +653,25 @@ namespace vkBasalt
     void EffectRegistry::clearEffectErrors()
     {
         std::lock_guard<std::mutex> lock(mutex);
+        std::vector<std::tuple<std::string, std::string, bool>> foundAgain;
         for (auto& effect : effects)
-            effect.compileError.clear();
+        {
+            if (!effect.fileMissing)
+            {
+                effect.compileError.clear();
+                continue;
+            }
+            std::error_code   ec;
+            const std::string path = std::filesystem::exists(effect.filePath, ec) ? effect.filePath : findEffectPath(effect.instanceName, pConfig);
+            if (!path.empty())
+                foundAgain.emplace_back(effect.instanceName, path, effect.enabled);
+        }
+        for (const auto& [name, path, enabled] : foundAgain)
+        {
+            effects.erase(std::remove_if(effects.begin(), effects.end(), [&name](const EffectConfig& e) { return e.instanceName == name; }), effects.end());
+            initReshadeEffect(name, path);
+            effects.back().enabled = enabled;
+        }
     }
 
     void EffectRegistry::ensureEffect(const std::string& instanceName, const std::string& effectType)
@@ -648,18 +681,17 @@ namespace vkBasalt
         std::string path;
         bool isBuiltIn = isBuiltInEffect(type);
         if (!isBuiltIn)
-        {
             path = findEffectPath(type, pConfig);
-            if (path.empty() || !std::filesystem::exists(path))
-            {
-                Logger::warn("EffectRegistry::ensureEffect: could not find effect file for: " + type);
-                return;
-            }
-        }
 
         std::lock_guard<std::mutex> lock(mutex);
 
         EffectConfig* existing = findEffectLocked(instanceName);
+        if (!isBuiltIn && (path.empty() || !std::filesystem::exists(path)))
+        {
+            if (!existing)
+                initMissingEffect(instanceName, type);
+            return;
+        }
         if (existing)
         {
             if (!isBuiltIn && !path.empty())

@@ -49,6 +49,7 @@ namespace vkBasalt
         std::vector<PreprocessorDefinition> preprocessorDefs;
         std::vector<std::pair<std::string, std::string>> parameterDefines;
         std::string compileError;
+        bool fileMissing = false;
         std::map<const void*, EffectOnDevice> onDevice;
         std::filesystem::file_time_type fileModTime{};
         bool hasFailed() const { return !compileError.empty(); }

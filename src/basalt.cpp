@@ -1698,7 +1698,7 @@ namespace vkBasalt
         for (const std::string& name : effectNames)
         {
             std::string path = effectRegistry.getEffectFilePath(name);
-            if (path.empty())
+            if (path.empty() || effectRegistry.hasEffectFailed(name))
                 continue;
 
             if (const auto stale = effectRegistry.staleParameterReadDefinitions(name))

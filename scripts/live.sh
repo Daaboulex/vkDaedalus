@@ -3724,6 +3724,29 @@ lane_config() {
         record PASS "a saved effect file that is gone is said" "uniform_smoke saved at a missing file ran from its include folder and the log named both"
     fi
 
+    log="$dir/config-nowhere.log" home="$dir/config-nowhere-home"
+    fresh_home "$home" cas:nowhere
+    printf 'nowhere = %s/gone/nowhere.fx\n' "$home" >>"$home/.config/vkdaedalus/vkdaedalus.conf"
+    printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+    background press_overlay_key "$log"
+    driver=$!
+    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- vkcube --c "$CONFIG_FRAMES" --wsi xcb
+    if ! wait "$driver"; then echo "the overlay key was never pressed" >"$log.driver"; fi
+    local said builds
+    said=$(count 'nowhere stays out of the chain until its effects reload: its file .*/gone/nowhere\.fx is not there' "$log")
+    builds=$(count 'EffectRegistry: initialized [0-9]+ effects' "$log")
+    if ! why=$(plain_verdict "$log" "$control"); then
+        record FAIL "an effect file found nowhere is said once" "$why"
+    elif [ "$(count 'overlay opened' "$log")" -lt 1 ]; then
+        record FAIL "an effect file found nowhere is said once" "the overlay never opened, so the frames that drew it were not tested"
+    elif [ "$said" -lt 1 ] || [ "$said" -gt "$builds" ] || [ "$(count 'could not find effect file' "$log")" -ne 0 ]; then
+        record FAIL "an effect file found nowhere is said once" "with the overlay open, nowhere was said $said times over $builds registry builds, want one each, and the old per-frame line came $(count 'could not find effect file' "$log") times"
+    elif [ "$(count 'creating effect [0-9]+: cas' "$log")" -lt 1 ] || [ "$(count 'creating effect [0-9]+: nowhere' "$log")" -ne 0 ]; then
+        record FAIL "an effect file found nowhere is said once" "cas built $(count 'creating effect [0-9]+: cas' "$log") times and nowhere $(count 'creating effect [0-9]+: nowhere' "$log") times, want at least 1 and 0"
+    else
+        record PASS "an effect file found nowhere is said once" "an effect whose saved file and name are found nowhere was said once per registry build while the overlay drew, stayed out of the chain, and cas ran"
+    fi
+
     log="$dir/config-limit.log" home="$dir/config-limit-home"
     fresh_home "$home" cas:smaa:lut
     printf 'maxEffects = 2\n' >"$home/.config/vkdaedalus/settings.conf"

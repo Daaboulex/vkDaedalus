@@ -142,6 +142,7 @@ namespace vkBasalt
         void initBuiltInEffect(const std::string& instanceName, const std::string& effectType);
 
         void initReshadeEffect(const std::string& name, const std::string& path);
+        void initMissingEffect(const std::string& instanceName, const std::string& effectType);
 
         void addGlobalDefaultLocked(const PreprocessorDefinition& def, const std::string& effectName);
         std::vector<PreprocessorDefinition> setGlobalDefinitionsLocked() const;
