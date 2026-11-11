@@ -8,13 +8,8 @@ namespace vkBasalt
 {
     static wl_display* waylandDisplay = nullptr;
     static wl_surface* waylandSurface = nullptr;
-    enum class InputBackend
-    {
-        Undetermined,
-        X11,
-        Wayland
-    };
-    static InputBackend inputBackend = InputBackend::Undetermined;
+    static bool        x11Surface     = false;
+    static bool        x11Instance    = false;
 
     void setWaylandDisplay(wl_display* display)
     {
@@ -22,8 +17,8 @@ namespace vkBasalt
             return;
 
         waylandDisplay = display;
-        inputBackend = InputBackend::Wayland;
-        Logger::info("captured Wayland display from vkCreateWaylandSurfaceKHR");
+        Logger::info(x11Surface ? "captured Wayland display from vkCreateWaylandSurfaceKHR beside the game's X11 window, so input stays with X11"
+                                : "captured Wayland display from vkCreateWaylandSurfaceKHR");
     }
 
     wl_display* getWaylandDisplay()
@@ -45,19 +40,34 @@ namespace vkBasalt
         return waylandSurface;
     }
 
-    void useX11InputBackend()
+    void noteX11Instance()
     {
-        if (inputBackend == InputBackend::Wayland)
+        if (x11Instance)
             return;
 
-        inputBackend = InputBackend::X11;
-        Logger::info("detected X11 (Xlib/Xcb) client -> X11 input backend");
+        x11Instance = true;
+        Logger::info("an instance enables only X11 surfaces -> X11 input backend until a surface says otherwise");
+    }
+
+    void noteX11Surface()
+    {
+        if (x11Surface)
+            return;
+
+        x11Surface = true;
+        Logger::info(waylandDisplay ? "the game's window is X11 (Xlib/Xcb surface) and a layer above presents it through a Wayland connection of its own, "
+                                      "as gamescope's WSI layer does, so input follows X11"
+                                    : "detected X11 (Xlib/Xcb) client -> X11 input backend");
     }
 
     bool isWayland()
     {
-        if (inputBackend != InputBackend::Undetermined)
-            return inputBackend == InputBackend::Wayland;
+        if (x11Surface)
+            return false;
+        if (waylandDisplay)
+            return true;
+        if (x11Instance)
+            return false;
 
         const char* wlDisplay = getenv("WAYLAND_DISPLAY");
         return wlDisplay && *wlDisplay;

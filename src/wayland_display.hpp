@@ -13,7 +13,9 @@ namespace vkBasalt
 
     wl_surface* getWaylandSurface();
 
-    void useX11InputBackend();
+    void noteX11Instance();
+
+    void noteX11Surface();
 
     bool isWayland();
 }

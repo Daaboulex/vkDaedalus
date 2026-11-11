@@ -1053,6 +1053,50 @@ lane_surfaces() {
         return
     fi
     lane_surface "$icd" "$dir" gamescope unvalidated -- gamescope --backend headless -W 1280 -H 720 -- env ENABLE_VKDAEDALUS=1 vkcube --c "$FRAMES"
+    gamescope_wsi_key_case "$icd" "$dir"
+}
+
+drive_gamescope_key() {
+    local log="$1" home="$2" shown="$3" pid environ display
+    wait_for_line 'present cycle' 30 "$log" || return 1
+    pid=$(vkcube_of_run "$home") || return 1
+    environ=$(tr '\0' '\n' <"/proc/$pid/environ") || return 1
+    display=$(sed -n 's/^DISPLAY=//p' <<<"$environ")
+    [ -n "$display" ] || return 1
+    printf '%s\n' "$display" >"$shown"
+    DISPLAY="$display" xdotool keydown "$OVERLAY_KEY"
+    wait_for_line 'overlay opened' 1 "$log" || true
+    DISPLAY="$display" xdotool keyup "$OVERLAY_KEY"
+}
+
+gamescope_wsi_key_case() {
+    local icd="$1" dir="$2" name="the overlay key reaches the layer under gamescope's WSI layer"
+    local log="$dir/gamescope-wsi-key.log" home="$dir/gamescope-wsi-key-home" shown="$dir/gamescope-wsi-key.display" chain why driver
+    if [ -z "${VKB_GAMESCOPE_WSI:-}" ]; then
+        record SKIP "$name" "no gamescope WSI layer is named (VKB_GAMESCOPE_WSI)"
+        return
+    fi
+    fresh_home "$home" cas
+    printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+    background drive_gamescope_key "$log" "$home" "$shown"
+    driver=$!
+    run "$log" "$home" "$icd" "" 0 0 -- gamescope --backend headless -W 1280 -H 720 -- \
+        env ENABLE_VKDAEDALUS=1 VK_ADD_IMPLICIT_LAYER_PATH="$VKB_GAMESCOPE_WSI/share/vulkan/implicit_layer.d" vkcube --c "$FRAMES" --wsi xcb
+    driver_finished "$name"
+    chain=$(awk '/vkCreateInstance layer callstack setup to:/ { p = 1; next } p && /<Drivers>|<Physical Devices>|callstack setup/ { exit } p' "$log" | grep -oE 'VK_LAYER_[A-Za-z0-9_]+$' | tr '\n' ' ')
+    if ! why=$(exited_cleanly "$log"); then
+        record FAIL "$name" "$why"
+    elif [[ "$chain" != *VK_LAYER_FROG_gamescope_wsi*"$BASALT"* ]]; then
+        record FAIL "$name" "gamescope's WSI layer did not sit above the layer, so the case proves nothing; the loader's chain was: $chain"
+    elif [ "$(count "as gamescope's WSI layer does, so input follows X11" "$log")" -lt 1 ]; then
+        record FAIL "$name" "the layer never reported the game's X11 window beside the WSI layer's Wayland surface: $(grep -m1 -E 'captured Wayland display|X11 input backend' "$log")"
+    elif [ "$(count 'overlay opened' "$log")" -lt 1 ]; then
+        record FAIL "$name" "$OVERLAY_KEY held over gamescope's Xwayland $(cat "$shown" 2>/dev/null) never opened the overlay"
+    elif [ "$(count 'vkDaedalus err:' "$log")" -ne 0 ]; then
+        record FAIL "$name" "$(grep -m1 'vkDaedalus err:' "$log")"
+    else
+        record PASS "$name" "an X11 vkcube presented through gamescope's WSI layer, which sits above the layer and adds a Wayland surface of its own; $OVERLAY_KEY over gamescope's Xwayland opened the overlay"
+    fi
 }
 
 wait_for_line() {

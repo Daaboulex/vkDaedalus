@@ -1077,7 +1077,7 @@ namespace vkBasalt
                     wantsX11 = true;
             }
             if (wantsX11 && !wantsWayland)
-                useX11InputBackend();
+                noteX11Instance();
         }
         bool presents = false;
         for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; ++i)
@@ -2901,7 +2901,7 @@ namespace vkBasalt
         if (!pInstance)
             return VK_ERROR_UNKNOWN;
 
-        useX11InputBackend();
+        noteX11Surface();
 
         auto nextFunc = (PFN_vkCreateOpaqueSurfaceKHR) pInstance->vki.GetInstanceProcAddr(instance, name);
         if (!nextFunc)

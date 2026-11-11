@@ -1755,6 +1755,9 @@
                     pkgs.libxcb
                     pkgs.libx11
                   ];
+                }
+                // pkgs.lib.optionalAttrs (pkgs.lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.gamescope) {
+                  VKB_GAMESCOPE_WSI = "${pkgs.gamescope-wsi}";
                 };
                 text = builtins.readFile ./scripts/live.sh;
               };
