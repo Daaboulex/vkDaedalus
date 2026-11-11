@@ -105,8 +105,15 @@ namespace vkBasalt
         return folder.string();
     }
 
-    std::string unixPathOfWindowsPath(const std::string& windowsPath, const std::string& winePrefix)
+    std::string unixPathOfWindowsPath(const std::string& givenPath, const std::string& winePrefix)
     {
+        std::string windowsPath = givenPath;
+        for (const std::string_view namespacePrefix : {R"(\\?\)", R"(\??\)"})
+            if (windowsPath.compare(0, namespacePrefix.size(), namespacePrefix) == 0)
+            {
+                windowsPath.erase(0, namespacePrefix.size());
+                break;
+            }
         std::error_code ec;
         if (!windowsPath.empty() && windowsPath[0] == '/')
         {

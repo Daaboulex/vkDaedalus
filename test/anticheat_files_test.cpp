@@ -128,6 +128,10 @@ int main(int argc, char** argv)
         if (c == '/')
             c = '\\';
     expect(unixPathOfWindowsPath(zPath, prefix.string()) == onC, "a Z: path resolves to the same file");
+    expect(unixPathOfWindowsPath(R"(\\?\C:\Games\g.exe)", prefix.string()) == onC,
+           "a path with Windows' \\\\?\\ namespace prefix, as Proton passes its own helpers, resolves like the plain one");
+    expect(unixPathOfWindowsPath(R"(\??\C:\Games\g.exe)", prefix.string()) == onC, "a path with the \\??\\ namespace prefix resolves like the plain one");
+    expect(unixPathOfWindowsPath(R"(\\?\UNC\server\share\g.exe)", prefix.string()).empty(), "a network path behind the namespace prefix does not resolve");
     expect(unixPathOfWindowsPath("g.exe", prefix.string()).empty(), "a path with no drive does not resolve");
     expect(unixPathOfWindowsPath("C:\\Games\\missing.exe", prefix.string()).empty(), "a file missing under the prefix does not resolve");
 
