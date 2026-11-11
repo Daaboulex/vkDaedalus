@@ -163,16 +163,15 @@ effects_builtin_inc = include_directories('effects/builtin')
 effects_params_inc = include_directories('effects/params')
 
 font_to_c = subproject('imgui').get_variable('font_to_c')
-barlow = subproject('barlow')
 overlay_fonts = []
-foreach font : [['barlow_regular', 'regular_ttf'], ['barlow_semibold', 'semibold_ttf'], ['barlow_semicondensed_bold', 'semicondensed_bold_ttf']]
+foreach font : [['barlow_regular', 'Barlow-Regular.ttf'], ['barlow_semibold', 'Barlow-SemiBold.ttf'], ['barlow_semicondensed_bold', 'BarlowSemiCondensed-SemiBold.ttf']]
     overlay_fonts += custom_target(font[0] + '_font',
-        input : barlow.get_variable(font[1]),
+        input : files('overlay/fonts' / font[1]),
         output : font[0] + '_font.h',
         command : [font_to_c, '@INPUT@', font[0]],
         capture : true)
 endforeach
-install_data(barlow.get_variable('licence'), rename : 'barlow-OFL.txt', install_dir : get_option('datadir') / 'doc' / 'vkdaedalus')
+install_data('overlay/fonts/OFL.txt', rename : 'barlow-OFL.txt', install_dir : get_option('datadir') / 'doc' / 'vkdaedalus')
 
 shared_library(meson.project_name().to_lower(),
     vkBasalt_src, overlay_src, shader_include, overlay_fonts,

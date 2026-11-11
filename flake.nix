@@ -45,10 +45,6 @@
       url = "github:crosire/reshade-shaders/slim";
       flake = false;
     };
-    barlow = {
-      url = "github:jpt/barlow";
-      flake = false;
-    };
   };
 
   outputs =

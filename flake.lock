@@ -1,21 +1,5 @@
 {
   "nodes": {
-    "barlow": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1594258379,
-        "narHash": "sha256-Z/Yoxxos1Q/ZtaMBIIIElFzGiBWXvBRELJCQ9t0Yd9U=",
-        "owner": "jpt",
-        "repo": "barlow",
-        "rev": "dc2940e2e04ef4ec96c07e23e0f02aefbddd343b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "jpt",
-        "repo": "barlow",
-        "type": "github"
-      }
-    },
     "filedetectionrulesets": {
       "flake": false,
       "locked": {
@@ -219,7 +203,6 @@
     },
     "root": {
       "inputs": {
-        "barlow": "barlow",
         "filedetectionrulesets": "filedetectionrulesets",
         "flake-parts": "flake-parts",
         "git-hooks": "git-hooks",
