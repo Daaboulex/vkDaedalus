@@ -106,6 +106,26 @@ relative_pointer_code = custom_target('relative-pointer-code',
     output: 'relative-pointer-unstable-v1-protocol.c',
     command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
+wayland_protocols_dir = wayland_protocols_dep.get_variable('pkgdatadir')
+tablet_xml = wayland_protocols_dir / 'stable' / 'tablet' / 'tablet-v2.xml'
+if not import('fs').exists(tablet_xml)
+    tablet_xml = wayland_protocols_dir / 'unstable' / 'tablet' / 'tablet-unstable-v2.xml'
+endif
+input_protocol_headers = [relative_pointer_client_h]
+input_protocol_code = [relative_pointer_code]
+foreach protocol : [['pointer-gestures-unstable-v1', wayland_protocols_dir / 'unstable' / 'pointer-gestures' / 'pointer-gestures-unstable-v1.xml'],
+                    ['tablet-v2', tablet_xml],
+                    ['text-input-unstable-v3', wayland_protocols_dir / 'unstable' / 'text-input' / 'text-input-unstable-v3.xml']]
+    input_protocol_headers += custom_target(protocol[0] + '-client-header',
+        input : protocol[1],
+        output : protocol[0] + '-client-protocol.h',
+        command : [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+    input_protocol_code += custom_target(protocol[0] + '-code',
+        input : protocol[1],
+        output : protocol[0] + '-protocol.c',
+        command : [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+endforeach
+
 xdg_output_xml = join_paths(wayland_protocols_dep.get_variable('pkgdatadir'),
     'unstable', 'xdg-output', 'xdg-output-unstable-v1.xml')
 
@@ -201,7 +221,7 @@ executable('vkdaedalus-frame-order',
     install : true)
 
 input_hook_lib = shared_library('vkdaedalus-input-hook',
-    'input_hook.cpp',
+    'input_hook.cpp', input_protocol_headers,
     dependencies: [wayland_client_dep.partial_dependency(compile_args : true, includes : true),
                    dependency('xcb').partial_dependency(compile_args : true, includes : true), dl_dep],
     gnu_symbol_visibility: 'hidden',

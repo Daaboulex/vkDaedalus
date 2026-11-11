@@ -1,6 +1,11 @@
 #include "input_hook.hpp"
 #include "x11_input_filter.hpp"
 
+#include "pointer-gestures-unstable-v1-client-protocol.h"
+#include "relative-pointer-unstable-v1-client-protocol.h"
+#include "tablet-v2-client-protocol.h"
+#include "text-input-unstable-v3-client-protocol.h"
+
 #include <wayland-client.h>
 #include <xcb/xcb.h>
 
@@ -14,6 +19,7 @@
 #include <cstring>
 #include <mutex>
 #include <optional>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -43,28 +49,39 @@ namespace
         return found;
     }
 
-    struct GamePointer
+    template<typename Listener>
+    struct GameListener
     {
-        const wl_pointer_listener* listener = nullptr;
-        void*                      data     = nullptr;
+        const Listener* listener = nullptr;
+        void*           data     = nullptr;
     };
 
-    struct GameKeyboard
-    {
-        const wl_keyboard_listener* listener = nullptr;
-        void*                       data     = nullptr;
-    };
+    template<typename Proxy, typename Listener>
+    using Listeners = std::unordered_map<Proxy*, GameListener<Listener>>;
 
-    std::mutex                                     mutex;
-    std::unordered_map<wl_pointer*, GamePointer>   pointers;
-    std::unordered_map<wl_keyboard*, GameKeyboard> keyboards;
-    std::unordered_set<wl_proxy*>                  ownProxies;
-    std::array<VkBasaltInputHookButton, 64>        buttons;
-    size_t                                         buttonCount = 0;
-    std::atomic<bool>                              blocked{false};
+    std::mutex                                                                         mutex;
+    Listeners<wl_pointer, wl_pointer_listener>                                         pointers;
+    Listeners<wl_keyboard, wl_keyboard_listener>                                       keyboards;
+    Listeners<wl_touch, wl_touch_listener>                                             touches;
+    Listeners<zwp_relative_pointer_v1, zwp_relative_pointer_v1_listener>               relativePointers;
+    Listeners<zwp_pointer_gesture_swipe_v1, zwp_pointer_gesture_swipe_v1_listener>     swipes;
+    Listeners<zwp_pointer_gesture_pinch_v1, zwp_pointer_gesture_pinch_v1_listener>     pinches;
+    Listeners<zwp_pointer_gesture_hold_v1, zwp_pointer_gesture_hold_v1_listener>       holds;
+    Listeners<zwp_tablet_tool_v2, zwp_tablet_tool_v2_listener>                         tabletTools;
+    Listeners<zwp_tablet_pad_v2, zwp_tablet_pad_v2_listener>                           tabletPads;
+    Listeners<zwp_tablet_pad_ring_v2, zwp_tablet_pad_ring_v2_listener>                 padRings;
+    Listeners<zwp_tablet_pad_strip_v2, zwp_tablet_pad_strip_v2_listener>               padStrips;
+#ifdef ZWP_TABLET_PAD_DIAL_V2_DELTA_SINCE_VERSION
+    Listeners<zwp_tablet_pad_dial_v2, zwp_tablet_pad_dial_v2_listener>                 padDials;
+#endif
+    Listeners<zwp_text_input_v3, zwp_text_input_v3_listener>                           textInputs;
+    std::unordered_set<wl_proxy*>                                                      ownProxies;
+    std::array<VkBasaltInputHookButton, 64>                                            buttons;
+    size_t                                                                             buttonCount = 0;
+    std::atomic<bool>                                                                  blocked{false};
 
-    template<typename Proxy, typename Entry>
-    std::optional<Entry> entryOf(const std::unordered_map<Proxy*, Entry>& table, Proxy* proxy)
+    template<typename Proxy, typename Listener>
+    std::optional<GameListener<Listener>> entryOf(const Listeners<Proxy, Listener>& table, Proxy* proxy)
     {
         std::lock_guard<std::mutex> lock(mutex);
         const auto                  at = table.find(proxy);
@@ -73,23 +90,29 @@ namespace
         return at->second;
     }
 
-    template<auto Member, typename... Args>
-    void toGamePointer(wl_pointer* pointer, Args... args)
+    template<auto Member, typename Proxy, typename Listener, typename... Args>
+    void toGame(const Listeners<Proxy, Listener>& table, Proxy* proxy, Args... args)
     {
-        if (const std::optional<GamePointer> game = entryOf(pointers, pointer); game && game->listener->*Member)
-            (game->listener->*Member)(game->data, pointer, args...);
-    }
-
-    template<auto Member, typename... Args>
-    void toGameKeyboard(wl_keyboard* keyboard, Args... args)
-    {
-        if (const std::optional<GameKeyboard> game = entryOf(keyboards, keyboard); game && game->listener->*Member)
-            (game->listener->*Member)(game->data, keyboard, args...);
+        if (const std::optional<GameListener<Listener>> game = entryOf(table, proxy); game && game->listener->*Member)
+            (game->listener->*Member)(game->data, proxy, args...);
     }
 
     bool isBlocked()
     {
         return blocked.load(std::memory_order_acquire);
+    }
+
+    template<auto Member, auto& Table, typename Proxy, typename... Args>
+    void pass(void*, Proxy* proxy, Args... args)
+    {
+        toGame<Member>(Table, proxy, args...);
+    }
+
+    template<auto Member, auto& Table, typename Proxy, typename... Args>
+    void holdWhileBlocked(void*, Proxy* proxy, Args... args)
+    {
+        if (!isBlocked())
+            toGame<Member>(Table, proxy, args...);
     }
 
     void recordButton(uint32_t button, bool pressed)
@@ -99,142 +122,199 @@ namespace
             buttons[buttonCount++] = {button, pressed};
     }
 
-    void pointerEnter(void*, wl_pointer* pointer, uint32_t serial, wl_surface* surface, wl_fixed_t x, wl_fixed_t y)
-    {
-        toGamePointer<&wl_pointer_listener::enter>(pointer, serial, surface, x, y);
-    }
-
-    void pointerLeave(void*, wl_pointer* pointer, uint32_t serial, wl_surface* surface)
-    {
-        toGamePointer<&wl_pointer_listener::leave>(pointer, serial, surface);
-    }
-
-    void pointerMotion(void*, wl_pointer* pointer, uint32_t time, wl_fixed_t x, wl_fixed_t y)
-    {
-        if (!isBlocked())
-            toGamePointer<&wl_pointer_listener::motion>(pointer, time, x, y);
-    }
-
     void pointerButton(void*, wl_pointer* pointer, uint32_t serial, uint32_t time, uint32_t button, uint32_t state)
     {
         if (isBlocked())
             recordButton(button, state == WL_POINTER_BUTTON_STATE_PRESSED);
         if (!isBlocked() || state == WL_POINTER_BUTTON_STATE_RELEASED)
-            toGamePointer<&wl_pointer_listener::button>(pointer, serial, time, button, state);
+            toGame<&wl_pointer_listener::button>(pointers, pointer, serial, time, button, state);
     }
-
-    void pointerAxis(void*, wl_pointer* pointer, uint32_t time, uint32_t axis, wl_fixed_t value)
-    {
-        if (!isBlocked())
-            toGamePointer<&wl_pointer_listener::axis>(pointer, time, axis, value);
-    }
-
-    void pointerFrame(void*, wl_pointer* pointer)
-    {
-        toGamePointer<&wl_pointer_listener::frame>(pointer);
-    }
-
-    void pointerAxisSource(void*, wl_pointer* pointer, uint32_t source)
-    {
-        if (!isBlocked())
-            toGamePointer<&wl_pointer_listener::axis_source>(pointer, source);
-    }
-
-    void pointerAxisStop(void*, wl_pointer* pointer, uint32_t time, uint32_t axis)
-    {
-        if (!isBlocked())
-            toGamePointer<&wl_pointer_listener::axis_stop>(pointer, time, axis);
-    }
-
-    void pointerAxisDiscrete(void*, wl_pointer* pointer, uint32_t axis, int32_t discrete)
-    {
-        if (!isBlocked())
-            toGamePointer<&wl_pointer_listener::axis_discrete>(pointer, axis, discrete);
-    }
-
-#ifdef WL_POINTER_AXIS_VALUE120_SINCE_VERSION
-    void pointerAxisValue120(void*, wl_pointer* pointer, uint32_t axis, int32_t value120)
-    {
-        if (!isBlocked())
-            toGamePointer<&wl_pointer_listener::axis_value120>(pointer, axis, value120);
-    }
-#endif
-
-#ifdef WL_POINTER_AXIS_RELATIVE_DIRECTION_SINCE_VERSION
-    void pointerAxisRelativeDirection(void*, wl_pointer* pointer, uint32_t axis, uint32_t direction)
-    {
-        if (!isBlocked())
-            toGamePointer<&wl_pointer_listener::axis_relative_direction>(pointer, axis, direction);
-    }
-#endif
-
-#ifdef WL_POINTER_WARP_SINCE_VERSION
-    void pointerWarp(void*, wl_pointer* pointer, wl_fixed_t x, wl_fixed_t y)
-    {
-        if (!isBlocked())
-            toGamePointer<&wl_pointer_listener::warp>(pointer, x, y);
-    }
-#endif
 
     const wl_pointer_listener pointerWrapper = {
-        .enter         = pointerEnter,
-        .leave         = pointerLeave,
-        .motion        = pointerMotion,
+        .enter         = pass<&wl_pointer_listener::enter, pointers>,
+        .leave         = pass<&wl_pointer_listener::leave, pointers>,
+        .motion        = holdWhileBlocked<&wl_pointer_listener::motion, pointers>,
         .button        = pointerButton,
-        .axis          = pointerAxis,
-        .frame         = pointerFrame,
-        .axis_source   = pointerAxisSource,
-        .axis_stop     = pointerAxisStop,
-        .axis_discrete = pointerAxisDiscrete,
+        .axis          = holdWhileBlocked<&wl_pointer_listener::axis, pointers>,
+        .frame         = pass<&wl_pointer_listener::frame, pointers>,
+        .axis_source   = holdWhileBlocked<&wl_pointer_listener::axis_source, pointers>,
+        .axis_stop     = holdWhileBlocked<&wl_pointer_listener::axis_stop, pointers>,
+        .axis_discrete = holdWhileBlocked<&wl_pointer_listener::axis_discrete, pointers>,
 #ifdef WL_POINTER_AXIS_VALUE120_SINCE_VERSION
-        .axis_value120 = pointerAxisValue120,
+        .axis_value120 = holdWhileBlocked<&wl_pointer_listener::axis_value120, pointers>,
 #endif
 #ifdef WL_POINTER_AXIS_RELATIVE_DIRECTION_SINCE_VERSION
-        .axis_relative_direction = pointerAxisRelativeDirection,
+        .axis_relative_direction = holdWhileBlocked<&wl_pointer_listener::axis_relative_direction, pointers>,
 #endif
 #ifdef WL_POINTER_WARP_SINCE_VERSION
-        .warp = pointerWarp,
+        .warp = holdWhileBlocked<&wl_pointer_listener::warp, pointers>,
 #endif
     };
-
-    void keyboardKeymap(void*, wl_keyboard* keyboard, uint32_t format, int32_t fd, uint32_t size)
-    {
-        toGameKeyboard<&wl_keyboard_listener::keymap>(keyboard, format, fd, size);
-    }
-
-    void keyboardEnter(void*, wl_keyboard* keyboard, uint32_t serial, wl_surface* surface, wl_array* keys)
-    {
-        toGameKeyboard<&wl_keyboard_listener::enter>(keyboard, serial, surface, keys);
-    }
-
-    void keyboardLeave(void*, wl_keyboard* keyboard, uint32_t serial, wl_surface* surface)
-    {
-        toGameKeyboard<&wl_keyboard_listener::leave>(keyboard, serial, surface);
-    }
 
     void keyboardKey(void*, wl_keyboard* keyboard, uint32_t serial, uint32_t time, uint32_t key, uint32_t state)
     {
         if (!isBlocked() || state == WL_KEYBOARD_KEY_STATE_RELEASED)
-            toGameKeyboard<&wl_keyboard_listener::key>(keyboard, serial, time, key, state);
-    }
-
-    void keyboardModifiers(void*, wl_keyboard* keyboard, uint32_t serial, uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group)
-    {
-        toGameKeyboard<&wl_keyboard_listener::modifiers>(keyboard, serial, depressed, latched, locked, group);
-    }
-
-    void keyboardRepeatInfo(void*, wl_keyboard* keyboard, int32_t rate, int32_t delay)
-    {
-        toGameKeyboard<&wl_keyboard_listener::repeat_info>(keyboard, rate, delay);
+            toGame<&wl_keyboard_listener::key>(keyboards, keyboard, serial, time, key, state);
     }
 
     const wl_keyboard_listener keyboardWrapper = {
-        .keymap      = keyboardKeymap,
-        .enter       = keyboardEnter,
-        .leave       = keyboardLeave,
+        .keymap      = pass<&wl_keyboard_listener::keymap, keyboards>,
+        .enter       = pass<&wl_keyboard_listener::enter, keyboards>,
+        .leave       = pass<&wl_keyboard_listener::leave, keyboards>,
         .key         = keyboardKey,
-        .modifiers   = keyboardModifiers,
-        .repeat_info = keyboardRepeatInfo,
+        .modifiers   = pass<&wl_keyboard_listener::modifiers, keyboards>,
+        .repeat_info = pass<&wl_keyboard_listener::repeat_info, keyboards>,
+    };
+
+    const wl_touch_listener touchWrapper = {
+        .down        = holdWhileBlocked<&wl_touch_listener::down, touches>,
+        .up          = pass<&wl_touch_listener::up, touches>,
+        .motion      = holdWhileBlocked<&wl_touch_listener::motion, touches>,
+        .frame       = pass<&wl_touch_listener::frame, touches>,
+        .cancel      = pass<&wl_touch_listener::cancel, touches>,
+        .shape       = holdWhileBlocked<&wl_touch_listener::shape, touches>,
+        .orientation = holdWhileBlocked<&wl_touch_listener::orientation, touches>,
+    };
+
+    const zwp_relative_pointer_v1_listener relativePointerWrapper = {
+        .relative_motion = holdWhileBlocked<&zwp_relative_pointer_v1_listener::relative_motion, relativePointers>,
+    };
+
+    const zwp_pointer_gesture_swipe_v1_listener swipeWrapper = {
+        .begin  = holdWhileBlocked<&zwp_pointer_gesture_swipe_v1_listener::begin, swipes>,
+        .update = holdWhileBlocked<&zwp_pointer_gesture_swipe_v1_listener::update, swipes>,
+        .end    = pass<&zwp_pointer_gesture_swipe_v1_listener::end, swipes>,
+    };
+
+    const zwp_pointer_gesture_pinch_v1_listener pinchWrapper = {
+        .begin  = holdWhileBlocked<&zwp_pointer_gesture_pinch_v1_listener::begin, pinches>,
+        .update = holdWhileBlocked<&zwp_pointer_gesture_pinch_v1_listener::update, pinches>,
+        .end    = pass<&zwp_pointer_gesture_pinch_v1_listener::end, pinches>,
+    };
+
+    const zwp_pointer_gesture_hold_v1_listener holdWrapper = {
+        .begin = holdWhileBlocked<&zwp_pointer_gesture_hold_v1_listener::begin, holds>,
+        .end   = pass<&zwp_pointer_gesture_hold_v1_listener::end, holds>,
+    };
+
+    void tabletToolButton(void*, zwp_tablet_tool_v2* tool, uint32_t serial, uint32_t button, uint32_t state)
+    {
+        if (!isBlocked() || state == ZWP_TABLET_TOOL_V2_BUTTON_STATE_RELEASED)
+            toGame<&zwp_tablet_tool_v2_listener::button>(tabletTools, tool, serial, button, state);
+    }
+
+    const zwp_tablet_tool_v2_listener tabletToolWrapper = {
+        .type              = pass<&zwp_tablet_tool_v2_listener::type, tabletTools>,
+        .hardware_serial   = pass<&zwp_tablet_tool_v2_listener::hardware_serial, tabletTools>,
+        .hardware_id_wacom = pass<&zwp_tablet_tool_v2_listener::hardware_id_wacom, tabletTools>,
+        .capability        = pass<&zwp_tablet_tool_v2_listener::capability, tabletTools>,
+        .done              = pass<&zwp_tablet_tool_v2_listener::done, tabletTools>,
+        .removed           = pass<&zwp_tablet_tool_v2_listener::removed, tabletTools>,
+        .proximity_in      = holdWhileBlocked<&zwp_tablet_tool_v2_listener::proximity_in, tabletTools>,
+        .proximity_out     = pass<&zwp_tablet_tool_v2_listener::proximity_out, tabletTools>,
+        .down              = holdWhileBlocked<&zwp_tablet_tool_v2_listener::down, tabletTools>,
+        .up                = pass<&zwp_tablet_tool_v2_listener::up, tabletTools>,
+        .motion            = holdWhileBlocked<&zwp_tablet_tool_v2_listener::motion, tabletTools>,
+        .pressure          = holdWhileBlocked<&zwp_tablet_tool_v2_listener::pressure, tabletTools>,
+        .distance          = holdWhileBlocked<&zwp_tablet_tool_v2_listener::distance, tabletTools>,
+        .tilt              = holdWhileBlocked<&zwp_tablet_tool_v2_listener::tilt, tabletTools>,
+        .rotation          = holdWhileBlocked<&zwp_tablet_tool_v2_listener::rotation, tabletTools>,
+        .slider            = holdWhileBlocked<&zwp_tablet_tool_v2_listener::slider, tabletTools>,
+        .wheel             = holdWhileBlocked<&zwp_tablet_tool_v2_listener::wheel, tabletTools>,
+        .button            = tabletToolButton,
+        .frame             = pass<&zwp_tablet_tool_v2_listener::frame, tabletTools>,
+    };
+
+    void tabletPadButton(void*, zwp_tablet_pad_v2* pad, uint32_t time, uint32_t button, uint32_t state)
+    {
+        if (!isBlocked() || state == ZWP_TABLET_PAD_V2_BUTTON_STATE_RELEASED)
+            toGame<&zwp_tablet_pad_v2_listener::button>(tabletPads, pad, time, button, state);
+    }
+
+    const zwp_tablet_pad_v2_listener tabletPadWrapper = {
+        .group   = pass<&zwp_tablet_pad_v2_listener::group, tabletPads>,
+        .path    = pass<&zwp_tablet_pad_v2_listener::path, tabletPads>,
+        .buttons = pass<&zwp_tablet_pad_v2_listener::buttons, tabletPads>,
+        .done    = pass<&zwp_tablet_pad_v2_listener::done, tabletPads>,
+        .button  = tabletPadButton,
+        .enter   = pass<&zwp_tablet_pad_v2_listener::enter, tabletPads>,
+        .leave   = pass<&zwp_tablet_pad_v2_listener::leave, tabletPads>,
+        .removed = pass<&zwp_tablet_pad_v2_listener::removed, tabletPads>,
+    };
+
+    const zwp_tablet_pad_ring_v2_listener padRingWrapper = {
+        .source = pass<&zwp_tablet_pad_ring_v2_listener::source, padRings>,
+        .angle  = holdWhileBlocked<&zwp_tablet_pad_ring_v2_listener::angle, padRings>,
+        .stop   = pass<&zwp_tablet_pad_ring_v2_listener::stop, padRings>,
+        .frame  = pass<&zwp_tablet_pad_ring_v2_listener::frame, padRings>,
+    };
+
+    const zwp_tablet_pad_strip_v2_listener padStripWrapper = {
+        .source   = pass<&zwp_tablet_pad_strip_v2_listener::source, padStrips>,
+        .position = holdWhileBlocked<&zwp_tablet_pad_strip_v2_listener::position, padStrips>,
+        .stop     = pass<&zwp_tablet_pad_strip_v2_listener::stop, padStrips>,
+        .frame    = pass<&zwp_tablet_pad_strip_v2_listener::frame, padStrips>,
+    };
+
+#ifdef ZWP_TABLET_PAD_DIAL_V2_DELTA_SINCE_VERSION
+    const zwp_tablet_pad_dial_v2_listener padDialWrapper = {
+        .delta = holdWhileBlocked<&zwp_tablet_pad_dial_v2_listener::delta, padDials>,
+        .frame = pass<&zwp_tablet_pad_dial_v2_listener::frame, padDials>,
+    };
+#endif
+
+    const zwp_text_input_v3_listener textInputWrapper = {
+        .enter                   = pass<&zwp_text_input_v3_listener::enter, textInputs>,
+        .leave                   = pass<&zwp_text_input_v3_listener::leave, textInputs>,
+        .preedit_string          = holdWhileBlocked<&zwp_text_input_v3_listener::preedit_string, textInputs>,
+        .commit_string           = holdWhileBlocked<&zwp_text_input_v3_listener::commit_string, textInputs>,
+        .delete_surrounding_text = holdWhileBlocked<&zwp_text_input_v3_listener::delete_surrounding_text, textInputs>,
+        .done                    = pass<&zwp_text_input_v3_listener::done, textInputs>,
+#ifdef ZWP_TEXT_INPUT_V3_ACTION_SINCE_VERSION
+        .action = holdWhileBlocked<&zwp_text_input_v3_listener::action, textInputs>,
+#endif
+#ifdef ZWP_TEXT_INPUT_V3_LANGUAGE_SINCE_VERSION
+        .language = pass<&zwp_text_input_v3_listener::language, textInputs>,
+#endif
+#ifdef ZWP_TEXT_INPUT_V3_PREEDIT_HINT_SINCE_VERSION
+        .preedit_hint = holdWhileBlocked<&zwp_text_input_v3_listener::preedit_hint, textInputs>,
+#endif
+    };
+
+    template<auto& Table, auto& Wrapper>
+    int wrapListener(AddListener addListener, wl_proxy* proxy, void (**implementation)(void), void* data)
+    {
+        using Proxy    = std::remove_pointer_t<typename std::remove_reference_t<decltype(Table)>::key_type>;
+        using Listener = std::remove_cv_t<std::remove_reference_t<decltype(Wrapper)>>;
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            Table[reinterpret_cast<Proxy*>(proxy)] = {reinterpret_cast<const Listener*>(implementation), data};
+        }
+        return addListener(proxy, reinterpret_cast<void (**)(void)>(const_cast<Listener*>(&Wrapper)), nullptr);
+    }
+
+    struct Wrappable
+    {
+        const char* name;
+        int (*wrap)(AddListener, wl_proxy*, void (**)(void), void*);
+    };
+
+    const Wrappable wrappable[] = {
+        {"wl_pointer", wrapListener<pointers, pointerWrapper>},
+        {"wl_keyboard", wrapListener<keyboards, keyboardWrapper>},
+        {"wl_touch", wrapListener<touches, touchWrapper>},
+        {"zwp_relative_pointer_v1", wrapListener<relativePointers, relativePointerWrapper>},
+        {"zwp_pointer_gesture_swipe_v1", wrapListener<swipes, swipeWrapper>},
+        {"zwp_pointer_gesture_pinch_v1", wrapListener<pinches, pinchWrapper>},
+        {"zwp_pointer_gesture_hold_v1", wrapListener<holds, holdWrapper>},
+        {"zwp_tablet_tool_v2", wrapListener<tabletTools, tabletToolWrapper>},
+        {"zwp_tablet_pad_v2", wrapListener<tabletPads, tabletPadWrapper>},
+        {"zwp_tablet_pad_ring_v2", wrapListener<padRings, padRingWrapper>},
+        {"zwp_tablet_pad_strip_v2", wrapListener<padStrips, padStripWrapper>},
+#ifdef ZWP_TABLET_PAD_DIAL_V2_DELTA_SINCE_VERSION
+        {"zwp_tablet_pad_dial_v2", wrapListener<padDials, padDialWrapper>},
+#endif
+        {"zwp_text_input_v3", wrapListener<textInputs, textInputWrapper>},
     };
 
     using XcbRead = xcb_generic_event_t* (*)(xcb_connection_t*);
@@ -378,21 +458,8 @@ extern "C" __attribute__((visibility("default"))) int wl_proxy_add_listener(wl_p
     const char* name = functions.getClass(proxy);
     if (name == nullptr || isOwnProxy(proxy))
         return functions.addListener(proxy, implementation, data);
-    if (std::strcmp(name, "wl_pointer") == 0)
-    {
-        {
-            std::lock_guard<std::mutex> lock(mutex);
-            pointers[reinterpret_cast<wl_pointer*>(proxy)] = {reinterpret_cast<const wl_pointer_listener*>(implementation), data};
-        }
-        return functions.addListener(proxy, reinterpret_cast<void (**)(void)>(const_cast<wl_pointer_listener*>(&pointerWrapper)), nullptr);
-    }
-    if (std::strcmp(name, "wl_keyboard") == 0)
-    {
-        {
-            std::lock_guard<std::mutex> lock(mutex);
-            keyboards[reinterpret_cast<wl_keyboard*>(proxy)] = {reinterpret_cast<const wl_keyboard_listener*>(implementation), data};
-        }
-        return functions.addListener(proxy, reinterpret_cast<void (**)(void)>(const_cast<wl_keyboard_listener*>(&keyboardWrapper)), nullptr);
-    }
+    for (const Wrappable& kind : wrappable)
+        if (std::strcmp(name, kind.name) == 0)
+            return kind.wrap(functions.addListener, proxy, implementation, data);
     return functions.addListener(proxy, implementation, data);
 }

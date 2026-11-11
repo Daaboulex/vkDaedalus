@@ -266,6 +266,17 @@
                 wayland-scanner client-header \
                   ${pkgs.wayland-protocols}/share/wayland-protocols/unstable/xdg-output/xdg-output-unstable-v1.xml \
                   gen/xdg-output-unstable-v1-client-protocol.h
+                wayland-scanner client-header \
+                  ${pkgs.wayland-protocols}/share/wayland-protocols/unstable/pointer-gestures/pointer-gestures-unstable-v1.xml \
+                  gen/pointer-gestures-unstable-v1-client-protocol.h
+                wayland-scanner client-header \
+                  ${pkgs.wayland-protocols}/share/wayland-protocols/unstable/tablet/tablet-unstable-v2.xml \
+                  gen/tablet-v2-client-protocol.h
+                grep -q ZWP_TABLET_PAD_DIAL_V2_DELTA_SINCE_VERSION gen/tablet-v2-client-protocol.h \
+                  && { echo "the unstable tablet header defines the dial, so this check no longer builds the hook without it"; exit 1; }
+                wayland-scanner client-header \
+                  ${pkgs.wayland-protocols}/share/wayland-protocols/unstable/text-input/text-input-unstable-v3.xml \
+                  gen/text-input-unstable-v3-client-protocol.h
 
                 printf '#include <wayland-client.h>\n#ifdef WL_POINTER_WARP_SINCE_VERSION\n#error newer protocol header\n#endif\n' > probe.cpp
                 $CXX -fsyntax-only -std=c++20 -Iold probe.cpp \

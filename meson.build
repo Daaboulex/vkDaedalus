@@ -417,9 +417,10 @@ if get_option('with_so')
         dependencies : [x11_dep])
     test('input-blocker', input_blocker_test)
 
-    input_hook_driver = shared_module('input-hook-driver', 'test/input-hook/driver.c',
+    input_hook_driver = shared_module('input-hook-driver', 'test/input-hook/driver.c', input_protocol_headers,
+        include_directories : include_directories('src'),
         dependencies : [wayland_client_dep])
-    input_hook_test = executable('input-hook-test', 'test/input_hook_test.cpp',
+    input_hook_test = executable('input-hook-test', 'test/input_hook_test.cpp', input_protocol_headers, input_protocol_code,
         include_directories : include_directories('src', 'test'),
         dependencies : [wayland_client_dep, dl_dep])
     input_hook_env = environment()

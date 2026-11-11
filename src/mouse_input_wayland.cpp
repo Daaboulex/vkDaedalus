@@ -169,7 +169,7 @@ namespace vkBasalt
         }
 
         relativePointer = zwp_relative_pointer_manager_v1_get_relative_pointer(manager, wlPointer);
-        zwp_relative_pointer_v1_add_listener(relativePointer, &relativePointerListener, nullptr);
+        addOverlayListener((wl_proxy*)relativePointer, &relativePointerListener, nullptr);
         Logger::debug("Wayland: pointer and relative pointer bound from shared seat");
     }
 
@@ -202,6 +202,7 @@ namespace vkBasalt
     {
         if (relativePointer)
         {
+            unregisterOverlayProxy((wl_proxy*)relativePointer);
             zwp_relative_pointer_v1_destroy(relativePointer);
             relativePointer = nullptr;
         }
