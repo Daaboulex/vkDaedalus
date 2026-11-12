@@ -24,8 +24,12 @@ static bool g_requireLiveUniforms = false;
 
 static const std::vector<std::pair<std::string, std::string>>& standardMacroPairs()
 {
-    static const std::vector<std::pair<std::string, std::string>> pairs =
-        vkBasalt::reshadeCompileDefines({1920, 1080}, VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, {});
+    static const std::vector<std::pair<std::string, std::string>> pairs = [] {
+        std::error_code         unreadable;
+        vkBasalt::ReshadeIdentity identity;
+        identity.application = vkBasalt::reshadeApplicationHash(std::filesystem::read_symlink("/proc/self/exe", unreadable).stem().string());
+        return vkBasalt::reshadeCompileDefines({1920, 1080}, VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, identity, {});
+    }();
     return pairs;
 }
 

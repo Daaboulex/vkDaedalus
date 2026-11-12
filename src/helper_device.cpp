@@ -183,6 +183,10 @@ namespace vkBasalt
         d.queueFamilyIndex                  = *family;
         d.queueFamilies[d.queue]            = *family;
         d.limits                            = request.gpu.properties.limits;
+        d.reshadeIdentity                   = {request.gpu.properties.vendorID, request.gpu.properties.deviceID,
+                                               reshadeRendererId(std::min(request.gpu.properties.apiVersion, request.instanceVersion),
+                                                                 request.gpu.properties.apiVersion),
+                                               request.application};
         d.timestampPeriodNanoseconds        = request.gpu.properties.limits.timestampPeriod;
         {
             uint32_t familyCount = 0;

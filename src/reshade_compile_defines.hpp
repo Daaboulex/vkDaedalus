@@ -10,19 +10,15 @@
 #include "vulkan_include.hpp"
 #include "effects/effect_config.hpp"
 #include "include/reshade_api_format.hpp"
+#include "reshade_formats.hpp"
+#include "reshade_identity.hpp"
 
 namespace vkBasalt
 {
     inline uint32_t reshadeColorBitDepth(VkFormat unormFormat)
     {
-        switch (unormFormat)
-        {
-            case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-            case VK_FORMAT_A2B10G10R10_UNORM_PACK32: return 10;
-            case VK_FORMAT_R16G16B16A16_UNORM:
-            case VK_FORMAT_R16G16B16A16_SFLOAT: return 16;
-            default: return 8;
-        }
+        const uint32_t bits = reshade::api::format_bit_depth(reshadeFormatOf(unormFormat));
+        return bits != 0 ? bits : 8;
     }
 
     inline reshade::api::color_space reshadeColorSpace(VkColorSpaceKHR colorSpace)
@@ -65,17 +61,23 @@ namespace vkBasalt
         return "";
     }
 
-    inline std::vector<std::pair<std::string, std::string>> reshadeCompileDefines(
-        VkExtent2D extent, VkFormat unormFormat, VkColorSpaceKHR colorSpace, const std::vector<PreprocessorDefinition>& customDefs)
+    inline std::vector<std::pair<std::string, std::string>> reshadeCompileDefines(VkExtent2D extent, VkFormat unormFormat, VkColorSpaceKHR colorSpace,
+                                                                                    const ReshadeIdentity&                     identity,
+                                                                                    const std::vector<PreprocessorDefinition>& customDefs)
     {
         std::vector<std::pair<std::string, std::string>> defines = {
             {"BUFFER_WIDTH", std::to_string(extent.width)},
             {"BUFFER_HEIGHT", std::to_string(extent.height)},
             {"BUFFER_RCP_WIDTH", "(1.0 / BUFFER_WIDTH)"},
             {"BUFFER_RCP_HEIGHT", "(1.0 / BUFFER_HEIGHT)"},
+            {"BUFFER_COLOR_FORMAT", std::to_string(static_cast<uint32_t>(reshadeFormatOf(unormFormat)))},
             {"BUFFER_COLOR_DEPTH", std::to_string(reshadeColorBitDepth(unormFormat))},
             {"BUFFER_COLOR_BIT_DEPTH", "BUFFER_COLOR_DEPTH"},
             {"BUFFER_COLOR_SPACE", std::to_string(static_cast<uint32_t>(reshadeColorSpace(colorSpace)))},
+            {"__RENDERER__", std::to_string(identity.rendererId)},
+            {"__VENDOR__", std::to_string(identity.vendorId)},
+            {"__DEVICE__", std::to_string(identity.deviceId)},
+            {"__APPLICATION__", std::to_string(identity.application)},
         };
         for (const auto& def : customDefs)
             defines.push_back({def.name, def.value});

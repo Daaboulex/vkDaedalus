@@ -23,7 +23,7 @@ namespace vkBasalt
     {
         pp.add_macro_definition("__RESHADE__", std::to_string(VKBASALT_RESHADE_FX_VERSION));
         pp.add_macro_definition("__RESHADE_PERFORMANCE_MODE__", liveUniforms ? "0" : "1");
-        pp.add_macro_definition("__RENDERER__", "0x20000");
+        pp.add_macro_definition("__RESHADE_PERMUTATION__", "0");
 
         pp.append_string("#define tex2Doffset(s, coords, offset) tex2D(s, coords, offset)\n"
                          "#define tex2Dlodoffset(s, coords, offset) tex2Dlod(s, coords, offset)\n"

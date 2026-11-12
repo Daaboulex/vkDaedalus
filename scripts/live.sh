@@ -3903,6 +3903,19 @@ lane_config() {
         record PASS "an effect file found nowhere is said once" "an effect whose saved file and name are found nowhere was said once per registry build while the overlay drew, stayed out of the chain, and cas ran"
     fi
 
+    log="$dir/config-identity.log" home="$dir/config-identity-home"
+    fresh_home "$home" cas:runtime_identity
+    cp "$VKB_FIXTURES/effects/runtime_identity.fx" "$home-fx/"
+    printf 'runtime_identity = %s/runtime_identity.fx\n' "$home-fx" >>"$home/.config/vkdaedalus/vkdaedalus.conf"
+    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- vkcube --c "$CONFIG_FRAMES" --wsi xcb
+    if ! why=$(plain_verdict "$log" "$control"); then
+        record FAIL "shaders see the GPU, the program and the back buffer as ReShade names them" "$why"
+    elif [ "$(count 'creating effect [0-9]+: runtime_identity' "$log")" -lt 1 ] || [ "$(count 'Failed to create ReshadeEffect runtime_identity|is not named|does not name|has no Vulkan equivalent|failed to compile runtime_identity' "$log")" -ne 0 ]; then
+        record FAIL "shaders see the GPU, the program and the back buffer as ReShade names them" "runtime_identity built $(count 'creating effect [0-9]+: runtime_identity' "$log") times; the layer said: $(grep -m1 -E 'Failed to create ReshadeEffect runtime_identity|is not named|does not name|has no Vulkan equivalent|failed to compile runtime_identity' "$log" || echo nothing)"
+    else
+        record PASS "shaders see the GPU, the program and the back buffer as ReShade names them" "an effect that refuses to compile without BUFFER_COLOR_FORMAT, __VENDOR__, __DEVICE__, __RENDERER__ of Vulkan 1.1 or later, __APPLICATION__ and permutation 0 compiled and ran, copying the back buffer through a texture declared in its format"
+    fi
+
     log="$dir/config-limit.log" home="$dir/config-limit-home"
     fresh_home "$home" cas:smaa:lut
     printf 'maxEffects = 2\n' >"$home/.config/vkdaedalus/settings.conf"

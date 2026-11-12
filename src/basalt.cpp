@@ -236,6 +236,7 @@ namespace vkBasalt
     static bool        firstLaunchOfTheGame = false;
     static std::string safeAntiCheatSource;
 
+
     void readSafeAntiCheat()
     {
         const GameSettings gs = safeAntiCheatSource.empty() ? GameSettings{} : ConfigSerializer::loadGameSettingsFile(safeAntiCheatSource);
@@ -623,6 +624,23 @@ namespace vkBasalt
         if (plan.parts.back().helper)
             plan.parts.push_back({nullptr, gameGpu, gpus.size(), 0});
         return plan;
+    }
+
+    std::map<std::string, const LogicalDevice*> devicesOfRows(LogicalDevice* pLogicalDevice, std::vector<std::string> chain,
+                                                              const std::vector<std::string>& added)
+    {
+        for (const std::string& name : added)
+            if (std::find(chain.begin(), chain.end(), name) == chain.end())
+                chain.push_back(name);
+        std::map<std::string, const LogicalDevice*> devices;
+        for (const std::string& name : chain)
+            devices[name] = pLogicalDevice;
+        if (const std::optional<OffloadPlan> plan = offloadPlan(pLogicalDevice, chain))
+            for (const ChainPart& part : plan->parts)
+                if (part.helper)
+                    for (size_t row = part.firstRow; row < part.firstRow + part.rows; row++)
+                        devices[chain[row]] = &part.helper->device;
+        return devices;
     }
 
     std::vector<std::string> createEffectsForSwapchain(
@@ -1467,6 +1485,8 @@ namespace vkBasalt
                 pLogicalDevice->queueFamilyIndex = queueInfo.queueFamilyIndex;
                 pLogicalDevice->timestampPeriodNanoseconds = deviceProps.limits.timestampPeriod;
                 pLogicalDevice->limits = deviceProps.limits;
+                pLogicalDevice->reshadeIdentity = {deviceProps.vendorID, deviceProps.deviceID,
+                                                   reshadeRendererId(usableVersion, deviceProps.apiVersion), reshadeApplicationOfThisProgram()};
                 pLogicalDevice->timestampValidBits = queueProperties[queueInfo.queueFamilyIndex].timestampValidBits;
 
                 if (pLogicalDevice->timestampValidBits == 0)
@@ -1688,12 +1708,15 @@ namespace vkBasalt
         bool                                             liveUniforms = false;
     };
 
-    std::vector<EffectCompileRequest> gatherEffectCompileRequestsLocked(const std::vector<std::string>& effectNames,
-                                                                 VkExtent2D                      extent,
-                                                                 VkFormat                        unormFormat,
-                                                                 VkColorSpaceKHR                 colorSpace)
+    std::vector<EffectCompileRequest> gatherEffectCompileRequestsLocked(const std::vector<std::string>& effectNames, const LogicalSwapchain* pSwapchain,
+                                                                        const std::vector<std::string>& chain)
     {
         std::vector<EffectCompileRequest> requests;
+        const VkExtent2D      extent      = pSwapchain->imageExtent;
+        const VkFormat        unormFormat = convertToUNORM(pSwapchain->format);
+        const VkColorSpaceKHR colorSpace  = pSwapchain->swapchainCreateInfo.imageColorSpace;
+        const std::map<std::string, const LogicalDevice*> rowDevices =
+            devicesOfRows(pSwapchain->pLogicalDevice, chain, effectNames);
 
         for (const std::string& name : effectNames)
         {
@@ -1704,7 +1727,8 @@ namespace vkBasalt
             if (const auto stale = effectRegistry.staleParameterReadDefinitions(name))
                 requests.push_back({path, parameterReadDefines(*stale)});
             requests.push_back({std::move(path),
-                                reshadeCompileDefines(extent, unormFormat, colorSpace, effectRegistry.getCompilePreprocessorDefs(name)),
+                                reshadeCompileDefines(extent, unormFormat, colorSpace, rowDevices.at(name)->reshadeIdentity,
+                                                      effectRegistry.getCompilePreprocessorDefs(name)),
                                 effectRegistry.getAllowHalfPrecision(name),
                                 settingsManager.getLiveReshadeUniforms()});
         }
@@ -1724,9 +1748,7 @@ namespace vkBasalt
         {
             if (!pSwapchain || pSwapchain->fakeImages.empty())
                 continue;
-            for (EffectCompileRequest& request : gatherEffectCompileRequestsLocked(effectNames, pSwapchain->imageExtent,
-                                                                                   convertToUNORM(pSwapchain->format),
-                                                                                   pSwapchain->swapchainCreateInfo.imageColorSpace))
+            for (EffectCompileRequest& request : gatherEffectCompileRequestsLocked(effectNames, pSwapchain.get(), effectRegistry.getActiveEffects()))
                 compiles.push_back([request = std::move(request)] {
                     warmEffectCompile(request, ConfigSerializer::loadShaderManagerConfig().discoveredShaderPaths);
                 });
@@ -1771,9 +1793,7 @@ namespace vkBasalt
         effectRegistry.initializeSelectedEffectsFromConfig();
 
         const std::vector<EffectCompileRequest> requests =
-            gatherEffectCompileRequestsLocked(effectRegistry.getActiveEffects(), pLogicalSwapchain->imageExtent,
-                                              convertToUNORM(pLogicalSwapchain->format),
-                                              pLogicalSwapchain->swapchainCreateInfo.imageColorSpace);
+            gatherEffectCompileRequestsLocked(effectRegistry.getActiveEffects(), pLogicalSwapchain, effectRegistry.getActiveEffects());
         l.unlock();
         runEffectCompileWarmUp(l, requests);
     }
@@ -1862,7 +1882,8 @@ namespace vkBasalt
                 continue;
             }
 
-            const HelperRequest request{pInstance->vki, pInstance->handle, pInstance->apiVersion, offload->create, offload->destroy, helperGpu, number};
+            const HelperRequest request{pInstance->vki, pInstance->handle, pInstance->apiVersion, offload->create, offload->destroy, helperGpu, number,
+                                        reshadeApplicationOfThisProgram()};
             offload->making = true;
             l.unlock();
             auto made = makeHelperDevice(l, request);
@@ -2300,9 +2321,7 @@ namespace vkBasalt
             if (!pSwapchain || pSwapchain->fakeImages.empty())
                 continue;
 
-            std::vector<EffectCompileRequest> forSwapchain = gatherEffectCompileRequestsLocked(
-                activeEffects, pSwapchain->imageExtent, convertToUNORM(pSwapchain->format),
-                pSwapchain->swapchainCreateInfo.imageColorSpace);
+            std::vector<EffectCompileRequest> forSwapchain = gatherEffectCompileRequestsLocked(activeEffects, pSwapchain.get(), activeEffects);
             requests.insert(requests.end(), forSwapchain.begin(), forSwapchain.end());
         }
 

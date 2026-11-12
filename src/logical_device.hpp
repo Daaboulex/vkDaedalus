@@ -12,6 +12,7 @@
 #include "vkdispatch.hpp"
 #include "logger.hpp"
 #include "frame_generation_place.hpp"
+#include "reshade_identity.hpp"
 
 namespace vkBasalt
 {
@@ -39,6 +40,7 @@ namespace vkBasalt
         bool                     supportsStorageImageWithoutFormat = false;
         bool                     isHelper = false;
         bool                     sharingEnabled = false;
+        ReshadeIdentity          reshadeIdentity;
         FrameGenerationPlace     frameGenerationPlace = FrameGenerationPlace::NotLoaded;
         std::vector<std::string> layersBelow;
         std::shared_ptr<DeviceOffload> offload;

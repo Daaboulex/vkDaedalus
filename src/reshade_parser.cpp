@@ -1,6 +1,7 @@
 #include "reshade_parser.hpp"
 
 #include <algorithm>
+#include <filesystem>
 
 #include "logger.hpp"
 #include "config_serializer.hpp"
@@ -264,9 +265,17 @@ namespace vkBasalt
         }
     }
 
+    uint32_t reshadeApplicationOfThisProgram()
+    {
+        static const uint32_t application = reshadeApplicationHash(std::filesystem::path(ConfigSerializer::detectGameName()).stem().string());
+        return application;
+    }
+
     std::vector<std::pair<std::string, std::string>> parameterReadDefines(const std::vector<PreprocessorDefinition>& defs)
     {
-        return reshadeCompileDefines({1920, 1080}, VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, defs);
+        ReshadeIdentity identity;
+        identity.application = reshadeApplicationOfThisProgram();
+        return reshadeCompileDefines({1920, 1080}, VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, identity, defs);
     }
 
     std::vector<std::unique_ptr<EffectParam>> parseReshadeEffect(

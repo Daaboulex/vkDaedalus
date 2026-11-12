@@ -26,6 +26,7 @@
 #include "image.hpp"
 #include "lut_cube.hpp"
 #include "format.hpp"
+#include "reshade_formats.hpp"
 #include "config_serializer.hpp"
 #include "shader_cache.hpp"
 #include "settings_manager.hpp"
@@ -1656,7 +1657,7 @@ namespace vkBasalt
     void ReshadeEffect::createReshadeModule()
     {
         std::vector<std::pair<std::string, std::string>> defines =
-            reshadeCompileDefines(imageExtent, inputOutputFormatUNORM, colorSpace, customPreprocessorDefs);
+            reshadeCompileDefines(imageExtent, inputOutputFormatUNORM, colorSpace, pLogicalDevice->reshadeIdentity, customPreprocessorDefs);
         for (const auto& def : customPreprocessorDefs)
             Logger::debug("  custom macro: " + def.name + " = " + def.value);
 
@@ -1741,30 +1742,10 @@ namespace vkBasalt
 
     VkFormat ReshadeEffect::convertReshadeFormat(reshadefx::texture_format texFormat)
     {
-        switch (texFormat)
-        {
-            case reshadefx::texture_format::r8: return VK_FORMAT_R8_UNORM;
-            case reshadefx::texture_format::r16: return VK_FORMAT_R16_UNORM;
-            case reshadefx::texture_format::r16f: return VK_FORMAT_R16_SFLOAT;
-            case reshadefx::texture_format::r32f: return VK_FORMAT_R32_SFLOAT;
-            case reshadefx::texture_format::r32i: return VK_FORMAT_R32_SINT;
-            case reshadefx::texture_format::r32u: return VK_FORMAT_R32_UINT;
-            case reshadefx::texture_format::rg8: return VK_FORMAT_R8G8_UNORM;
-            case reshadefx::texture_format::rg16: return VK_FORMAT_R16G16_UNORM;
-            case reshadefx::texture_format::rg16f: return VK_FORMAT_R16G16_SFLOAT;
-            case reshadefx::texture_format::rg32f: return VK_FORMAT_R32G32_SFLOAT;
-            case reshadefx::texture_format::rgba8: return VK_FORMAT_R8G8B8A8_UNORM;
-            case reshadefx::texture_format::rgba16: return VK_FORMAT_R16G16B16A16_UNORM;
-            case reshadefx::texture_format::rgba16f: return VK_FORMAT_R16G16B16A16_SFLOAT;
-            case reshadefx::texture_format::rgba32f: return VK_FORMAT_R32G32B32A32_SFLOAT;
-            case reshadefx::texture_format::rgba32u: return VK_FORMAT_R32G32B32A32_UINT;
-            case reshadefx::texture_format::rgba32i: return VK_FORMAT_R32G32B32A32_SINT;
-            case reshadefx::texture_format::rgb10a2: return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
-            case reshadefx::texture_format::rg11b10f: return VK_FORMAT_B10G11R11_UFLOAT_PACK32;
-            default:
-                throw std::runtime_error("texture format " + std::to_string(static_cast<int>(texFormat))
-                                         + " has no Vulkan equivalent here");
-        }
+        const VkFormat format = vulkanFormatOf(static_cast<reshade::api::format>(texFormat));
+        if (format == VK_FORMAT_UNDEFINED)
+            throw std::runtime_error("texture format " + std::to_string(static_cast<int>(texFormat)) + " has no Vulkan equivalent here");
+        return format;
     }
 
     VkCompareOp ReshadeEffect::convertReshadeCompareOp(reshadefx::stencil_func compareOp)

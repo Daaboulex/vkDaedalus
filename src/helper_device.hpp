@@ -54,7 +54,8 @@ namespace vkBasalt
         PFN_vkLayerCreateDevice  create          = nullptr;
         PFN_vkLayerDestroyDevice destroy         = nullptr;
         InstanceGpu              gpu;
-        uint32_t                 number = 0;
+        uint32_t                 number      = 0;
+        uint32_t                 application = 0;
     };
 
     bool makingHelperDevice();

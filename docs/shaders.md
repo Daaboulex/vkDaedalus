@@ -51,6 +51,26 @@ vkDaedalus ships both, searched after every shader folder, so a pack copied with
 vkDaedalus' own, with the same widget macros for the ReShade version it reports. A pack's own copy, in its
 folder or a shader folder, wins over the shipped one.
 
+## What a shader is told
+
+Every shader gets the macros ReShade defines, with the values ReShade would give in the same place:
+
+| Macro | Value |
+|---|---|
+| `__RESHADE__` | The ReShade version whose runtime this build keeps |
+| `__RESHADE_PERMUTATION__` | 0, the back buffer's own |
+| `__RESHADE_PERFORMANCE_MODE__` | 0 with Instant ReShade sliders on, else 1 |
+| `__VENDOR__`, `__DEVICE__` | The PCI ids of the GPU the effect runs on |
+| `__RENDERER__` | `0x20000` with the Vulkan version the game runs at, `0x21300` for 1.3 |
+| `__APPLICATION__` | The program's name hashed the way ReShade hashes it on Windows |
+| `BUFFER_WIDTH`, `BUFFER_HEIGHT`, `BUFFER_RCP_WIDTH`, `BUFFER_RCP_HEIGHT` | The back buffer's size |
+| `BUFFER_COLOR_FORMAT` | The back buffer's format in ReShade's numbering, sRGB counted as its linear twin |
+| `BUFFER_COLOR_BIT_DEPTH` | The bits per colour channel of that format |
+| `BUFFER_COLOR_SPACE` | ReShade's colour space of the swapchain: 1 sRGB, 2 scRGB, 3 HDR10 PQ, 4 HDR10 HLG |
+
+A texture declared with `Format = BUFFER_COLOR_FORMAT` takes the back buffer's format, a BGRA one
+included.
+
 ## Compiled effects
 
 Compiled effects are kept in `~/.cache/vkdaedalus/` between runs. Clear compiled effects on the Shaders
