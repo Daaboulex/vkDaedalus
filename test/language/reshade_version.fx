@@ -1,5 +1,5 @@
-#if __RESHADE__ != 60500
-#error "__RESHADE__ is not the 60500 the layer claims in reshade_fx_version.hpp"
+#if __RESHADE__ != 60800
+#error "__RESHADE__ is not the 60800 the layer claims in reshade_fx_version.hpp"
 #endif
 
 float4 VersionVS(uint id : SV_VertexID) : SV_Position
