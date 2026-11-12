@@ -41,6 +41,10 @@
       url = "github:marzer/tomlplusplus";
       flake = false;
     };
+    lsfg-vk = {
+      url = "git+https://git.lsfg-vk.dev/lsfg-vk.git?shallow=1";
+      flake = false;
+    };
     reshade-shaders = {
       url = "github:crosire/reshade-shaders/slim";
       flake = false;
@@ -219,6 +223,7 @@
             "^format\\.sh$"
             "^vkdaedalus-run\\.sh$"
           ];
+          pre-commit.settings.hooks.taplo.excludes = [ "^test/lsfg-config/" ];
           pre-commit.settings.hooks.trim-trailing-whitespace.excludes = [
             "^src/"
             "^subprojects/packagefiles/.*\\.patch$"
@@ -1313,6 +1318,26 @@
                 warm=$(sed -n '/^    std::vector<EffectCompileJobs::Compile> chainCompilesForLocked(/,/^    }/p' ${./src/basalt.cpp})
                 grep -q 'gatherEffectCompileRequestsLocked' <<< "$warm" && grep -q 'warmEffectCompile' <<< "$warm" \
                   || { echo "an added effect's warm-up no longer asks for the chain's own compile requests, so the chain compiles it again inside the present"; exit 1; }
+                touch $out
+              '';
+
+          checks.frame-generation-file-matches-lsfg-vk =
+            pkgs.runCommand "frame-generation-file-matches-lsfg-vk"
+              {
+                nativeBuildInputs = [
+                  pkgs.stdenv.cc
+                  pkgs.diffutils
+                ];
+              }
+              ''
+                mkdir -p ours theirs work
+                $CXX -std=c++20 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=undefined \
+                  -I${./src} -I${inputs.tomlplusplus}/include -I${pkgs.vulkan-headers}/include \
+                  ${./test/lsfg-config/probe_vkdaedalus.cpp} ${./src/frame_generation.cpp} -ldl -o ours/lsfg-config-probe
+                $CXX -std=c++20 -O1 -I${inputs.lsfg-vk}/lsfg-vk-config/include -isystem ${inputs.lsfg-vk}/thirdparty \
+                  ${./test/lsfg-config/probe_lsfg_vk.cpp} ${inputs.lsfg-vk}/lsfg-vk-config/src/config.cpp -o theirs/lsfg-config-probe
+                bash ${./test/lsfg-config/compare.sh} "$PWD/ours/lsfg-config-probe" "$PWD/theirs/lsfg-config-probe" \
+                  ${./test/lsfg-config} "$PWD/work"
                 touch $out
               '';
 

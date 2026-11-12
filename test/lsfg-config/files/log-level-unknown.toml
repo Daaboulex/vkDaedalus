@@ -1,0 +1,3 @@
+version = 2
+[global]
+log_level = "trace"

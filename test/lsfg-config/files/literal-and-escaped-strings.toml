@@ -1,0 +1,6 @@
+version = 2
+[global]
+[[profile]]
+name = 'C:\Games\a'
+active_in = ["tab\there", "\u00e9t\u00e9", '''multi
+line''']

@@ -1,0 +1,5 @@
+version = 2
+[global]
+fp16 = true
+[[profile]]
+name = "a"

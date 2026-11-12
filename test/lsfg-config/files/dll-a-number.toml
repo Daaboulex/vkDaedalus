@@ -1,0 +1,5 @@
+version = 2
+[global]
+dll = 1
+[[profile]]
+name = "a"

@@ -1,0 +1,4 @@
+version = 1
+[global]
+[[profile]]
+name = "a"

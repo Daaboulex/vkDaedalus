@@ -1,0 +1,8 @@
+version = 2
+[global]
+[[profile]]
+name = "first"
+active_in = "probe"
+[[profile]]
+name = "second"
+active_in = "/lsfg-config-probe"

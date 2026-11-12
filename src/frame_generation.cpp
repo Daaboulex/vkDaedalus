@@ -214,7 +214,7 @@ namespace vkBasalt
                     const std::optional<std::string> pacing = value.value<std::string>();
                     if (!pacing)
                         return refused(problem, typeProblem(key));
-                    if (lowered(*pacing) != "vsync")
+                    if (!isChoice(lsfgPacingModes, lowered(*pacing)))
                         return refused(problem, "Invalid enum name: " + lowered(*pacing));
                 }
                 else if (key == "override_present_mode")
@@ -555,6 +555,12 @@ namespace vkBasalt
         {
             std::error_code unreadable;
             return fs::is_regular_file(path, unreadable);
+        }
+
+        bool takenByLsfg(const fs::path& path)
+        {
+            std::error_code unreadable;
+            return fs::exists(path, unreadable);
         }
 
         std::string readWhole(const fs::path& path)
@@ -943,11 +949,11 @@ namespace vkBasalt
         for (const char* base : {"XDG_DATA_HOME", "HOME"})
             if (const std::optional<std::string> prefix = environment(base))
                 for (const char* folder : steamFolders)
-                    if (const fs::path path = fs::path(*prefix) / folder / "Lossless Scaling" / "lsfg-vk.dll"; isFile(path))
+                    if (const fs::path path = fs::path(*prefix) / folder / "Lossless Scaling" / "lsfg-vk.dll"; takenByLsfg(path))
                         return path.string();
         std::error_code noDirectory;
         const fs::path  here = fs::current_path(noDirectory) / "lsfg-vk.dll";
-        if (!noDirectory && isFile(here))
+        if (!noDirectory && takenByLsfg(here))
             return here.string();
         return std::nullopt;
     }

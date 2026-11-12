@@ -122,6 +122,23 @@
         "type": "github"
       }
     },
+    "lsfg-vk": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792364758,
+        "narHash": "sha256-YwCvbxdRhPz2daEIEMOciA/i4nhk/hY0Tj7l9t9oOWI=",
+        "ref": "refs/heads/master",
+        "rev": "21fbd1bc4e94ebc076cc0a86f09e3107b83f0c96",
+        "shallow": true,
+        "type": "git",
+        "url": "https://git.lsfg-vk.dev/lsfg-vk.git"
+      },
+      "original": {
+        "shallow": true,
+        "type": "git",
+        "url": "https://git.lsfg-vk.dev/lsfg-vk.git"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1793876309,
@@ -208,6 +225,7 @@
         "git-hooks": "git-hooks",
         "imgui": "imgui",
         "imgui-filebrowser": "imgui-filebrowser",
+        "lsfg-vk": "lsfg-vk",
         "nixpkgs": "nixpkgs",
         "reshade": "reshade",
         "reshade-shaders": "reshade-shaders",

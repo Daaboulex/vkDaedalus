@@ -1,0 +1,11 @@
+version = 2
+[global]
+[[profile]]
+name = "process name in full"
+active_in = "lsfg-config-probe-x"
+[[profile]]
+name = "same name"
+active_in = []
+[[profile]]
+name = "same name"
+active_in = "4242"

@@ -1,0 +1,26 @@
+version   =   2
+
+[global]
+allow_fp16 = false
+log_level = "warning"
+
+[[profile]]
+name = "plain"
+active_in = "/usr/bin/plain"
+multiplier = 3
+flow_scale = 0.5
+
+[[profile]]
+name = 'vkdaedalus Default'
+active_in = [
+    "a.exe",
+    "/opt/b",
+]
+color_space = "hdr10"
+transfer_function = "pq"
+override_present_mode = false
+
+[[profile]]
+name = "kept"
+active_in = []
+performance_mode = true

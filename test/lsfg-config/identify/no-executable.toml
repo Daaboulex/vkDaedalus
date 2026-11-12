@@ -1,0 +1,11 @@
+version = 2
+[global]
+[[profile]]
+name = "steam"
+active_in = "4242"
+[[profile]]
+name = "process"
+active_in = "lsfg-config-pro"
+[[profile]]
+name = "wine"
+active_in = ["Game.exe", "Other.EXE"]

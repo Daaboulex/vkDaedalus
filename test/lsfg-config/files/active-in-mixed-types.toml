@@ -1,0 +1,5 @@
+version = 2
+[global]
+[[profile]]
+name = "a"
+active_in = ["game", 1]

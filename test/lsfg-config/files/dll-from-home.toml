@@ -1,0 +1,6 @@
+version = 2
+[global]
+dll = "~/games/lsfg-vk.dll"
+log_file = "~/lsfg.log"
+[[profile]]
+name = "a"

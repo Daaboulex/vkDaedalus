@@ -27,7 +27,8 @@ namespace vkBasalt
         std::string_view shown;
     };
 
-    inline constexpr std::array<LsfgChoice, 4> lsfgColorSpaces = {{{"srgb", "sRGB"}, {"hdr10", "HDR10"}, {"scrgb", "scRGB"}, {"dcip3", "DCI-P3"}}};
+    inline constexpr std::array<LsfgChoice, 1> lsfgPacingModes = {{{"vsync", "Vsync"}}};
+    inline constexpr std::array<LsfgChoice, 4> lsfgColorSpaces ={{{"srgb", "sRGB"}, {"hdr10", "HDR10"}, {"scrgb", "scRGB"}, {"dcip3", "DCI-P3"}}};
     inline constexpr std::array<LsfgChoice, 6> lsfgTransferFunctions = {
         {{"srgb", "sRGB"}, {"linear", "Linear"}, {"pq", "HDR10 PQ"}, {"hlg", "HDR10 HLG"}, {"scrgbnl", "scRGB non-linear"}, {"dcip3", "DCI-P3"}}};
     inline constexpr std::array<LsfgChoice, 4> lsfgLogLevels = {{{"debug", "Debug"}, {"info", "Info"}, {"warning", "Warning"}, {"error", "Error"}}};

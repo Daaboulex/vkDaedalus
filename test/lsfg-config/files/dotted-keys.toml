@@ -1,0 +1,4 @@
+version = 2
+global.allow_fp16 = false
+[[profile]]
+name = "a"

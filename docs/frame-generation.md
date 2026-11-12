@@ -1,6 +1,6 @@
 # Frame generation
 
-Frame generation comes from [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk), which stays its own layer
+Frame generation comes from [lsfg-vk](https://lsfg-vk.dev), which stays its own layer
 and is not changed. The Frame generation card edits lsfg-vk's own file, the one lsfg-vk and its settings
 program `lsfg-vk-ui` read and write, found by lsfg-vk's own rules.
 

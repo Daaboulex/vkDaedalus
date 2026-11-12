@@ -1,0 +1,8 @@
+version = 2
+[global]
+log_level = "WARNING"
+[[profile]]
+name = "a"
+color_space = "SRGB"
+transfer_function = "PQ"
+pacing_mode = "VSync"
