@@ -12,7 +12,7 @@ Or place the files in `~/.config/vkdaedalus/reshade/Shaders/` and `Textures/`.
 
 ## What runs
 
-When the corpus was last recorded, 512 of the 516 shaders in ReShade's package index compiled to
+When the corpus was last recorded, 513 of the 517 shaders in ReShade's package index compiled to
 something vkDaedalus runs. [SHADER-COMPATIBILITY.md](../SHADER-COMPATIBILITY.md) lists them all, why the
 other four do not, and which shaders have been run, since compiling is not rendering.
 

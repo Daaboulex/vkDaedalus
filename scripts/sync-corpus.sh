@@ -2,9 +2,22 @@ root=$(git rev-parse --show-toplevel)
 lock="$root/test/shader-corpus.lock.json"
 export GIT_TERMINAL_PROMPT=0
 
-index_rev=$(git ls-remote https://github.com/crosire/reshade-shaders refs/heads/list | cut -f1)
+retrying() {
+    local attempt out
+    for attempt in 1 2 3; do
+        if out=$("$@"); then
+            printf '%s\n' "$out"
+            return 0
+        fi
+        echo "attempt $attempt of 3 failed: $*" >&2
+        [ "$attempt" -lt 3 ] && sleep $((attempt * 20))
+    done
+    return 1
+}
+
+index_rev=$(retrying git ls-remote https://github.com/crosire/reshade-shaders refs/heads/list | cut -f1)
 [ -n "$index_rev" ] || { echo "crosire/reshade-shaders has no list branch" >&2; exit 1; }
-index=$(nix flake prefetch --json "github:crosire/reshade-shaders/$index_rev")
+index=$(retrying nix flake prefetch --json "github:crosire/reshade-shaders/$index_rev")
 index_path=$(jq -r .storePath <<<"$index")
 index_hash=$(jq -r .hash <<<"$index")
 [ -f "$index_path/EffectPackages.ini" ] || { echo "the index at $index_rev has no EffectPackages.ini" >&2; exit 1; }
@@ -17,10 +30,10 @@ for url in "${urls[@]}"; do
     path=${url#https://github.com/}
     owner=${path%%/*}
     repo=${path#*/}
-    rev=$(git ls-remote "$url" HEAD | cut -f1)
+    rev=$(retrying git ls-remote "$url" HEAD | cut -f1)
     [ -n "$rev" ] || { echo "$owner/$repo: no default branch to pin" >&2; exit 1; }
-    hash=$(nix flake prefetch --json "github:$owner/$repo/$rev" | jq -r .hash)
-    [ -n "$hash" ] || { echo "$owner/$repo: no hash for $rev" >&2; exit 1; }
+    hash=$(retrying nix flake prefetch --json "github:$owner/$repo/$rev" | jq -r .hash)
+    [ -n "$hash" ] && [ "$hash" != null ] || { echo "$owner/$repo: no hash for $rev" >&2; exit 1; }
     entries+=("$(jq -cn --arg owner "$owner" --arg repo "$repo" --arg rev "$rev" --arg hash "$hash" \
         '{owner: $owner, repo: $repo, rev: $rev, hash: $hash}')")
     echo "$owner/$repo at $rev" >&2

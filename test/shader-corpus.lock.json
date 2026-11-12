@@ -45,8 +45,8 @@
     {
       "owner": "BlueSkyDefender",
       "repo": "Depth3D",
-      "rev": "d52d9fc5767a2562c9df1183010388f82c3b80e2",
-      "hash": "sha256-SZI7FWY6iAk9ZZZfBC46XlhmxCPIpf+BgIKFYmc5/9s="
+      "rev": "2d028c76aed6c507ee1983f3efd76a618f5ed797",
+      "hash": "sha256-pXXKkbOLhIa5+VpKDi2eh21l1Ec5QOrDvSRmNrr9Gag="
     },
     {
       "owner": "brussell1",
@@ -123,8 +123,8 @@
     {
       "owner": "liuxd17thu",
       "repo": "BX-Shade",
-      "rev": "40f293d99bddca1518422551070d2157d60c3a30",
-      "hash": "sha256-jhWIMTWbAGyC0WR34Bp5SM4beMC0W8CxmaZbYOCB40Y="
+      "rev": "f012a325db7a892194b6465b4ea64e32879af722",
+      "hash": "sha256-mvHa7NF7LQ5go2pekHbuPBZXgEBKxo28n4YxztcCWTg="
     },
     {
       "owner": "LordKobra",
@@ -195,8 +195,8 @@
     {
       "owner": "outmode",
       "repo": "rendepth-reshade",
-      "rev": "7b80c5e2dfac74d4ec1cdcbc016ac8b6c2dc104d",
-      "hash": "sha256-OOwrr2uni0BqvvPLQd8QEVgihBXTVwvxaTFA8VLLm3w="
+      "rev": "8a6ba194093e6ff48d0c282f2f2e80957d9e9992",
+      "hash": "sha256-aR292yFoSRVl+Hj9i/gYPB6VQWpQtSwSswgUVHT/IXo="
     },
     {
       "owner": "P0NYSLAYSTATION",
@@ -207,8 +207,8 @@
     {
       "owner": "papadanku",
       "repo": "CShade",
-      "rev": "86b40b4d30fdbf458cbfad1f8c4c0466cc97e529",
-      "hash": "sha256-YNVJX4fvSyNo3FqAQEs6Ke+vwyNRQXH1aarCn6inaT4="
+      "rev": "2b220380477c9b227acb9201e31c23f5c6669ba5",
+      "hash": "sha256-OEygUGku02tauQHrkosQZ8GdIz7fgHzNle2lRlFzoCU="
     },
     {
       "owner": "prod80",
@@ -243,8 +243,8 @@
     {
       "owner": "umar-afzaal",
       "repo": "LumeniteFX",
-      "rev": "f8cbbb4eccfcb7adf0d74bb358ba349272e3c1e9",
-      "hash": "sha256-ky20mAVhGkU3E4VD023VK+cdd4ybZZJDNqqF3GQDhts="
+      "rev": "62b9a4e7b4acf033bc0b54b50fa9e2c65e3438e0",
+      "hash": "sha256-l6hJHgkd33h36KsbUFsZlo6qVIn68IfwyaghQ+8BsnM="
     },
     {
       "owner": "vertver",

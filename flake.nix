@@ -365,7 +365,7 @@
                 else
                   lib.concatMapStrings (m: "echo ${lib.escapeShellArg m}\n") mismatches
                   + ''
-                    echo "regenerate the wraps from the lock: nix run .#after-lock-update"
+                    echo "regenerate the wraps from the lock: nix run .#sync-wraps"
                     exit 1
                   ''
               );
@@ -375,6 +375,20 @@
             program = lib.getExe (
               pkgs.writeShellApplication {
                 name = "after-lock-update";
+                text = ''
+                  ${self'.apps.sync-wraps.program}
+                  ${self'.apps.sync-corpus.program}
+                '';
+              }
+            );
+            meta.description = "After a lock refresh: rewrite every wrap from flake.lock and pin every official shader pack";
+          };
+
+          apps.sync-wraps = {
+            type = "app";
+            program = lib.getExe (
+              pkgs.writeShellApplication {
+                name = "sync-wraps";
                 runtimeInputs = [
                   pkgs.git
                   pkgs.jq
