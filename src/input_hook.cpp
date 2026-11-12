@@ -351,6 +351,7 @@ namespace
         unsigned int mask  = 0;
     };
     std::unordered_map<const Display*, HeldPointer> heldPointers;
+    std::optional<HeldPointer>                      pointerAtBlock;
 
     using QueryPointer         = Bool (*)(Display*, Window, Window*, Window*, int*, int*, int*, int*, unsigned int*);
     using WarpPointer          = int (*)(Display*, Window, Window, int, int, unsigned int, unsigned int, int, int);
@@ -437,7 +438,14 @@ namespace
             std::lock_guard<std::mutex> lock(mutex);
             droppedPresses.clear();
             heldPointers.clear();
+            pointerAtBlock.reset();
         }
+    }
+
+    void holdPointerAt(int rootX, int rootY, unsigned int mask)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        pointerAtBlock = HeldPointer{rootX, rootY, None, mask};
     }
 
     bool gameListenersWrapped()
@@ -478,7 +486,7 @@ namespace
 extern "C" __attribute__((visibility("default"))) const VkBasaltInputHook* vkdaedalus_input_hook()
 {
     static const VkBasaltInputHook hook = {vkbasaltInputHookVersion, setBlocked,   gameListenersWrapped, markOwnProxy,   unmarkOwnProxy,
-                                           takeGameButtons,          xcbReady,     markOwnXcbConnection, setXInputOpcode};
+                                           takeGameButtons,          xcbReady,     markOwnXcbConnection, setXInputOpcode, holdPointerAt};
     return &hook;
 }
 
@@ -492,7 +500,8 @@ extern "C" __attribute__((visibility("default"))) Bool XQueryPointer(Display* di
     if (!found || !blocked.load(std::memory_order_acquire) || ownDisplay(display))
         return found;
     std::lock_guard<std::mutex> lock(mutex);
-    const auto [held, first] = heldPointers.try_emplace(display, HeldPointer{*rootX, *rootY, *child, *mask});
+    const auto [held, first] = heldPointers.try_emplace(
+        display, pointerAtBlock ? HeldPointer{pointerAtBlock->rootX, pointerAtBlock->rootY, *child, pointerAtBlock->mask} : HeldPointer{*rootX, *rootY, *child, *mask});
     const int dx = held->second.rootX - *rootX;
     const int dy = held->second.rootY - *rootY;
     *rootX += dx;
@@ -517,7 +526,9 @@ extern "C" __attribute__((visibility("default"))) int XWarpPointer(Display* disp
     const bool placed = to != None && functions.translate != nullptr
                         && functions.translate(display, to, DefaultRootWindow(display), toX, toY, &rootX, &rootY, &child);
     std::lock_guard<std::mutex> lock(mutex);
-    const auto held = heldPointers.find(display);
+    auto held = heldPointers.find(display);
+    if (held == heldPointers.end() && pointerAtBlock)
+        held = heldPointers.emplace(display, *pointerAtBlock).first;
     if (placed)
         heldPointers[display] = HeldPointer{rootX, rootY, held != heldPointers.end() ? held->second.child : None,
                                             held != heldPointers.end() ? held->second.mask : 0};

@@ -125,6 +125,11 @@ namespace vkBasalt
             int      revert  = 0;
             if (display == nullptr || XGetInputFocus(display, &focusAtGrab, &revert) == 0)
                 focusAtGrab = None;
+            Window       root = None, child = None;
+            int          rootX = 0, rootY = 0, windowX = 0, windowY = 0;
+            unsigned int mask = 0;
+            if (display != nullptr && XQueryPointer(display, DefaultRootWindow(display), &root, &child, &rootX, &rootY, &windowX, &windowY, &mask))
+                holdGamePointerAt(rootX, rootY, mask);
             hookHolds = true;
             setGameInputBlocked(true);
             Logger::debug("X11 input hook: the game's key, button and motion events are held, with no grab");

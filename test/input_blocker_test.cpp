@@ -34,6 +34,8 @@ namespace vkBasalt
         hookBlocks.push_back(blocked);
     }
 
+    void holdGamePointerAt(int, int, unsigned int) {}
+
     void* getKeyboardDisplay()
     {
         return nullptr;

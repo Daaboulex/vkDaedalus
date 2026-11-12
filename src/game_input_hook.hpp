@@ -10,6 +10,7 @@ namespace vkBasalt
     void unregisterOverlayProxy(wl_proxy* proxy);
     bool gameInputHooked();
     void setGameInputBlocked(bool blocked);
+    void holdGamePointerAt(int rootX, int rootY, unsigned int mask);
     void takeGameButtons(void (*into)(uint32_t button, bool pressed));
     bool gameX11InputHooked();
     void markOverlayX11Display(void* display);

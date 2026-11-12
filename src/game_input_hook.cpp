@@ -62,6 +62,12 @@ namespace vkBasalt
             hook->setBlocked(blocked);
     }
 
+    void holdGamePointerAt(int rootX, int rootY, unsigned int mask)
+    {
+        if (const VkBasaltInputHook* hook = inputHook())
+            hook->holdPointerAt(rootX, rootY, mask);
+    }
+
     bool gameX11InputHooked()
     {
         const VkBasaltInputHook* hook = inputHook();

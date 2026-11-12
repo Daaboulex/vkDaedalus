@@ -5,7 +5,7 @@
 
 struct wl_proxy;
 
-inline constexpr uint32_t vkbasaltInputHookVersion = 2;
+inline constexpr uint32_t vkbasaltInputHookVersion = 3;
 
 struct VkBasaltInputHookButton
 {
@@ -24,4 +24,5 @@ struct VkBasaltInputHook
     bool (*xcbReady)();
     void (*markOwnXcbConnection)(const void* connection);
     void (*setXInputOpcode)(int opcode);
+    void (*holdPointerAt)(int rootX, int rootY, unsigned int mask);
 };
