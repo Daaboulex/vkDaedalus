@@ -9,7 +9,9 @@ float4 MinPrecPS(float4 pos : SV_Position) : SV_Target
 {
     min16float a = (min16float)Strength;
     min16float b = a * a + (min16float)0.25;
-    return float4(b, b, b, 1.0);
+    min16float2x2 m = min16float2x2(a, 0.0, 0.0, b);
+    min16float2 v = mul(m, min16float2(1.0, 1.0));
+    return float4(v.x, v.y, b, 1.0);
 }
 
 technique MinPrecision

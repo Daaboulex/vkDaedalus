@@ -4,6 +4,9 @@ sampler2D DeclBackBuffer { Texture = DeclBackBufferTex; };
 texture2D DeclPacked { Width = 8; Height = 8; Format = RG11B10F; };
 sampler2D DeclPackedSampler { Texture = DeclPacked; };
 
+texture2D DeclPackedFullName { Width = 8; Height = 8; Format = R11G11B10F; };
+sampler2D DeclPackedFullNameSampler { Texture = DeclPackedFullName; };
+
 texture2D DeclWide { Width = 8; Height = 8; Format = RGB10A2; };
 storage2D DeclWideStorage { Texture = DeclWide; };
 sampler2D DeclWideSampler { Texture = DeclWide; };
@@ -50,7 +53,7 @@ int FillIntMipsPS(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 
 float4 CombinePS(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 {
-    float4 extra = tex2D(DeclPackedSampler, uv) + tex2D(DeclWideSampler, uv)
+    float4 extra = tex2D(DeclPackedSampler, uv) + tex2D(DeclPackedFullNameSampler, uv) + tex2D(DeclWideSampler, uv)
                  + tex2Dlod(DeclMipsSampler, float4(uv, 0.0, 2.0)) + tex2Dlod(DeclTooManyMipsSampler, float4(uv, 0.0, 3.0));
     extra += float(tex2Dlod(DeclIntMipsSampler, float4(uv, 0.0, 1.0))) * 0.001 + float4(tex2D(DeclSignedIntsSampler, uv)) * 0.001;
     return tex2D(DeclBackBuffer, uv) * 0.6 + extra * 0.1;
