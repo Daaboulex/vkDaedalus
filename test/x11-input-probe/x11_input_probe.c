@@ -1,6 +1,7 @@
-#define VK_USE_PLATFORM_XCB_KHR
+#define VK_USE_PLATFORM_XLIB_KHR
 #include <vulkan/vulkan.h>
-#include <xcb/xcb.h>
+#include <X11/Xlib.h>
+#include <X11/extensions/XInput2.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +9,9 @@
 
 enum
 {
-    SLOTS = 2
+    SLOTS = 2,
+    WINE_XI_MAJOR = 2,
+    WINE_XI_MINOR = 2
 };
 
 static int fail(const char* why)
@@ -44,57 +47,70 @@ static int recordClear(VkCommandBuffer cmd, VkImage image)
     return vkEndCommandBuffer(cmd) == VK_SUCCESS ? 0 : fail("vkEndCommandBuffer failed");
 }
 
-static void report(const xcb_generic_event_t* event, unsigned long* keys, unsigned long* buttons, unsigned long* motions)
+static Bool anyEvent(Display* display, XEvent* event, XPointer unused)
 {
-    const uint8_t type = event->response_type & 0x7F;
-    if (type == XCB_KEY_PRESS)
+    return True;
+}
+
+static void report(Display* display, int xinput, XEvent* event)
+{
+    if (event->type == KeyPress)
+        fprintf(stderr, "x11-input-probe: key press %u\n", event->xkey.keycode);
+    else if (event->type == ButtonPress)
+        fprintf(stderr, "x11-input-probe: button press %u\n", event->xbutton.button);
+    else if (event->type == MotionNotify)
+        fprintf(stderr, "x11-input-probe: motion %d %d\n", event->xmotion.x, event->xmotion.y);
+    else if (event->type == GenericEvent && event->xcookie.extension == xinput && XGetEventData(display, &event->xcookie))
     {
-        (*keys)++;
-        fprintf(stderr, "x11-input-probe: key press %u\n", ((const xcb_key_press_event_t*)event)->detail);
-    }
-    else if (type == XCB_BUTTON_PRESS)
-    {
-        (*buttons)++;
-        fprintf(stderr, "x11-input-probe: button press %u\n", ((const xcb_button_press_event_t*)event)->detail);
-    }
-    else if (type == XCB_MOTION_NOTIFY)
-    {
-        (*motions)++;
-        fprintf(stderr, "x11-input-probe: motion\n");
+        if (event->xcookie.evtype == XI_RawMotion)
+            fprintf(stderr, "x11-input-probe: raw motion\n");
+        else if (event->xcookie.evtype == XI_RawButtonPress)
+            fprintf(stderr, "x11-input-probe: raw button press %d\n", ((const XIRawEvent*)event->xcookie.data)->detail);
+        else if (event->xcookie.evtype == XI_RawKeyPress)
+            fprintf(stderr, "x11-input-probe: raw key press %d\n", ((const XIRawEvent*)event->xcookie.data)->detail);
+        XFreeEventData(display, &event->xcookie);
     }
 }
 
 int main(int argc, char** argv)
 {
     char*               end    = NULL;
-    const unsigned long frames = argc == 2 ? strtoul(argv[1], &end, 10) : 0;
-    if (argc != 2 || !end || *end != '\0' || frames < 8 || frames > 100000)
-        return fail("usage: x11-input-probe <presents, 8 to 100000>");
+    const unsigned long frames   = argc >= 2 ? strtoul(argv[1], &end, 10) : 0;
+    const int           recenter = argc == 3 && strcmp(argv[2], "recenter") == 0;
+    if (argc < 2 || argc > 3 || (argc == 3 && !recenter) || !end || *end != '\0' || frames < 8 || frames > 100000)
+        return fail("usage: x11-input-probe <presents, 8 to 100000> [recenter]");
 
-    xcb_connection_t* connection = xcb_connect(NULL, NULL);
-    if (xcb_connection_has_error(connection))
+    Display* display = XOpenDisplay(NULL);
+    if (!display)
         return fail("no X11 display");
-    const xcb_screen_t* screen = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
-    const xcb_window_t  window = xcb_generate_id(connection);
-    const uint32_t      events = XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE | XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE |
-                            XCB_EVENT_MASK_POINTER_MOTION | XCB_EVENT_MASK_EXPOSURE;
-    xcb_create_window(connection, XCB_COPY_FROM_PARENT, window, screen->root, 0, 0, 640, 480, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual,
-                      XCB_CW_EVENT_MASK, &events);
-    xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, strlen("x11-input-probe"), "x11-input-probe");
-    xcb_map_window(connection, window);
-    xcb_flush(connection);
+    const Window         root       = DefaultRootWindow(display);
+    XSetWindowAttributes attributes = {.event_mask = KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | ExposureMask};
+    const Window window = XCreateWindow(display, root, 0, 0, 640, 480, 0, CopyFromParent, InputOutput, CopyFromParent, CWEventMask, &attributes);
+    XStoreName(display, window, "x11-input-probe");
+    XMapWindow(display, window);
 
-    const char* const          extensions[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_XCB_SURFACE_EXTENSION_NAME};
+    int xinput = 0, firstEvent = 0, firstError = 0, major = WINE_XI_MAJOR, minor = WINE_XI_MINOR;
+    if (!XQueryExtension(display, "XInputExtension", &xinput, &firstEvent, &firstError) || XIQueryVersion(display, &major, &minor) != Success)
+        return fail("no XInput2 on the display");
+    unsigned char rawMask[XIMaskLen(XI_LASTEVENT)] = {0};
+    XISetMask(rawMask, XI_RawMotion);
+    XISetMask(rawMask, XI_RawButtonPress);
+    XISetMask(rawMask, XI_RawKeyPress);
+    XIEventMask selection = {.deviceid = XIAllMasterDevices, .mask_len = sizeof(rawMask), .mask = rawMask};
+    XISelectEvents(display, root, &selection, 1);
+    XFlush(display);
+
+    const char* const          extensions[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_XLIB_SURFACE_EXTENSION_NAME};
     const VkApplicationInfo    app          = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "x11-input-probe", .apiVersion = VK_API_VERSION_1_1};
     const VkInstanceCreateInfo instanceInfo = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app, .enabledExtensionCount = 2, .ppEnabledExtensionNames = extensions};
     VkInstance instance = VK_NULL_HANDLE;
     if (vkCreateInstance(&instanceInfo, NULL, &instance) != VK_SUCCESS)
         return fail("vkCreateInstance failed");
-    const VkXcbSurfaceCreateInfoKHR surfaceInfo = {.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR, .connection = connection, .window = window};
-    VkSurfaceKHR                    surface     = VK_NULL_HANDLE;
-    if (vkCreateXcbSurfaceKHR(instance, &surfaceInfo, NULL, &surface) != VK_SUCCESS)
-        return fail("vkCreateXcbSurfaceKHR failed");
+    const VkXlibSurfaceCreateInfoKHR surfaceInfo = {.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR, .dpy = display, .window = window};
+    VkSurfaceKHR                     surface     = VK_NULL_HANDLE;
+    if (vkCreateXlibSurfaceKHR(instance, &surfaceInfo, NULL, &surface) != VK_SUCCESS)
+        return fail("vkCreateXlibSurfaceKHR failed");
     uint32_t         count    = 1;
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     const VkResult   listed   = vkEnumeratePhysicalDevices(instance, &count, &physical);
@@ -170,7 +186,8 @@ int main(int argc, char** argv)
     VkImage*         images   = calloc(imageCount ? imageCount : 1, sizeof(*images));
     VkCommandBuffer* commands = calloc(imageCount ? imageCount : 1, sizeof(*commands));
     VkSemaphore*     rendered = calloc(imageCount ? imageCount : 1, sizeof(*rendered));
-    if (!images || !commands || !rendered)
+    VkFence*         lastUse  = calloc(imageCount ? imageCount : 1, sizeof(*lastUse));
+    if (!images || !commands || !rendered || !lastUse)
         return fail("out of memory");
     vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images);
     const VkCommandPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .queueFamilyIndex = family};
@@ -192,28 +209,39 @@ int main(int argc, char** argv)
         if (vkCreateSemaphore(device, &semaphoreInfo, NULL, &acquired[s]) != VK_SUCCESS || vkCreateFence(device, &fenceInfo, NULL, &inFlight[s]) != VK_SUCCESS)
             return fail("vkCreateSemaphore or vkCreateFence failed");
 
-    unsigned long keys = 0, buttons = 0, motions = 0;
-    int           holding = 0;
+    int holding = 0, seenX = -1, seenY = -1;
     for (unsigned long frame = 0; frame < frames; frame++)
     {
-        if (!holding)
+        if (!holding
+            && XGrabPointer(display, window, False, ButtonPressMask | ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync, window, None,
+                            CurrentTime) == GrabSuccess)
         {
-            const uint16_t                pointerEvents = XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE | XCB_EVENT_MASK_POINTER_MOTION;
-            xcb_grab_pointer_reply_t* grab = xcb_grab_pointer_reply(connection,
-                                                                     xcb_grab_pointer(connection, 0, window, pointerEvents, XCB_GRAB_MODE_ASYNC,
-                                                                                      XCB_GRAB_MODE_ASYNC, window, XCB_NONE, XCB_CURRENT_TIME),
-                                                                     NULL);
-            if (grab && grab->status == XCB_GRAB_STATUS_SUCCESS)
-            {
-                holding = 1;
-                fprintf(stderr, "x11-input-probe: holds the pointer\n");
-            }
-            free(grab);
+            holding = 1;
+            fprintf(stderr, "x11-input-probe: holds the pointer\n");
         }
-        for (xcb_generic_event_t* event = xcb_poll_for_event(connection); event; event = xcb_poll_for_event(connection))
+        for (XEvent event; XCheckIfEvent(display, &event, anyEvent, NULL);)
+            report(display, xinput, &event);
+        Window       rootSeen = None, child = None;
+        int          x = 0, y = 0, windowX = 0, windowY = 0;
+        unsigned int buttonsHeld = 0;
+        if (XQueryPointer(display, root, &rootSeen, &child, &x, &y, &windowX, &windowY, &buttonsHeld) && (x != seenX || y != seenY))
         {
-            report(event, &keys, &buttons, &motions);
-            free(event);
+            if (seenX >= 0)
+                fprintf(stderr, "x11-input-probe: pointer moved %d %d\n", x, y);
+            seenX = x;
+            seenY = y;
+        }
+        if (recenter)
+        {
+            XWarpPointer(display, None, window, 0, 0, 0, 0, 320, 240);
+            Window       warpedRoot = None, warpedChild = None;
+            int          warpedX = 0, warpedY = 0, warpedWindowX = 0, warpedWindowY = 0;
+            unsigned int warpedButtons = 0;
+            if (XQueryPointer(display, root, &warpedRoot, &warpedChild, &warpedX, &warpedY, &warpedWindowX, &warpedWindowY, &warpedButtons))
+            {
+                seenX = warpedX;
+                seenY = warpedY;
+            }
         }
         const uint32_t slot = (uint32_t)(frame % SLOTS);
         if (vkWaitForFences(device, 1, &inFlight[slot], VK_TRUE, UINT64_MAX) != VK_SUCCESS || vkResetFences(device, 1, &inFlight[slot]) != VK_SUCCESS)
@@ -222,6 +250,10 @@ int main(int argc, char** argv)
         const VkResult got   = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, acquired[slot], VK_NULL_HANDLE, &index);
         if (got != VK_SUCCESS && got != VK_SUBOPTIMAL_KHR)
             return fail("vkAcquireNextImageKHR failed");
+        if (lastUse[index] != VK_NULL_HANDLE && lastUse[index] != inFlight[slot]
+            && vkWaitForFences(device, 1, &lastUse[index], VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+            return fail("vkWaitForFences on the image's last frame failed");
+        lastUse[index] = inFlight[slot];
         const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         const VkSubmitInfo         submit    = {.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
                                                 .waitSemaphoreCount   = 1,
@@ -244,8 +276,7 @@ int main(int argc, char** argv)
             return fail("vkQueuePresentKHR failed");
     }
     vkDeviceWaitIdle(device);
-    fprintf(stderr, "x11-input-probe: counted %lu key presses, %lu button presses and %lu motions over %lu presents%s\n", keys, buttons, motions, frames,
-            holding ? ", holding the pointer" : ", never holding the pointer");
+    fprintf(stderr, "x11-input-probe: done after %lu presents%s\n", frames, holding ? ", holding the pointer" : ", never holding the pointer");
     for (int s = 0; s < SLOTS; s++)
     {
         vkDestroySemaphore(device, acquired[s], NULL);
@@ -261,6 +292,7 @@ int main(int argc, char** argv)
     free(images);
     free(commands);
     free(rendered);
-    xcb_disconnect(connection);
+    free(lastUse);
+    XCloseDisplay(display);
     return 0;
 }

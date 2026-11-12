@@ -3545,30 +3545,36 @@ lane_focus() {
 }
 
 drive_x11_hook() {
-    local log="$1" window
+    local log="$1" map="$2" window
     wait_for_line 'x11-input-probe: holds the pointer' 1 "$log" || return 0
     window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name 'x11-input-probe' | tail -1) || true
     ui_take_window "$window"
     hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || return 0
     sleep 0.5
-    DISPLAY="$PRIVATE_DISPLAY" xdotool key a mousemove_relative 30 30 click 1 || true
+    head -1 "$map" >"$log.mouse-before" 2>/dev/null || true
+    DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove_relative 30 30 || true
+    sleep 0.5
+    head -1 "$map" >"$log.mouse-after" 2>/dev/null || true
+    DISPLAY="$PRIVATE_DISPLAY" xdotool key a click 1 || true
     sleep 0.5
     hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || return 0
     sleep 0.5
-    DISPLAY="$PRIVATE_DISPLAY" xdotool key b click 1 || true
+    DISPLAY="$PRIVATE_DISPLAY" xdotool key b mousemove_relative 30 30 click 1 || true
 }
 
 x11_hook_case() {
-    local icd="$1" dir="$2" control="$3" name="the input hook holds an X11 game's input" log="$2/x11-hook.log" home="$2/x11-hook-home" driver why opened closed during after
+    local icd="$1" dir="$2" control="$3" name="the input hook holds an X11 game's input" log="$2/x11-hook.log" home="$2/x11-hook-home" map="$2/x11-hook.map"
+    local driver why opened closed during kind silent moved own_warp='x11-input-probe: motion 320 240'
+    local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved")
     if [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then
         record SKIP "$name" "this build has no vkdaedalus-run (a plain meson build installs none)"
         return 0
     fi
     fresh_home "$home" cas
     printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
-    background drive_x11_hook "$log"
+    background drive_x11_hook "$log" "$map"
     driver=$!
-    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- "$VKB_LAYER/bin/vkdaedalus-run" x11-input-probe 900
+    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" "$VKB_LAYER/bin/vkdaedalus-run" x11-input-probe 900 recenter
     driver_finished "drive_x11_hook"
     opened=$(grep -n -m1 'overlay opened' "$log" | cut -d: -f1)
     closed=$(grep -n -m1 'overlay closed' "$log" | cut -d: -f1)
@@ -3579,14 +3585,25 @@ x11_hook_case() {
     elif [ -z "$opened" ] || [ -z "$closed" ]; then
         record FAIL "$name" "the overlay key never opened and closed the overlay over the probe"
     else
-        during=$(awk -v a="$opened" -v b="$closed" 'NR > a && NR < b && /^x11-input-probe: (key press|button press|motion)/ { n++ } END { print n + 0 }' "$log")
-        after=$(awk -v b="$closed" 'NR > b && /^x11-input-probe: key press/ { n++ } END { print n + 0 }' "$log")
-        if [ "$during" -ne 0 ]; then
-            record FAIL "$name" "the game got $during key, button or motion events while the overlay was open: $(awk -v a="$opened" -v b="$closed" 'NR > a && NR < b && /^x11-input-probe: (key press|button press|motion)/' "$log" | head -3 | tr '\n' ' ')"
-        elif [ "$after" -lt 1 ]; then
-            record FAIL "$name" "the game got no key once the overlay closed, so it may get no input at all"
+        during=""
+        silent=""
+        for kind in "${kinds[@]}"; do
+            why=$(awk -v a="$opened" -v b="$closed" -v k="x11-input-probe: $kind" -v w="$own_warp" \
+                'NR > a && NR < b && $0 != w && (index($0, k " ") == 1 || $0 == k) { print; exit }' "$log")
+            [ -z "$why" ] || during+="${during:+; }$why"
+            awk -v b="$closed" -v k="x11-input-probe: $kind" -v w="$own_warp" 'NR > b && $0 != w && (index($0, k " ") == 1 || $0 == k) { found = 1 } END { exit found ? 0 : 1 }' "$log" \
+                || silent+="${silent:+, }$kind"
+        done
+        moved=$(awk 'FNR == 1 && $3 == "mouse" { x[NR == FNR] = $4; y[NR == FNR] = $5; n++ } END { if (n == 2) print x[0] - x[1], y[0] - y[1] }' \
+            "$log.mouse-before" "$log.mouse-after" 2>/dev/null)
+        if [ -n "$during" ]; then
+            record FAIL "$name" "the game read input while the overlay was open: $during"
+        elif [ -n "$silent" ]; then
+            record FAIL "$name" "after the overlay closed the probe saw no $silent, so the case cannot show those are held while it is open"
+        elif ! awk -v m="$moved" 'BEGIN { split(m, d, " "); exit (m != "" && d[1] >= 29 && d[1] <= 31 && d[2] >= 29 && d[2] <= 31) ? 0 : 1 }'; then
+            record FAIL "$name" "the overlay's pointer moved ${moved:-by an unreadable amount} for a move of 30 30 while the game re-centred its own, so the game's warp moved the overlay's pointer"
         else
-            record PASS "$name" "a game holding its own pointer grab, started with vkdaedalus-run, got no key, button or motion while the overlay was open and its keys again once it closed"
+            record PASS "$name" "a game reading input as Wine does (core and XInput2 raw events through Xlib, the pointer through XQueryPointer) and re-centring it with XWarpPointer, holding its own pointer grab and started with vkdaedalus-run, read nothing while the overlay was open, never moved the overlay's pointer, and read every kind again once it closed"
         fi
     fi
 }

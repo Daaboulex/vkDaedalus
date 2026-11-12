@@ -17,8 +17,11 @@ It reads the mouse only while it is open or a running effect reads the mouse, an
 only while it is open. Closed, it draws only the HUD and the launch notice when they are on, and each
 card computes its figures only while it is the card shown.
 While it is open, the input hook that `vkdaedalus-run` preloads drops the game's keys, buttons and
-motion: in libxcb's event reads on X11 and in the game's own Wayland listeners. Releases still reach
-the game, so a key held when the overlay opened does not stick. An X11 game started without
+motion: in libxcb's event reads on X11 and in the game's own Wayland listeners. On X11 a game that
+asks where the pointer is (XQueryPointer, which Wine's GetCursorPos uses) is told it has not moved, and
+a pointer move it asks for (XWarpPointer, Wine's SetCursorPos) moves only that answer, so the camera
+stays still and the overlay's pointer stays where you put it. Releases still reach the game, so a key
+held when the overlay opened does not stick. An X11 game started without
 `vkdaedalus-run` gets a keyboard and pointer grab instead.
 
 ## The order around lsfg-vk

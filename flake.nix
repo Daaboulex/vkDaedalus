@@ -284,6 +284,7 @@
 
                 cp -r ${./src} src
                 $CXX -fsyntax-only -std=c++20 -Isrc -Iold -Igen -I${pkgs.lib.getDev pkgs.libxcb}/include \
+                  -I${pkgs.lib.getDev pkgs.libx11}/include -I${pkgs.xorgproto}/include \
                   src/mouse_input_wayland.cpp src/input_hook.cpp src/wayland_input_common.cpp \
                   || { echo "a Wayland protocol member newer than wayland 1.20, the oldest supported floor (Ubuntu 22.04), is used without its SINCE_VERSION guard"; exit 1; }
                 touch $out
@@ -1728,6 +1729,7 @@
                     pkgs.vulkan-loader
                     pkgs.libxcb
                     pkgs.libx11
+                    pkgs.libxi
                   ];
                   dontConfigure = true;
                   buildPhase = ''

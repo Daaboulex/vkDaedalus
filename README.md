@@ -69,7 +69,8 @@ AMD Radeon RX 9070 XT as its second GPU (2026-10-25).
 - **Safe Anti-Cheat**, on for every game by default: no effect reads depth.
 - **The game gets no input while the overlay is open**: the input hook
   `vkdaedalus-run` preloads holds the game's keys, buttons and motion on Wayland
-  and X11, with no grab, so a game holding the pointer is held too; a release
+  and X11, and on X11 the pointer position a game reads or moves, with no grab,
+  so a game holding the pointer is held too; a release
   whose press reached the game still does, so a held key does not stick. Started
   without `vkdaedalus-run`, an X11 game gets a keyboard and pointer grab instead.
 

@@ -11,7 +11,7 @@ mkdir -p "$out/bin" "$out/lib" "$out/share/vulkan/implicit_layer.d" "$out/share/
 "$cc" -O2 -Wall -Werror -o "$out/bin/api-probe" "$test/api-probe/api_probe.c" -lvulkan
 "$cc" -O2 -Wall -Werror -pthread -o "$out/bin/queue-race-probe" "$test/queue-race-probe/queue_race_probe.c" -lvulkan -lxcb
 "$cc" -O2 -Wall -Werror -o "$out/bin/two-swapchain-probe" "$test/two-swapchain-probe/two_swapchain_probe.c" -lvulkan -lxcb
-"$cc" -O2 -Wall -Werror -o "$out/bin/x11-input-probe" "$test/x11-input-probe/x11_input_probe.c" -lvulkan -lxcb
+"$cc" -O2 -Wall -Werror -o "$out/bin/x11-input-probe" "$test/x11-input-probe/x11_input_probe.c" -lvulkan -lX11 -lXi
 "$cc" -O2 -Wall -Werror -o "$out/bin/swapchain-probe" "$test/swapchain-probe/swapchain_probe.c" -lvulkan -lxcb
 "$cc" -O2 -Wall -Werror -o "$out/bin/pixel-probe" "$test/pixel-probe/pixel_probe.c"
 "$cc" -O2 -Wall -Werror -o "$out/bin/grab-probe" "$test/focus-loss/grab_probe.c" -lX11

@@ -15,7 +15,7 @@ missing=()
 for tool in cc vkcube vulkaninfo weston Xwayland xdotool gawk timeout setsid pgrep find sort mktemp; do
     command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 done
-[ "${#missing[@]}" -eq 0 ] || die "this host lacks ${missing[*]}; the Vulkan headers and the xcb and X11 development files are needed too"
+[ "${#missing[@]}" -eq 0 ] || die "this host lacks ${missing[*]}; the Vulkan headers and the xcb, X11 and XInput2 (libXi) development files are needed too"
 weston_help=$(weston --help 2>&1 || true)
 case "$weston_help" in
     *vulkan*) ;;

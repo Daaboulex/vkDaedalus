@@ -6,6 +6,7 @@
 #include "tablet-v2-client-protocol.h"
 #include "text-input-unstable-v3-client-protocol.h"
 
+#include <X11/Xlib.h>
 #include <wayland-client.h>
 #include <xcb/xcb.h>
 
@@ -341,6 +342,51 @@ namespace
     }
 
     std::unordered_set<const void*> ownConnections;
+
+    struct HeldPointer
+    {
+        int          rootX = 0;
+        int          rootY = 0;
+        Window       child = None;
+        unsigned int mask  = 0;
+    };
+    std::unordered_map<const Display*, HeldPointer> heldPointers;
+
+    using QueryPointer         = Bool (*)(Display*, Window, Window*, Window*, int*, int*, int*, int*, unsigned int*);
+    using WarpPointer          = int (*)(Display*, Window, Window, int, int, unsigned int, unsigned int, int, int);
+    using TranslateCoordinates = Bool (*)(Display*, Window, Window, int, int, int*, int*, Window*);
+    using ConnectionOf         = xcb_connection_t* (*)(Display*);
+
+    struct Xlib
+    {
+        QueryPointer         query     = nullptr;
+        WarpPointer          warp      = nullptr;
+        TranslateCoordinates translate = nullptr;
+        ConnectionOf         connectionOf = nullptr;
+    };
+
+    const Xlib& xlib()
+    {
+        static const Xlib found = [] {
+            Xlib        functions;
+            void* const x11  = dlopen("libX11.so.6", RTLD_NOW | RTLD_NOLOAD);
+            void* const from = x11 != nullptr ? x11 : RTLD_NEXT;
+            void* const xcb  = dlopen("libX11-xcb.so.1", RTLD_NOW | RTLD_NOLOAD);
+            functions.query        = reinterpret_cast<QueryPointer>(dlsym(from, "XQueryPointer"));
+            functions.warp         = reinterpret_cast<WarpPointer>(dlsym(from, "XWarpPointer"));
+            functions.translate    = reinterpret_cast<TranslateCoordinates>(dlsym(from, "XTranslateCoordinates"));
+            functions.connectionOf = reinterpret_cast<ConnectionOf>(dlsym(xcb != nullptr ? xcb : RTLD_DEFAULT, "XGetXCBConnection"));
+            return functions;
+        }();
+        return found;
+    }
+
+    bool ownDisplay(Display* display)
+    {
+        const ConnectionOf connectionOf = xlib().connectionOf;
+        std::lock_guard<std::mutex> lock(mutex);
+        return connectionOf != nullptr && ownConnections.count(connectionOf(display)) > 0;
+    }
     std::atomic<int>                xinputOpcode{-1};
     vkBasalt::X11DroppedPresses     droppedPresses;
 
@@ -390,6 +436,7 @@ namespace
         {
             std::lock_guard<std::mutex> lock(mutex);
             droppedPresses.clear();
+            heldPointers.clear();
         }
     }
 
@@ -433,6 +480,53 @@ extern "C" __attribute__((visibility("default"))) const VkBasaltInputHook* vkdae
     static const VkBasaltInputHook hook = {vkbasaltInputHookVersion, setBlocked,   gameListenersWrapped, markOwnProxy,   unmarkOwnProxy,
                                            takeGameButtons,          xcbReady,     markOwnXcbConnection, setXInputOpcode};
     return &hook;
+}
+
+extern "C" __attribute__((visibility("default"))) Bool XQueryPointer(Display* display, Window window, Window* root, Window* child, int* rootX, int* rootY,
+                                                                     int* windowX, int* windowY, unsigned int* mask)
+{
+    const QueryPointer query = xlib().query;
+    if (query == nullptr)
+        return False;
+    const Bool found = query(display, window, root, child, rootX, rootY, windowX, windowY, mask);
+    if (!found || !blocked.load(std::memory_order_acquire) || ownDisplay(display))
+        return found;
+    std::lock_guard<std::mutex> lock(mutex);
+    const auto [held, first] = heldPointers.try_emplace(display, HeldPointer{*rootX, *rootY, *child, *mask});
+    const int dx = held->second.rootX - *rootX;
+    const int dy = held->second.rootY - *rootY;
+    *rootX += dx;
+    *rootY += dy;
+    *windowX += dx;
+    *windowY += dy;
+    *child = held->second.child;
+    *mask  = held->second.mask;
+    return found;
+}
+
+extern "C" __attribute__((visibility("default"))) int XWarpPointer(Display* display, Window from, Window to, int fromX, int fromY, unsigned int fromWidth,
+                                                                   unsigned int fromHeight, int toX, int toY)
+{
+    const Xlib& functions = xlib();
+    if (functions.warp == nullptr)
+        return 0;
+    if (!blocked.load(std::memory_order_acquire) || ownDisplay(display))
+        return functions.warp(display, from, to, fromX, fromY, fromWidth, fromHeight, toX, toY);
+    int    rootX = 0, rootY = 0;
+    Window child = None;
+    const bool placed = to != None && functions.translate != nullptr
+                        && functions.translate(display, to, DefaultRootWindow(display), toX, toY, &rootX, &rootY, &child);
+    std::lock_guard<std::mutex> lock(mutex);
+    const auto held = heldPointers.find(display);
+    if (placed)
+        heldPointers[display] = HeldPointer{rootX, rootY, held != heldPointers.end() ? held->second.child : None,
+                                            held != heldPointers.end() ? held->second.mask : 0};
+    else if (to == None && held != heldPointers.end())
+    {
+        held->second.rootX += toX;
+        held->second.rootY += toY;
+    }
+    return 1;
 }
 
 extern "C" __attribute__((visibility("default"))) xcb_generic_event_t* xcb_poll_for_event(xcb_connection_t* connection)
