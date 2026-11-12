@@ -1,4 +1,5 @@
 #include "imgui_overlay.hpp"
+#include "chain_rows.hpp"
 #include "effects/effect_registry.hpp"
 #include "settings_manager.hpp"
 #include "live_uniform_policy.hpp"
@@ -171,6 +172,7 @@ namespace vkBasalt
             desktopXftDpi  = isWayland() ? std::nullopt : xftDpiFrom(x11ResourceString());
         }
         listeningForKey = KeyBinding::None;
+        listeningRow.clear();
         if (visible)
             getKeyboardState();
         else
@@ -293,12 +295,22 @@ namespace vkBasalt
         effects = pEffectRegistry->getSelectedEffects();
         allDefs = pEffectRegistry->getSavedGlobalDefinitions();
 
-        for (const auto& effectName : effects)
+        std::set<std::string> instancesWritten;
+        for (const auto& row : effects)
         {
+            liveParameterKeys.insert(row + ".gpu");
+            liveParameterKeys.insert(row + ".key");
+            if (const uint32_t gpu = pEffectRegistry->getEffectGpu(row); gpu != 0)
+                params.push_back({row, "gpu", std::to_string(gpu)});
+            if (const std::string key = pEffectRegistry->getEffectKey(row); !key.empty())
+                params.push_back({row, "key", key});
+            if (!pEffectRegistry->isEffectEnabled(row))
+                disabledEffects.push_back(row);
+
+            const std::string effectName = instanceOfRow(row);
+            if (!instancesWritten.insert(effectName).second)
+                continue;
             liveParameterKeys.insert(effectName + ".halfPrecision");
-            liveParameterKeys.insert(effectName + ".gpu");
-            if (const uint32_t gpu = pEffectRegistry->getEffectGpu(effectName); gpu != 0)
-                params.push_back({effectName, "gpu", std::to_string(gpu)});
             for (auto* p : pEffectRegistry->getParametersForEffect(effectName))
             {
                 for (const auto& [suffix, value] : p->serialize())
@@ -316,9 +328,6 @@ namespace vkBasalt
                     params.push_back(cp);
                 }
             }
-
-            if (!pEffectRegistry->isEffectEnabled(effectName))
-                disabledEffects.push_back(effectName);
 
             if (pEffectRegistry->isEffectBuiltIn(effectName))
             {
@@ -624,6 +633,7 @@ namespace vkBasalt
             switchOff(std::string("a view failed while the overlay drew: ") + e.what());
             return {};
         }
+        shortcutsHeld = visible && (ImGui::IsAnyItemActive() || listeningForKey != KeyBinding::None || !listeningRow.empty());
         ImGui::Render();
         UiMap::endFrame();
         ImDrawData* drawData = ImGui::GetDrawData();

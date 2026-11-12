@@ -1,7 +1,9 @@
 #ifndef EFFECT_CONFIG_HPP_INCLUDED
 #define EFFECT_CONFIG_HPP_INCLUDED
 
+#include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 #include <memory>
@@ -9,6 +11,7 @@
 #include <map>
 
 #include "params/effect_param.hpp"
+#include "technique_info.hpp"
 
 namespace vkBasalt
 {
@@ -39,6 +42,7 @@ namespace vkBasalt
     {
         std::string instanceName;
         std::string baseType;
+        std::string technique;
         std::string filePath;
         EffectType type = EffectType::BuiltIn;
         bool enabled = true;
@@ -52,6 +56,9 @@ namespace vkBasalt
         bool fileMissing = false;
         std::map<const void*, EffectOnDevice> onDevice;
         std::filesystem::file_time_type fileModTime{};
+        std::vector<TechniqueInfo> techniques;
+        std::string toggleKey;
+        std::optional<std::chrono::steady_clock::time_point> offAt;
         bool hasFailed() const { return !compileError.empty(); }
     };
 

@@ -52,6 +52,7 @@ namespace vkBasalt
         std::vector<bool>                   timingValid;
         std::optional<float>                timingSpanMilliseconds;
         PresentIntervals                    presentIntervals;
+        PresentClock                        presentClock;
         uint64_t                            ratesReportedIntervals = 0;
         double                              ratesReportedMs        = 0.0;
         std::vector<bool>                   timingSamplesPending;

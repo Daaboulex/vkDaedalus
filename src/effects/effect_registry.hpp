@@ -62,6 +62,16 @@ namespace vkBasalt
         std::vector<EffectParam*> getParametersForEffect(const std::string& effectName);
         std::string               authorText(const std::string& effectName) const;
 
+        std::vector<TechniqueInfo> techniquesOf(const std::string& row) const;
+        std::string                getEffectKey(const std::string& row) const;
+        void                       setEffectKey(const std::string& row, const std::string& key);
+        std::vector<std::pair<std::string, std::string>> rowKeys() const;
+        std::vector<std::string>   takeTimedOut(std::chrono::steady_clock::time_point now);
+
+        void setEditedParameter(const std::string& effectName, const std::string& active, const std::string& hovered);
+        void clearEditedParameters();
+        std::pair<std::string, std::string> editedParameter(const std::string& effectName) const;
+
         Config* getConfig() const { return pConfig; }
 
         static bool isBuiltInEffect(const std::string& name);
@@ -131,6 +141,7 @@ namespace vkBasalt
         std::set<std::string> explicitGlobals;
         std::map<std::string, std::set<std::string>> globalUsers;
         std::vector<std::string> selectedEffects;
+        std::map<std::string, std::pair<std::string, std::string>> editedParameters;
         bool initializedFromConfig = false;
         GpuPlan plan;
         bool    gpuListEdited = false;
@@ -143,6 +154,12 @@ namespace vkBasalt
 
         void initReshadeEffect(const std::string& name, const std::string& path);
         void initMissingEffect(const std::string& instanceName, const std::string& effectType);
+        void initTechniqueRowLocked(const std::string& row);
+        std::vector<std::string> withEveryTechniqueLocked(const std::vector<std::string>& rows);
+        void setRowEnabledLocked(EffectConfig& row, bool enabled);
+        const TechniqueInfo* techniqueOfLocked(const std::string& row) const;
+        void ensureInstance(const std::string& instanceName, const std::string& effectType);
+        void addRowLocked(const std::string& row, bool enabled);
 
         void addGlobalDefaultLocked(const PreprocessorDefinition& def, const std::string& effectName);
         std::vector<PreprocessorDefinition> setGlobalDefinitionsLocked() const;
@@ -151,6 +168,8 @@ namespace vkBasalt
 
         EffectConfig* findEffectLocked(const std::string& effectName);
         const EffectConfig* findEffectLocked(const std::string& effectName) const;
+        EffectConfig* findInstanceLocked(const std::string& row);
+        const EffectConfig* findInstanceLocked(const std::string& row) const;
         EffectParam* findParamLocked(EffectConfig& effect, const std::string& paramName);
         const EffectParam* findParamLocked(const EffectConfig& effect, const std::string& paramName) const;
     };

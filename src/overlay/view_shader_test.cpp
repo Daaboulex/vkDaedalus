@@ -222,7 +222,7 @@ namespace vkBasalt
             if (ui::disclosure("FailedShaders", "Failed", palette.text, ImGui::GetContentRegionAvail().x, count.c_str()))
             {
                 ui::beginPanel();
-                for (const auto& [name, path, success, usesDepth, usesMinPrecision, error] : results)
+                for (const auto& [name, path, success, usesDepth, usesMinPrecision, error, techniques] : results)
                 {
                     if (success)
                         continue;
@@ -250,7 +250,7 @@ namespace vkBasalt
             if (open)
             {
                 ui::beginPanel();
-                for (const auto& [name, path, success, usesDepth, usesMinPrecision, error] : results)
+                for (const auto& [name, path, success, usesDepth, usesMinPrecision, error, techniques] : results)
                     if (success && usesDepth)
                     {
                         ui::panelRow(ui::Size::control);

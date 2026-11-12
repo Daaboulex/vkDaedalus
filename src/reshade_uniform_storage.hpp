@@ -2,6 +2,7 @@
 #define RESHADE_UNIFORM_STORAGE_HPP_INCLUDED
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -10,6 +11,38 @@
 
 namespace vkBasalt
 {
+    inline uint32_t reshadeWordFromFloat(const reshadefx::type& type, float value)
+    {
+        return type.is_floating_point() ? std::bit_cast<uint32_t>(value) : static_cast<uint32_t>(static_cast<int32_t>(value));
+    }
+
+    inline uint32_t reshadeWordFromInt(const reshadefx::type& type, int32_t value)
+    {
+        return type.is_floating_point() ? std::bit_cast<uint32_t>(static_cast<float>(value)) : static_cast<uint32_t>(value);
+    }
+
+    inline uint32_t reshadeWordFromUint(const reshadefx::type& type, uint32_t value)
+    {
+        return type.is_floating_point() ? std::bit_cast<uint32_t>(static_cast<float>(value)) : value;
+    }
+
+    inline uint32_t reshadeWordFromBool(const reshadefx::type& type, bool value)
+    {
+        return type.is_floating_point() ? std::bit_cast<uint32_t>(value ? 1.0f : 0.0f) : (value ? 1u : 0u);
+    }
+
+    inline float reshadeFloatOfWord(const reshadefx::type& type, uint32_t word)
+    {
+        if (type.is_floating_point())
+            return std::bit_cast<float>(word);
+        return type.is_signed() ? static_cast<float>(static_cast<int32_t>(word)) : static_cast<float>(word);
+    }
+
+    inline bool reshadeBoolOfWord(const reshadefx::type& type, uint32_t word)
+    {
+        return type.is_floating_point() ? std::bit_cast<float>(word) != 0.0f : word != 0;
+    }
+
     inline bool writeReshadeUniformWords(
         void* mappedBuffer, size_t bufferSize,
         const reshadefx::uniform& variable,

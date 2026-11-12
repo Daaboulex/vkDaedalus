@@ -704,7 +704,7 @@
                   exit 1
                 fi
 
-                grep -Fq 'uniform->update(stagingBuffersMapped[imageIndex], bufferSize);' "$effect" \
+                grep -Fq 'uniform->update(stagingBuffersMapped[imageIndex], bufferSize, frame);' "$effect" \
                   || { echo "updateEffect does not pass the real uniform buffer size, so the bounds check has nothing true to test against"; exit 1; }
 
                 touch $out
@@ -725,7 +725,7 @@
                 present = Path('${./src/basalt.cpp}').read_text()
                 start = present.index('vkBasalt_QueuePresentKHR(VkQueue queue')
                 wait = present.index('waitForPreviousSubmissions(l, pLogicalDevice', start)
-                update = present.index('effect->updateEffect(index);', start)
+                update = present.index('effect->updateEffect(index, frame);', start)
                 submit = present.index('vkd.QueueSubmit(', start)
                 if not wait < update < submit:
                     raise SystemExit(
@@ -1566,7 +1566,7 @@
               fi
             done
             awk '/recordCommandBuffers\(/ { calls++; if ($0 !~ /VK_NULL_HANDLE, VK_NULL_HANDLE, VK_FORMAT_UNDEFINED/) { print "gpu_chain.cpp:" NR " records a segment of the chain with a depth image"; bad = 1 } } END { exit (calls > 0 && !bad) ? 0 : 1 }' ${./src/gpu_chain.cpp}
-            grep -q 'if (compiled->usesDepth && pLogicalDevice->isHelper && settingsManager.getDepthCapture())' ${./src/effects/effect_reshade.cpp} \
+            grep -q 'if (compiled->techniqueReadsDepth(techniqueIndex) && pLogicalDevice->isHelper && settingsManager.getDepthCapture())' ${./src/effects/effect_reshade.cpp} \
               || { echo "an effect reading depth is built on GPU 2 without refusal, where no depth image exists"; exit 1; }
             touch $out
           '';

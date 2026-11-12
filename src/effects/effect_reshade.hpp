@@ -94,11 +94,12 @@ namespace vkBasalt
                       std::vector<VkImage> outputImages,
                       EffectRegistry*      pEffectRegistry,
                       std::shared_ptr<SharedReshadeTexturePool> texturePool,
+                      std::shared_ptr<InstanceUniformStorages>  uniformStorages,
                       std::string          effectName,
                       std::string          effectPath = "",
                       std::vector<PreprocessorDefinition> customDefs = {});
         void virtual applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer) override;
-        void virtual updateEffect(uint32_t imageIndex) override;
+        void updateEffect(uint32_t imageIndex, const ReshadeFrame& frame) override;
         void virtual useDepthImage(VkImageView depthImageView) override;
         virtual ~ReshadeEffect();
 
@@ -162,6 +163,7 @@ namespace vkBasalt
         VkExtent2D                            imageExtent;
         std::vector<VkSampler>                samplers;
         std::shared_ptr<SharedReshadeTexturePool> sharedTexturePool;
+        std::shared_ptr<InstanceUniformStorages>  uniformStorages;
         EffectRegistry*                       pEffectRegistry = nullptr;
         std::string                           effectName;
         std::string                           effectPath;
@@ -177,6 +179,7 @@ namespace vkBasalt
         VkImage     stencilImage = VK_NULL_HANDLE;
         VkImageView stencilImageView = VK_NULL_HANDLE;
         int                      backBufferWriteCount = 0;
+        size_t                   techniqueIndex       = 0;
         std::vector<VkImage>     backBufferImages;
         std::vector<VkImageView> backBufferImageViewsUNORM;
         std::vector<VkImageView> backBufferImageViewsSRGB;

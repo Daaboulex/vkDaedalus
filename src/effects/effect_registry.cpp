@@ -8,6 +8,7 @@
 #include <sstream>
 #include <tuple>
 
+#include "chain_rows.hpp"
 #include "reshade_compile_defines.hpp"
 #include "reshade_parser.hpp"
 #include "config_serializer.hpp"
@@ -156,29 +157,7 @@ namespace vkBasalt
         std::set<std::string> disabledSet(disabledEffects.begin(), disabledEffects.end());
 
         for (const auto& name : effectNames)
-        {
-            std::string storedValue = pConfig->getOption<std::string>(name, "");
-
-            if (!storedValue.empty() && isBuiltInEffect(storedValue))
-            {
-                initBuiltInEffect(name, storedValue);
-            }
-            else if (isBuiltInEffect(name))
-            {
-                initBuiltInEffect(name, name);
-            }
-            else
-            {
-                std::string effectPath = findEffectPath(name, pConfig);
-                if (effectPath.empty())
-                    initMissingEffect(name, name);
-                else
-                    initReshadeEffect(name, effectPath);
-            }
-
-            if (!effects.empty() && disabledSet.count(name))
-                effects.back().enabled = false;
-        }
+            addRowLocked(name, !disabledSet.count(name));
 
         plan.list       = parseGpuList(pConfig->getOption<std::string>("gpus", ""));
         gpuListEdited   = false;
@@ -190,11 +169,56 @@ namespace vkBasalt
         ++parameterStorageRevision;
     }
 
+    void EffectRegistry::addRowLocked(const std::string& row, bool enabled)
+    {
+        const std::string instance = instanceOfRow(row);
+        if (!findEffectLocked(instance))
+        {
+            const std::string storedValue = pConfig->getOption<std::string>(instance, "");
+            if (!storedValue.empty() && isBuiltInEffect(storedValue))
+                initBuiltInEffect(instance, storedValue);
+            else if (isBuiltInEffect(instance))
+                initBuiltInEffect(instance, instance);
+            else if (const std::string effectPath = findEffectPath(instance, pConfig); effectPath.empty())
+                initMissingEffect(instance, instance);
+            else
+                initReshadeEffect(instance, effectPath);
+        }
+        if (row != instance && !findEffectLocked(row))
+            initTechniqueRowLocked(row);
+        if (EffectConfig* entry = findEffectLocked(row))
+        {
+            const TechniqueInfo* technique = techniqueOfLocked(row);
+            setRowEnabledLocked(*entry, enabled || (technique != nullptr && technique->enabledAlways));
+            entry->toggleKey = pConfig->getInstanceOption<std::string>(row, "key", "");
+        }
+    }
+
+    void EffectRegistry::initTechniqueRowLocked(const std::string& row)
+    {
+        const EffectConfig* instance = findEffectLocked(instanceOfRow(row));
+        EffectConfig        config;
+        config.instanceName = row;
+        config.technique    = techniqueOfRow(row);
+        config.baseType     = instance != nullptr ? instance->baseType : instanceOfRow(row);
+        config.filePath     = instance != nullptr ? instance->filePath : std::string();
+        config.type         = EffectType::ReShade;
+        config.gpu          = rowGpuFromConfig(row, pConfig);
+        if (instance != nullptr && instance->type == EffectType::BuiltIn)
+            config.compileError = instanceOfRow(row) + " is a built-in effect, which has no technique " + config.technique;
+        effects.push_back(std::move(config));
+        ++parameterStorageRevision;
+    }
+
     std::vector<std::string> EffectRegistry::reshadeEffectFilesOf(Config* pConfig)
     {
         std::vector<std::string> files;
-        for (const auto& name : pConfig->getOption<std::vector<std::string>>("effects"))
+        std::set<std::string>    instances;
+        for (const auto& row : pConfig->getOption<std::vector<std::string>>("effects"))
         {
+            const std::string name = instanceOfRow(row);
+            if (!instances.insert(name).second)
+                continue;
             const std::string storedValue = pConfig->getOption<std::string>(name, "");
             if ((!storedValue.empty() && isBuiltInEffect(storedValue)) || isBuiltInEffect(name))
                 continue;
@@ -280,6 +304,7 @@ namespace vkBasalt
         else
         {
             config.usesMinPrecision  = testResult.usesMinPrecision;
+            config.techniques        = testResult.techniques;
             config.allowHalfPrecision = pConfig->getInstanceOption<bool>(name, "halfPrecision", false);
 
             for (auto& def : extractPreprocessorDefinitions(name, path))
@@ -358,6 +383,16 @@ namespace vkBasalt
         return nullptr;
     }
 
+    EffectConfig* EffectRegistry::findInstanceLocked(const std::string& row)
+    {
+        return findEffectLocked(instanceOfRow(row));
+    }
+
+    const EffectConfig* EffectRegistry::findInstanceLocked(const std::string& row) const
+    {
+        return findEffectLocked(instanceOfRow(row));
+    }
+
     EffectParam* EffectRegistry::findParamLocked(EffectConfig& effect, const std::string& paramName)
     {
         for (auto& param : effect.parameters)
@@ -382,9 +417,90 @@ namespace vkBasalt
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        EffectConfig* effect = findEffectLocked(effectName);
-        if (effect)
-            effect->enabled = enabled;
+        if (EffectConfig* effect = findEffectLocked(effectName))
+            setRowEnabledLocked(*effect, enabled);
+    }
+
+    const TechniqueInfo* EffectRegistry::techniqueOfLocked(const std::string& row) const
+    {
+        const EffectConfig* instance = findInstanceLocked(row);
+        return instance != nullptr ? techniqueOfRowIn(row, instance->techniques) : nullptr;
+    }
+
+    void EffectRegistry::setRowEnabledLocked(EffectConfig& row, bool enabled)
+    {
+        row.enabled = enabled;
+        row.offAt.reset();
+        if (const TechniqueInfo* technique = techniqueOfLocked(row.instanceName); enabled && technique != nullptr && technique->timeoutMs > 0)
+            row.offAt = std::chrono::steady_clock::now() + std::chrono::milliseconds(technique->timeoutMs);
+    }
+
+    std::vector<std::string> EffectRegistry::withEveryTechniqueLocked(const std::vector<std::string>& rows)
+    {
+        const std::vector<std::string> every = rowsWithEveryTechnique(rows, [&](const std::string& instance) {
+            std::vector<std::string> names;
+            if (const EffectConfig* entry = findEffectLocked(instance))
+                for (const TechniqueInfo& technique : entry->techniques)
+                    names.push_back(technique.name);
+            return names;
+        });
+        for (const std::string& row : every)
+        {
+            if (std::find(rows.begin(), rows.end(), row) != rows.end())
+                continue;
+            if (row != instanceOfRow(row) && !findEffectLocked(row))
+                initTechniqueRowLocked(row);
+            if (EffectConfig* entry = findEffectLocked(row))
+            {
+                const TechniqueInfo* technique = techniqueOfLocked(row);
+                setRowEnabledLocked(*entry, technique != nullptr && technique->enabledAlways);
+            }
+        }
+        return every;
+    }
+
+    std::vector<TechniqueInfo> EffectRegistry::techniquesOf(const std::string& row) const
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        const EffectConfig*         instance = findInstanceLocked(row);
+        return instance != nullptr ? instance->techniques : std::vector<TechniqueInfo>{};
+    }
+
+    std::string EffectRegistry::getEffectKey(const std::string& row) const
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        const EffectConfig*         entry = findEffectLocked(row);
+        return entry != nullptr ? entry->toggleKey : std::string();
+    }
+
+    void EffectRegistry::setEffectKey(const std::string& row, const std::string& key)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (EffectConfig* entry = findEffectLocked(row))
+            entry->toggleKey = key;
+    }
+
+    std::vector<std::pair<std::string, std::string>> EffectRegistry::rowKeys() const
+    {
+        std::lock_guard<std::mutex>                      lock(mutex);
+        std::vector<std::pair<std::string, std::string>> keys;
+        for (const std::string& row : selectedEffects)
+            if (const EffectConfig* entry = findEffectLocked(row); entry != nullptr && !entry->toggleKey.empty())
+                keys.emplace_back(row, entry->toggleKey);
+        return keys;
+    }
+
+    std::vector<std::string> EffectRegistry::takeTimedOut(std::chrono::steady_clock::time_point now)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        std::vector<std::string>    off;
+        for (EffectConfig& entry : effects)
+            if (entry.offAt && *entry.offAt <= now)
+            {
+                setRowEnabledLocked(entry, false);
+                off.push_back(entry.instanceName);
+            }
+        return off;
     }
 
     bool EffectRegistry::isEffectEnabled(const std::string& effectName) const
@@ -419,7 +535,7 @@ namespace vkBasalt
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        EffectConfig* effect = findEffectLocked(effectName);
+        EffectConfig* effect = findInstanceLocked(effectName);
         if (!effect)
             return;
 
@@ -432,7 +548,7 @@ namespace vkBasalt
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        EffectConfig* effect = findEffectLocked(effectName);
+        EffectConfig* effect = findInstanceLocked(effectName);
         if (!effect)
             return;
 
@@ -445,7 +561,7 @@ namespace vkBasalt
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        EffectConfig* effect = findEffectLocked(effectName);
+        EffectConfig* effect = findInstanceLocked(effectName);
         if (!effect)
             return;
 
@@ -458,7 +574,7 @@ namespace vkBasalt
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        EffectConfig* effect = findEffectLocked(effectName);
+        EffectConfig* effect = findInstanceLocked(effectName);
         if (!effect)
             return nullptr;
 
@@ -469,7 +585,7 @@ namespace vkBasalt
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        const EffectConfig* effect = findEffectLocked(effectName);
+        const EffectConfig* effect = findInstanceLocked(effectName);
         if (!effect)
             return nullptr;
 
@@ -488,7 +604,7 @@ namespace vkBasalt
 
         if (cachedRevision != parameterStorageRevision)
         {
-            const EffectConfig* effect = findEffectLocked(effectName);
+            const EffectConfig* effect = findInstanceLocked(effectName);
             cachedParam = effect != nullptr ? findParamLocked(*effect, paramName) : nullptr;
             cachedRevision = parameterStorageRevision;
         }
@@ -555,7 +671,7 @@ namespace vkBasalt
         std::lock_guard<std::mutex> lock(mutex);
         std::vector<EffectParam*> result;
 
-        EffectConfig* effect = findEffectLocked(effectName);
+        EffectConfig* effect = findInstanceLocked(effectName);
         if (!effect)
             return result;
 
@@ -569,11 +685,30 @@ namespace vkBasalt
     {
         std::lock_guard<std::mutex> lock(mutex);
         std::string                 text;
-        if (const EffectConfig* effect = findEffectLocked(effectName))
+        if (const EffectConfig* effect = findInstanceLocked(effectName))
             for (const auto& param : effect->parameters)
                 if (!param->text.empty())
                     text += (text.empty() ? "" : "\n\n") + param->text;
         return text;
+    }
+
+    void EffectRegistry::setEditedParameter(const std::string& effectName, const std::string& active, const std::string& hovered)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        editedParameters[instanceOfRow(effectName)] = {active, hovered};
+    }
+
+    void EffectRegistry::clearEditedParameters()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        editedParameters.clear();
+    }
+
+    std::pair<std::string, std::string> EffectRegistry::editedParameter(const std::string& effectName) const
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        const auto it = editedParameters.find(instanceOfRow(effectName));
+        return it == editedParameters.end() ? std::pair<std::string, std::string>() : it->second;
     }
 
     bool EffectRegistry::hasEffect(const std::string& name) const
@@ -585,36 +720,40 @@ namespace vkBasalt
     std::string EffectRegistry::getEffectFilePath(const std::string& name) const
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const EffectConfig* effect = findEffectLocked(name);
+        const EffectConfig* effect = findInstanceLocked(name);
         return effect ? effect->filePath : "";
     }
 
     std::string EffectRegistry::getEffectType(const std::string& name) const
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const EffectConfig* effect = findEffectLocked(name);
+        const EffectConfig* effect = findInstanceLocked(name);
         return effect ? effect->baseType : "";
     }
 
     bool EffectRegistry::isEffectBuiltIn(const std::string& name) const
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const EffectConfig* effect = findEffectLocked(name);
+        const EffectConfig* effect = findInstanceLocked(name);
         return effect ? (effect->type == EffectType::BuiltIn) : false;
     }
 
     bool EffectRegistry::hasEffectFailed(const std::string& name) const
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const EffectConfig* effect = findEffectLocked(name);
-        return effect ? effect->hasFailed() : false;
+        const EffectConfig* row      = findEffectLocked(name);
+        const EffectConfig* instance = findInstanceLocked(name);
+        return (row != nullptr && row->hasFailed()) || (instance != nullptr && instance->hasFailed());
     }
 
     std::string EffectRegistry::getEffectError(const std::string& name) const
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const EffectConfig* effect = findEffectLocked(name);
-        return effect ? effect->compileError : "";
+        const EffectConfig* row      = findEffectLocked(name);
+        const EffectConfig* instance = findInstanceLocked(name);
+        if (row != nullptr && row->hasFailed())
+            return row->compileError;
+        return instance != nullptr ? instance->compileError : "";
     }
 
     EffectOnDevice EffectRegistry::getEffectOnDevice(const std::string& name, const void* device) const
@@ -674,7 +813,18 @@ namespace vkBasalt
         }
     }
 
-    void EffectRegistry::ensureEffect(const std::string& instanceName, const std::string& effectType)
+    void EffectRegistry::ensureEffect(const std::string& row, const std::string& effectType)
+    {
+        const std::string instance = instanceOfRow(row);
+        ensureInstance(instance, effectType);
+        if (row == instance)
+            return;
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!findEffectLocked(row))
+            initTechniqueRowLocked(row);
+    }
+
+    void EffectRegistry::ensureInstance(const std::string& instanceName, const std::string& effectType)
     {
         std::string type = effectType.empty() ? instanceName : effectType;
 
@@ -727,10 +877,11 @@ namespace vkBasalt
     void EffectRegistry::removeEffect(const std::string& name)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const size_t oldSize = effects.size();
+        const size_t oldSize    = effects.size();
+        const bool   isInstance = instanceOfRow(name) == name;
         effects.erase(
             std::remove_if(effects.begin(), effects.end(),
-                [&](const EffectConfig& e) { return e.instanceName == name; }),
+                [&](const EffectConfig& e) { return e.instanceName == name || (isInstance && instanceOfRow(e.instanceName) == name); }),
             effects.end());
         if (effects.size() != oldSize)
             ++parameterStorageRevision;
@@ -739,14 +890,14 @@ namespace vkBasalt
     bool EffectRegistry::effectUsesMinPrecision(const std::string& effectName) const
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const EffectConfig* effect = findEffectLocked(effectName);
+        const EffectConfig* effect = findInstanceLocked(effectName);
         return effect && effect->usesMinPrecision;
     }
 
     bool EffectRegistry::getAllowHalfPrecision(const std::string& effectName) const
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const EffectConfig* effect = findEffectLocked(effectName);
+        const EffectConfig* effect = findInstanceLocked(effectName);
         return effect && effect->allowHalfPrecision;
     }
 
@@ -823,7 +974,7 @@ namespace vkBasalt
     void EffectRegistry::setAllowHalfPrecision(const std::string& effectName, bool allow)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        EffectConfig* effect = findEffectLocked(effectName);
+        EffectConfig* effect = findInstanceLocked(effectName);
         if (effect)
             effect->allowHalfPrecision = allow;
     }
@@ -831,7 +982,7 @@ namespace vkBasalt
     std::vector<PreprocessorDefinition>& EffectRegistry::getPreprocessorDefs(const std::string& effectName)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        EffectConfig* effect = findEffectLocked(effectName);
+        EffectConfig* effect = findInstanceLocked(effectName);
         if (effect)
             return effect->preprocessorDefs;
         static thread_local std::vector<PreprocessorDefinition> emptyDefs;
@@ -842,7 +993,7 @@ namespace vkBasalt
     const std::vector<PreprocessorDefinition>& EffectRegistry::getPreprocessorDefs(const std::string& effectName) const
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const EffectConfig* effect = findEffectLocked(effectName);
+        const EffectConfig* effect = findInstanceLocked(effectName);
         if (effect)
             return effect->preprocessorDefs;
         static thread_local const std::vector<PreprocessorDefinition> emptyDefs;
@@ -854,7 +1005,7 @@ namespace vkBasalt
     {
         std::lock_guard<std::mutex> lock(mutex);
         std::vector<PreprocessorDefinition> defs = setGlobalDefinitionsLocked();
-        if (const EffectConfig* effect = findEffectLocked(effectName))
+        if (const EffectConfig* effect = findInstanceLocked(effectName))
         {
             for (const auto& def : effect->preprocessorDefs)
             {
@@ -943,7 +1094,7 @@ namespace vkBasalt
     std::optional<std::vector<PreprocessorDefinition>> EffectRegistry::staleParameterReadDefinitions(const std::string& effectName) const
     {
         std::lock_guard<std::mutex> lock(mutex);
-        const EffectConfig* effect = findEffectLocked(effectName);
+        const EffectConfig* effect = findInstanceLocked(effectName);
         if (!effect || effect->type != EffectType::ReShade || !effect->compileError.empty())
             return std::nullopt;
         std::vector<PreprocessorDefinition> readDefs = parameterReadDefinitionsLocked(*effect);
@@ -955,7 +1106,7 @@ namespace vkBasalt
     void EffectRegistry::refreshParameters(const std::string& effectName)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        EffectConfig* effect = findEffectLocked(effectName);
+        EffectConfig* effect = findInstanceLocked(effectName);
         if (!effect || effect->type != EffectType::ReShade || !effect->compileError.empty())
             return;
         const std::vector<PreprocessorDefinition> readDefs = parameterReadDefinitionsLocked(*effect);
@@ -1032,7 +1183,7 @@ namespace vkBasalt
             }
             return;
         }
-        EffectConfig* effect = findEffectLocked(effectName);
+        EffectConfig* effect = findInstanceLocked(effectName);
         if (!effect)
             return;
 
@@ -1050,7 +1201,7 @@ namespace vkBasalt
     void EffectRegistry::setSelectedEffects(const std::vector<std::string>& effects)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        selectedEffects = effects;
+        selectedEffects = withEveryTechniqueLocked(effects);
         replanLocked();
     }
 
@@ -1083,7 +1234,10 @@ namespace vkBasalt
             plan.list       = parseGpuList(pConfig->getOption<std::string>("gpus", ""));
             gpuListEdited   = false;
             for (EffectConfig& effect : effects)
-                effect.gpu = rowGpuFromConfig(effect.instanceName, pConfig);
+            {
+                effect.gpu       = rowGpuFromConfig(effect.instanceName, pConfig);
+                effect.toggleKey = pConfig->getInstanceOption<std::string>(effect.instanceName, "key", "");
+            }
         }
 
         for (const auto& effectName : configEffects)
@@ -1097,10 +1251,17 @@ namespace vkBasalt
                     Logger::warn(problem + ", so every effect runs on the game's GPU");
         }
 
-        for (const auto& effectName : configEffects)
         {
-            bool enabled = (disabledSet.find(effectName) == disabledSet.end());
-            setEffectEnabled(effectName, enabled);
+            std::lock_guard<std::mutex> lock(mutex);
+            for (const auto& effectName : configEffects)
+                if (EffectConfig* entry = findEffectLocked(effectName))
+                {
+                    const TechniqueInfo* technique = techniqueOfLocked(effectName);
+                    setRowEnabledLocked(*entry, !disabledSet.count(effectName) || (technique != nullptr && technique->enabledAlways));
+                    entry->toggleKey = pConfig->getInstanceOption<std::string>(effectName, "key", "");
+                }
+            selectedEffects = withEveryTechniqueLocked(selectedEffects);
+            replanLocked();
         }
 
         initializedFromConfig = true;

@@ -1,6 +1,7 @@
 #include "config_serializer.hpp"
 #include "config_paths.hpp"
 #include "config_value.hpp"
+#include "chain_rows.hpp"
 #include "logger.hpp"
 #include "overlay/hud.hpp"
 #include "overlay/palette_names.hpp"
@@ -162,7 +163,8 @@ namespace vkBasalt
         {
             if (!liveParameterKeys || liveParameterKeys->count(key) != 0)
                 return false;
-            return std::any_of(effects.begin(), effects.end(), [&](const std::string& effect) {
+            return std::any_of(effects.begin(), effects.end(), [&](const std::string& row) {
+                const std::string effect = instanceOfRow(row);
                 return key.size() > effect.size() + 1 && key.starts_with(effect + ".") && key.find('.', effect.size() + 1) == std::string::npos
                        && !std::isdigit(static_cast<unsigned char>(key[effect.size() + 1]));
             });

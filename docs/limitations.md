@@ -2,7 +2,8 @@
 
 ## Known limitations
 
-- Only a shader's first technique runs.
+- vkDaedalus takes no screenshots, so a `screenshot` uniform reads false and a technique's
+  `enabled_in_screenshot` changes nothing.
 - Depth access depends on the game's depth format and layout.
 - A game on Wayland needs `vkdaedalus-run` for the overlay to hold its input.
 - An X11 game started without `vkdaedalus-run` that holds the pointer, as a Proton game does while it

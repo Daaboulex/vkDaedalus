@@ -27,6 +27,7 @@
 #include "lut_cube.hpp"
 #include "format.hpp"
 #include "reshade_formats.hpp"
+#include "chain_rows.hpp"
 #include "config_serializer.hpp"
 #include "shader_cache.hpp"
 #include "settings_manager.hpp"
@@ -150,6 +151,7 @@ namespace vkBasalt
                                  std::vector<VkImage> outputImages,
                                  EffectRegistry*      pEffectRegistry,
                                  std::shared_ptr<SharedReshadeTexturePool> texturePool,
+                                 std::shared_ptr<InstanceUniformStorages>  uniformStorages,
                                  std::string          effectName,
                                  std::string          effectPath,
                                  std::vector<PreprocessorDefinition> customDefs)
@@ -163,6 +165,7 @@ namespace vkBasalt
         this->outputImages          = outputImages;
         this->pEffectRegistry       = pEffectRegistry;
         this->sharedTexturePool     = std::move(texturePool);
+        this->uniformStorages       = std::move(uniformStorages);
         this->effectName            = effectName;
         this->effectPath            = effectPath;
         this->customPreprocessorDefs = customDefs;
@@ -207,9 +210,8 @@ namespace vkBasalt
 
         enumerateReshadeUniforms(module);
 
-        uniforms = createReshadeUniforms(
-            module, pEffectRegistry, effectName,
-            settingsManager.getLiveReshadeUniforms());
+        uniforms = createReshadeUniforms(module, pEffectRegistry, effectName, settingsManager.getLiveReshadeUniforms(),
+                                         this->uniformStorages->of(instanceOfRow(effectName)));
 
         bufferSize = module.total_uniform_size;
         if (bufferSize)
@@ -648,7 +650,7 @@ namespace vkBasalt
         inputDescriptorSets =
             allocateAndWriteImageSamplerDescriptorSets(pLogicalDevice, descriptorPool, imageSamplerDescriptorSetLayout, samplers, imageViewVector);
 
-        backBufferWriteCount = static_cast<int>(countReshadeBackBufferWrites(module.techniques[0]));
+        backBufferWriteCount = static_cast<int>(countReshadeBackBufferWrites(module.techniques[techniqueIndex]));
         Logger::debug("output writes: " + std::to_string(backBufferWriteCount));
 
         if (backBufferWriteCount > 1)
@@ -804,7 +806,7 @@ namespace vkBasalt
                                   .pData         = specData.data()};
         }
 
-        for (bool outputToBackBuffer = backBufferWriteCount % 2 == 0; auto& pass : module.techniques[0].passes)
+        for (bool outputToBackBuffer = backBufferWriteCount % 2 == 0; auto& pass : module.techniques[techniqueIndex].passes)
         {
             if (!pass.cs_entry_point.empty())
             {
@@ -1195,13 +1197,13 @@ namespace vkBasalt
         Logger::debug("finished creating Reshade effect");
     }
 
-    void ReshadeEffect::updateEffect(uint32_t imageIndex)
+    void ReshadeEffect::updateEffect(uint32_t imageIndex, const ReshadeFrame& frame)
     {
         if (imageIndex >= stagingBuffersMapped.size())
             return;
 
         for (auto& uniform : uniforms)
-            uniform->update(stagingBuffersMapped[imageIndex], bufferSize);
+            uniform->update(stagingBuffersMapped[imageIndex], bufferSize, frame);
     }
 
     void ReshadeEffect::useDepthImage(VkImageView depthImageView)
@@ -1362,7 +1364,7 @@ namespace vkBasalt
         const std::vector<VkDescriptorSet>* currentColorSets = &inputDescriptorSets;
         for (size_t i = 0; i < graphicsPipelines.size(); i++)
         {
-            const auto& passInfo = module.techniques[0].passes[i];
+            const auto& passInfo = module.techniques[techniqueIndex].passes[i];
 
             if (!passInfo.cs_entry_point.empty())
             {
@@ -1434,7 +1436,7 @@ namespace vkBasalt
 
             pLogicalDevice->vkd.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelines[i]);
 
-            pLogicalDevice->vkd.CmdDraw(commandBuffer, module.techniques[0].passes[i].num_vertices, 1, 0, 0);
+            pLogicalDevice->vkd.CmdDraw(commandBuffer, module.techniques[techniqueIndex].passes[i].num_vertices, 1, 0, 0);
 
             pLogicalDevice->vkd.CmdEndRenderPass(commandBuffer);
 
@@ -1450,7 +1452,7 @@ namespace vkBasalt
 
             for (auto& renderTarget : renderTargets[i])
             {
-                if (module.techniques[0].passes[i].generate_mipmaps)
+                if (module.techniques[techniqueIndex].passes[i].generate_mipmaps)
                     generateMipMaps(
                         pLogicalDevice, commandBuffer, textureImages[renderTarget][0], textureExtents[renderTarget], textureMipLevels[renderTarget],
                         textureMipFilters[renderTarget]);
@@ -1703,9 +1705,17 @@ namespace vkBasalt
         }
         if (!compiled->warnings.empty())
             Logger::warn(shaderPath + ": " + compiled->warnings);
-        if (compiled->usesDepth && settingsManager.getSafeAntiCheat())
+        if (const std::string technique = techniqueOfRow(effectName); !technique.empty())
+        {
+            const auto& techniques = compiled->module.techniques;
+            const auto  named = std::find_if(techniques.begin(), techniques.end(), [&](const reshadefx::technique& t) { return t.name == technique; });
+            if (named == techniques.end())
+                throw std::runtime_error(shaderPath + " has no technique " + technique);
+            techniqueIndex = static_cast<size_t>(named - techniques.begin());
+        }
+        if (compiled->techniqueReadsDepth(techniqueIndex) && settingsManager.getSafeAntiCheat())
             throw SafeAntiCheatRefusal("Safe Anti-Cheat keeps " + effectName + " out of the chain, because it reads the depth buffer");
-        if (compiled->usesDepth && pLogicalDevice->isHelper && settingsManager.getDepthCapture())
+        if (compiled->techniqueReadsDepth(techniqueIndex) && pLogicalDevice->isHelper && settingsManager.getDepthCapture())
             throw DepthOnOtherGpuRefusal(effectName + " reads the game's depth buffer, which stays on the game's GPU");
 
         module = compiled->module;

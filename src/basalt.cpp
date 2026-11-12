@@ -511,6 +511,7 @@ namespace vkBasalt
                                      const std::vector<VkImage>&                      firstImages,
                                      const std::vector<VkImage>&                      secondImages,
                                      const std::shared_ptr<SharedReshadeTexturePool>& sharedTexturePool,
+                                     const std::shared_ptr<InstanceUniformStorages>&  uniformStorages,
                                      uint32_t                                         gpu,
                                      const std::string&                               gpuRefusal)
     {
@@ -555,7 +556,7 @@ namespace vkBasalt
         {
             auto effect = std::make_shared<ReshadeEffect>(buildOn, pLogicalSwapchain->format, pLogicalSwapchain->imageExtent,
                                                           pLogicalSwapchain->swapchainCreateInfo.imageColorSpace, firstImages, secondImages,
-                                                          &effectRegistry, sharedTexturePool, effectName, effectPath, customDefs);
+                                                          &effectRegistry, sharedTexturePool, uniformStorages, effectName, effectPath, customDefs);
             effectRegistry.setEffectOnDevice(effectName, shownOn, {"", false, effect->deviceNotices(), gpu, gpuRefusal});
             return effect;
         }
@@ -662,6 +663,7 @@ namespace vkBasalt
         }
 
         const auto sharedTexturePool = std::make_shared<SharedReshadeTexturePool>(pLogicalDevice);
+        const auto uniformStorages   = std::make_shared<InstanceUniformStorages>();
         std::vector<std::shared_ptr<SharedReshadeTexturePool>> segmentPools;
         std::vector<std::string>                               dropped;
         bool                                                   segmentEmptied = false;
@@ -678,7 +680,7 @@ namespace vkBasalt
                         return std::vector<VkImage>(slots.begin() + imageCount * s, slots.begin() + imageCount * (s + 1));
                     };
                     const auto build = [&](size_t row, const std::vector<VkImage>& from, const std::vector<VkImage>& to) {
-                        return buildRow(device, pLogicalDevice, pLogicalSwapchain, pConfig, effectStrings[row], from, to, segmentPools.back(), gpu, "");
+                        return buildRow(device, pLogicalDevice, pLogicalSwapchain, pConfig, effectStrings[row], from, to, segmentPools.back(), uniformStorages, gpu, "");
                     };
                     BuiltRows<std::shared_ptr<Effect>> built = buildRowsSkippingDropped<std::shared_ptr<Effect>>(effectStrings, firstRow, rows, local, local(rows), build);
                     dropped.insert(dropped.end(), built.dropped.begin(), built.dropped.end());
@@ -728,7 +730,7 @@ namespace vkBasalt
                 : std::vector<VkImage>(pLogicalSwapchain->fakeImages.end() - count, pLogicalSwapchain->fakeImages.end());
         const auto buildHead = [&](size_t row, const std::vector<VkImage>& from, const std::vector<VkImage>& to) {
             Logger::debug("creating effect " + std::to_string(row) + ": " + effectStrings[row]);
-            return buildRow(pLogicalDevice, pLogicalDevice, pLogicalSwapchain, pConfig, effectStrings[row], from, to, sharedTexturePool, gameGpu,
+            return buildRow(pLogicalDevice, pLogicalDevice, pLogicalSwapchain, pConfig, effectStrings[row], from, to, sharedTexturePool, uniformStorages, gameGpu,
                             row >= refusedFrom ? refusal : "");
         };
         const BuiltRows<std::shared_ptr<Effect>> head = buildRowsSkippingDropped<std::shared_ptr<Effect>>(effectStrings, 0, headRows, slot, pLogicalSwapchain->chain ? slot(headRows) : finalImages, buildHead);
@@ -1671,6 +1673,8 @@ namespace vkBasalt
         pLogicalSwapchain->pLogicalDevice      = pLogicalDevice;
         pLogicalSwapchain->appImageUsage       = pCreateInfo->imageUsage;
         pLogicalSwapchain->keepCreateInfo(*pCreateInfo);
+        if (const LogicalSwapchain* old = findSwapchain(pCreateInfo->oldSwapchain))
+            pLogicalSwapchain->presentClock.continueFrom(old->presentClock);
         pLogicalSwapchain->imageExtent         = modifiedCreateInfo.imageExtent;
         pLogicalSwapchain->format              = modifiedCreateInfo.imageFormat;
         pLogicalSwapchain->imageCount          = 0;
@@ -2075,6 +2079,12 @@ namespace vkBasalt
         return *pCount < pLogicalSwapchain->imageCount ? VK_INCOMPLETE : VK_SUCCESS;
     }
 
+    struct RowKeyState
+    {
+        uint32_t key     = 0;
+        bool     pressed = false;
+    };
+
     struct PresentControls
     {
         uint32_t toggleKey      = 0;
@@ -2088,6 +2098,7 @@ namespace vkBasalt
         bool     reloadPressed  = false;
         bool     overlayPressed = false;
         bool     effectsOn      = false;
+        std::map<std::string, RowKeyState> rowKeys;
     };
 
     void bindControlKey(uint32_t& key, bool& wasPressed, const std::string& name)
@@ -2143,6 +2154,36 @@ namespace vkBasalt
         FileChanged,
     };
 
+    bool pollRowKeys(PresentControls& controls, ImGuiOverlay* overlay)
+    {
+        const bool                         keysWork = controls.effectsOn && !(overlay && overlay->holdsShortcuts());
+        bool                               changed  = false;
+        std::map<std::string, RowKeyState> bound;
+        for (const auto& [row, name] : effectRegistry.rowKeys())
+        {
+            const auto  known = controls.rowKeys.find(row);
+            RowKeyState state = known != controls.rowKeys.end() ? known->second : RowKeyState{};
+            bindControlKey(state.key, state.pressed, name);
+            if (handleKeyPress(state.key, state.pressed) && keysWork)
+            {
+                const bool on = !effectRegistry.isEffectEnabled(row);
+                effectRegistry.setEffectEnabled(row, on);
+                Logger::debug(row + (on ? " on" : " off") + " by its key");
+                if (overlay)
+                    overlay->markDefinitionsEdited();
+                changed = true;
+            }
+            bound[row] = state;
+        }
+        controls.rowKeys = std::move(bound);
+        for (const std::string& row : effectRegistry.takeTimedOut(std::chrono::steady_clock::now()))
+        {
+            Logger::debug(row + " off: its timeout ran out");
+            changed = true;
+        }
+        return changed;
+    }
+
     ReloadReason pollControls(LogicalDevice* pLogicalDevice, PresentControls& controls)
     {
         ImGuiOverlay* overlay = pLogicalDevice->imguiOverlay.get();
@@ -2178,6 +2219,8 @@ namespace vkBasalt
             Logger::debug("config file changed detected");
             fileChanged = true;
         }
+        if (pollRowKeys(controls, overlay))
+            rebuild = true;
 
         OffInThisRun& off = offInThisRun();
         if (overlay && overlay->takeOffInThisRunRequest())
@@ -2569,13 +2612,16 @@ namespace vkBasalt
             GpuChain* chain = runEffects && pLogicalSwapchain->chain && !pLogicalSwapchain->chain->failed ? pLogicalSwapchain->chain.get() : nullptr;
             if (runEffects)
             {
+                const ImGuiOverlay* overlay = pLogicalDevice->imguiOverlay.get();
+                const ReshadeFrame  frame   = pLogicalSwapchain->presentClock.frame(overlay != nullptr && overlay->isVisible());
                 for (auto& effect : pLogicalSwapchain->effects)
-                    effect->updateEffect(index);
+                    effect->updateEffect(index, frame);
                 if (chain)
                     for (ChainSegment& segment : chain->segments)
                         for (auto& effect : segment.effects)
-                            effect->updateEffect(index);
+                            effect->updateEffect(index, frame);
             }
+            pLogicalSwapchain->presentClock.presented(presentedAt);
 
             VkSubmitInfo submitInfo = {};
             submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
+
+#include "technique_info.hpp"
 
 namespace vkBasalt
 {
@@ -12,6 +15,7 @@ namespace vkBasalt
         bool        usesDepth        = false;
         bool        usesMinPrecision = false;
         std::string errorMessage;
+        std::vector<TechniqueInfo> techniques;
     };
 
     inline bool shaderTestAllowed(const ShaderTestResult& result, bool safeAntiCheat)

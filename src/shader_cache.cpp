@@ -577,7 +577,9 @@ namespace vkBasalt
                 w.str(name);
                 w.str(value);
             }
-            w.u8(e.usesDepth ? 1 : 0);
+            w.u32((uint32_t) e.depthEntryPoints.size());
+            for (const std::string& entryPoint : e.depthEntryPoints)
+                w.str(entryPoint);
             w.u8(e.usesMinPrecision ? 1 : 0);
             w.str(e.warnings);
             putModule(w, e.module);
@@ -638,7 +640,8 @@ namespace vkBasalt
                 name = r.str();
                 value = r.str();
             }
-            e->usesDepth = r.u8() != 0;
+            for (uint32_t n = r.count(); n > 0; n--)
+                e->depthEntryPoints.insert(r.str());
             e->usesMinPrecision = r.u8() != 0;
             e->warnings = r.str();
             e->module = getModule(r);
@@ -766,7 +769,8 @@ namespace vkBasalt
     constexpr uint32_t spvOpPtrAccessChain = 67;
     constexpr uint32_t spvOpCopyObject   = 83;
 
-    static bool moduleUsesDepth(const reshadefx::effect_module& module, const std::map<std::string, std::vector<uint32_t>>& entryPointSpirv)
+    static std::set<std::string> depthReadingEntryPoints(const reshadefx::effect_module&                       module,
+                                                         const std::map<std::string, std::vector<uint32_t>>& entryPointSpirv)
     {
             std::set<std::string> depthTexNames;
             for (const auto& tex : module.textures)
@@ -777,7 +781,7 @@ namespace vkBasalt
                 }
             }
             if (depthTexNames.empty())
-                return false;
+                return {};
 
             auto isSamplerUsedInOneModule = [&](uint32_t samplerId, const std::vector<uint32_t>& code) -> bool {
                 if (code.size() < 5)
@@ -859,21 +863,16 @@ namespace vkBasalt
                 return false;
             };
 
-            auto isSamplerUsedInSpirv = [&](uint32_t samplerId) -> bool {
-                for (const auto& [entryPointName, code] : entryPointSpirv)
-                    if (isSamplerUsedInOneModule(samplerId, code))
-                        return true;
-                return false;
-            };
-
+            std::set<std::string> readers;
             for (const auto& samp : module.samplers)
             {
                 if (depthTexNames.count(samp.texture_name) == 0)
                     continue;
-                if (isSamplerUsedInSpirv(samp.id))
-                    return true;
+                for (const auto& [entryPointName, code] : entryPointSpirv)
+                    if (isSamplerUsedInOneModule(samp.id, code))
+                        readers.insert(entryPointName);
             }
-            return false;
+            return readers;
     }
 
     namespace
@@ -1015,7 +1014,7 @@ namespace vkBasalt
                 return e;
             }
 
-            e->usesDepth = moduleUsesDepth(e->module, e->entryPointSpirv);
+            e->depthEntryPoints = depthReadingEntryPoints(e->module, e->entryPointSpirv);
             e->usesMinPrecision = codegen->uses_min_precision();
             return e;
         }
@@ -1208,8 +1207,8 @@ namespace vkBasalt
             return "error";
         if (d->warnings != e.warnings)
             return "warnings";
-        if (d->usesDepth != e.usesDepth)
-            return "usesDepth";
+        if (d->depthEntryPoints != e.depthEntryPoints)
+            return "depthEntryPoints";
         if (d->usesMinPrecision != e.usesMinPrecision)
             return "usesMinPrecision";
         if (d->usedMacros != e.usedMacros)

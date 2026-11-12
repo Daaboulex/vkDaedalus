@@ -71,6 +71,8 @@ namespace vkBasalt
     {
         ImGuiIO& io        = ImGui::GetIO();
         io.MouseDrawCursor = true;
+        if (pEffectRegistry)
+            pEffectRegistry->clearEditedParameters();
         const FrameLayout layout = frameLayout(io.DisplaySize.x, io.DisplaySize.y, desktopScale().scale);
         applyFrameScale(layout.scale);
         ui::beginFrame(fonts);

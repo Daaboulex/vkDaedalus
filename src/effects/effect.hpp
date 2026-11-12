@@ -9,6 +9,7 @@
 
 #include "vulkan_include.hpp"
 #include "params/effect_param.hpp"
+#include "reshade_frame.hpp"
 
 namespace vkBasalt
 {
@@ -16,7 +17,7 @@ namespace vkBasalt
     {
     public:
         void virtual applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer) = 0;
-        void virtual updateEffect(uint32_t imageIndex){};
+        virtual void updateEffect(uint32_t imageIndex, const ReshadeFrame& frame) {}
         void virtual useDepthImage(VkImageView depthImageView){};
         virtual ~Effect(){};
 

@@ -237,6 +237,25 @@ namespace vkBasalt
             return it != spec.annotations.end() && getAnnotationInt(*it) != 0;
         }
 
+        std::vector<TechniqueInfo> techniquesOf(const reshadefx::effect_module& module)
+        {
+            std::vector<TechniqueInfo> techniques;
+            for (const reshadefx::technique& technique : module.techniques)
+            {
+                const auto text = [&](const char* name) {
+                    const auto it = findAnnotation(technique.annotations, name);
+                    return it != technique.annotations.end() && it->type.base == reshadefx::type::t_string ? it->value.string_data : std::string();
+                };
+                const auto number = [&](const char* name) {
+                    const auto it = findAnnotation(technique.annotations, name);
+                    return it != technique.annotations.end() && it->type.base != reshadefx::type::t_string ? getAnnotationInt(*it) : 0;
+                };
+                techniques.push_back({technique.name, text("ui_label"), text("ui_tooltip"), number("hidden") != 0, number("enabled") != 0,
+                                      static_cast<uint32_t>(std::max(number("timeout"), 0))});
+            }
+            return techniques;
+        }
+
         std::unique_ptr<EffectParam> convertSpecConstant(const reshadefx::uniform& spec, const std::string& effectName, Config* pConfig)
         {
             std::unique_ptr<EffectParam> p = typedParameter(spec, effectName, pConfig);
@@ -460,8 +479,9 @@ namespace vkBasalt
             auto compiled = getOrCompileReshadeEffect(effectPath, parameterReadDefines({}), includePaths);
             result.success = compiled->ok();
             result.errorMessage = compiled->ok() ? compiled->warnings : compiled->error;
-            result.usesDepth = compiled->usesDepth;
+            result.usesDepth = compiled->usesDepth();
             result.usesMinPrecision = compiled->usesMinPrecision;
+            result.techniques = techniquesOf(compiled->module);
         }
         catch (const std::exception& e)
         {

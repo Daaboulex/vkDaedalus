@@ -185,7 +185,7 @@ static TestResult testShader(
             }
         }
 
-        result.usesDepth = compiled->usesDepth;
+        result.usesDepth = compiled->usesDepth();
         result.success = true;
     }
     catch (const std::exception& e)

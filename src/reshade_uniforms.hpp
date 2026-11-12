@@ -17,6 +17,11 @@
 #include "reshade/effect_module.hpp"
 #include "logger.hpp"
 #include "reshade_uniform_storage.hpp"
+#include "reshade_frame.hpp"
+
+#include <array>
+#include <map>
+#include <optional>
 
 namespace vkBasalt
 {
@@ -25,22 +30,41 @@ namespace vkBasalt
 
     void enumerateReshadeUniforms(reshadefx::effect_module module);
 
+    class InstanceUniformStorage
+    {
+    public:
+        struct Slot
+        {
+            std::array<uint32_t, 16> words{};
+            uint64_t                 frame   = 0;
+            bool                     wasDown = false;
+        };
+
+        Slot& slotFor(const reshadefx::uniform& uniform);
+
+    private:
+        std::map<std::string, Slot> slots;
+    };
+
+    class InstanceUniformStorages
+    {
+    public:
+        InstanceUniformStorage& of(const std::string& instance) { return storages[instance]; }
+
+    private:
+        std::map<std::string, InstanceUniformStorage> storages;
+    };
+
     class ReshadeUniform
     {
     public:
         explicit ReshadeUniform(reshadefx::uniform uniformInfo) : uniformInfo(std::move(uniformInfo)) {}
-        void virtual update(void* mapedBuffer, size_t bufferSize) = 0;
-        virtual ~ReshadeUniform(){};
+        virtual void update(void* mappedBuffer, size_t bufferSize, const ReshadeFrame& frame) = 0;
+        virtual ~ReshadeUniform() = default;
 
     protected:
-        template<typename T>
-        bool writeValues(void* mappedBuffer, size_t bufferSize, const T* values, size_t count)
+        bool writeWords(void* mappedBuffer, size_t bufferSize, const uint32_t* words, size_t count)
         {
-            static_assert(sizeof(T) == sizeof(uint32_t), "ReShade uniforms are made of 32-bit words");
-            uint32_t words[16];
-            if (count > std::size(words))
-                return false;
-            std::memcpy(words, values, count * sizeof(uint32_t));
             if (writeReshadeUniformWords(mappedBuffer, bufferSize, uniformInfo, words, count))
                 return true;
             if (!reportedOutOfRange)
@@ -56,112 +80,25 @@ namespace vkBasalt
         bool reportedOutOfRange = false;
     };
 
-    std::vector<std::shared_ptr<ReshadeUniform>> createReshadeUniforms(
-        reshadefx::effect_module module, EffectRegistry* effectRegistry,
-        const std::string& effectName, bool liveUniforms);
+    std::vector<std::shared_ptr<ReshadeUniform>> createReshadeUniforms(const reshadefx::effect_module& module, EffectRegistry* effectRegistry,
+                                                                       const std::string& effectName, bool liveUniforms,
+                                                                       InstanceUniformStorage& storage);
 
     class ParameterUniform : public ReshadeUniform
     {
     public:
-        ParameterUniform(reshadefx::uniform uniformInfo,
-                         EffectRegistry* effectRegistry,
-                         std::string effectName);
-        void update(void* mappedBuffer, size_t bufferSize) override;
+        ParameterUniform(reshadefx::uniform uniformInfo, EffectRegistry* effectRegistry, std::string effectName);
+        void update(void* mappedBuffer, size_t bufferSize, const ReshadeFrame& frame) override;
 
     private:
-        EffectRegistry* effectRegistry = nullptr;
-        std::string effectName;
-        uint64_t cachedRegistryRevision = 0;
-        const EffectParam* cachedParam = nullptr;
-    };
-
-    class FrameTimeUniform : public ReshadeUniform
-    {
-    public:
-        FrameTimeUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~FrameTimeUniform();
-
-    private:
-        std::chrono::time_point<std::chrono::high_resolution_clock> lastFrame;
-    };
-
-    class FrameCountUniform : public ReshadeUniform
-    {
-    public:
-        FrameCountUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~FrameCountUniform();
-
-    private:
-        int32_t count = 0;
-    };
-
-    class DateUniform : public ReshadeUniform
-    {
-    public:
-        DateUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~DateUniform();
-    };
-
-    class TimerUniform : public ReshadeUniform
-    {
-    public:
-        TimerUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~TimerUniform();
-
-    private:
-        std::chrono::time_point<std::chrono::high_resolution_clock> start;
-    };
-
-    class PingPongUniform : public ReshadeUniform
-    {
-    public:
-        PingPongUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~PingPongUniform();
-
-    private:
-        std::chrono::time_point<std::chrono::high_resolution_clock> lastFrame;
-
-        float min             = 0.0f;
-        float max             = 0.0f;
-        float stepMin         = 0.0f;
-        float stepMax         = 0.0f;
-        float smoothing       = 0.0f;
-        float currentValue[2] = {0.0f, 1.0f};
-    };
-
-    class RandomUniform : public ReshadeUniform
-    {
-    public:
-        RandomUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~RandomUniform();
-
-    private:
-        int max = 0;
-        int min = 0;
+        EffectRegistry*    effectRegistry = nullptr;
+        std::string        effectName;
+        uint64_t           cachedRegistryRevision = 0;
+        const EffectParam* cachedParam            = nullptr;
     };
 
     bool effectsReadMouse(bool effectsRun);
     void beginReshadeInputFrame(bool readMouse);
-
-    class KeyUniform : public ReshadeUniform
-    {
-    public:
-        KeyUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~KeyUniform();
-
-    private:
-        uint32_t keysym = 0;
-        KeyMode  mode   = KeyMode::held;
-        bool     wasDown = false;
-        bool     toggled = false;
-    };
 
     class MouseReader
     {
@@ -172,50 +109,60 @@ namespace vkBasalt
         MouseReader& operator=(const MouseReader&) = delete;
     };
 
-    class MouseButtonUniform : public ReshadeUniform
+    enum class UniformSource
     {
-    public:
-        MouseButtonUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~MouseButtonUniform();
-
-    private:
-        int         button  = 0;
-        KeyMode     mode    = KeyMode::held;
-        bool        wasDown = false;
-        bool        toggled = false;
-        MouseReader reader;
+        FrameTime,
+        FrameCount,
+        Random,
+        PingPong,
+        Date,
+        Timer,
+        Key,
+        MousePoint,
+        MouseDelta,
+        MouseButton,
+        MouseWheel,
+        OverlayOpen,
+        OverlayActive,
+        OverlayHovered,
+        Screenshot,
     };
 
-    class MousePointUniform : public ReshadeUniform
+    std::optional<UniformSource> uniformSourceNamed(const std::string& source);
+
+    class SourceUniform : public ReshadeUniform
     {
     public:
-        MousePointUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~MousePointUniform();
+        SourceUniform(reshadefx::uniform uniformInfo, UniformSource source, InstanceUniformStorage::Slot& slot, EffectRegistry* effectRegistry,
+                      std::string instance, std::vector<std::string> uniformNames);
+        void update(void* mappedBuffer, size_t bufferSize, const ReshadeFrame& frame) override;
 
     private:
-        MouseReader reader;
-    };
+        void compute(const ReshadeFrame& frame);
+        void store(size_t component, uint32_t word) { slot.words[component] = word; }
+        float loadFloat(size_t component) const { return reshadeFloatOfWord(uniformInfo.type, slot.words[component]); }
+        bool  loadBool() const { return reshadeBoolOfWord(uniformInfo.type, slot.words[0]); }
+        void  storeButton(KeyMode mode, bool isDown, bool pressed);
+        float annotationFloat(const char* name, size_t component, float otherwise) const;
+        int   annotationInt(const char* name, int otherwise) const;
 
-    class MouseDeltaUniform : public ReshadeUniform
-    {
-    public:
-        MouseDeltaUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
-        virtual ~MouseDeltaUniform();
-
-    private:
-        MouseReader reader;
+        UniformSource                 source;
+        InstanceUniformStorage::Slot& slot;
+        EffectRegistry*               effectRegistry = nullptr;
+        std::string                   instance;
+        std::vector<std::string>      uniformNames;
+        KeyMode                       mode   = KeyMode::held;
+        uint32_t                      keysym = 0;
+        int                           button = -1;
+        std::optional<MouseReader>    reader;
     };
 
     class DepthUniform : public ReshadeUniform
     {
     public:
-        DepthUniform(reshadefx::uniform uniformInfo);
-        void virtual update(void* mapedBuffer, size_t bufferSize) override;
+        explicit DepthUniform(reshadefx::uniform uniformInfo) : ReshadeUniform(std::move(uniformInfo)) {}
+        void update(void* mappedBuffer, size_t bufferSize, const ReshadeFrame& frame) override;
         void setDepthAvailable(bool available) { depthAvailable = available; }
-        virtual ~DepthUniform();
 
     private:
         bool depthAvailable = false;

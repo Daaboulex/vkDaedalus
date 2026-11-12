@@ -2,6 +2,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,12 +28,23 @@ namespace vkBasalt
         std::vector<std::pair<std::string, uint64_t>> includedFiles;
         std::vector<IncludeResolution> includeResolutions;
         std::vector<std::pair<std::string, std::string>> usedMacros;
-        bool usesDepth = false;
+        std::set<std::string> depthEntryPoints;
         bool usesMinPrecision = false;
         std::string warnings;
         std::string error;
 
         bool ok() const { return error.empty(); }
+        bool usesDepth() const { return !depthEntryPoints.empty(); }
+        bool techniqueReadsDepth(size_t technique) const
+        {
+            if (technique >= module.techniques.size())
+                return false;
+            for (const reshadefx::pass& pass : module.techniques[technique].passes)
+                for (const std::string* entryPoint : {&pass.vs_entry_point, &pass.ps_entry_point, &pass.cs_entry_point})
+                    if (!entryPoint->empty() && depthEntryPoints.count(*entryPoint) != 0)
+                        return true;
+            return false;
+        }
     };
 
     std::shared_ptr<const CompiledReshadeEffect> getOrCompileReshadeEffect(

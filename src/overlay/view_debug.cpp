@@ -1,4 +1,5 @@
 #include "imgui_overlay.hpp"
+#include "chain_rows.hpp"
 
 #include <ctime>
 #include <filesystem>
@@ -263,6 +264,9 @@ namespace vkBasalt
                     ui::beginPanel();
                     ui::factRow("Type", effect.baseType.c_str());
                     ui::factRow("Ticked", effect.enabled ? "yes" : "no");
+                    const std::vector<TechniqueInfo> techniques = pEffectRegistry->techniquesOf(effect.instanceName);
+                    if (const TechniqueInfo* technique = techniqueOfRowIn(effect.instanceName, techniques))
+                        ui::factRow("Technique", technique->name.c_str());
                     if (!effect.filePath.empty())
                     {
                         ui::factRow("Path", ui::elideStart(effect.filePath, ImGui::GetContentRegionAvail().x * 0.7f).c_str());

@@ -7,6 +7,8 @@
 #include "overlay/frame_draw.hpp"
 #include "overlay/widgets.hpp"
 #include "settings_manager.hpp"
+#include "chain_rows.hpp"
+#include "effects/effect_registry.hpp"
 #include "input_blocker.hpp"
 #include "logger.hpp"
 #include "format.hpp"
@@ -23,18 +25,9 @@
 
 namespace vkBasalt
 {
-    void ImGuiOverlay::renderKeysCard(const KeyboardState& keyboard)
+    std::vector<ImGuiOverlay::LayerKeyBinding> ImGuiOverlay::layerKeyBindings()
     {
-        const OverlayPalette& palette = activePalette();
-        struct Binding
-        {
-            const char*                             label;
-            const char*                             tooltip;
-            std::string                             key;
-            std::function<void(const std::string&)> set;
-            KeyBinding                              id;
-        };
-        const std::vector<Binding> bindings = {
+        return {
             {"Toggle overlay", "Shows or hides this overlay", settingsManager.getOverlayKey(), [](const std::string& key) { settingsManager.setOverlayKey(key); }, KeyBinding::Overlay},
             {"Toggle effects", "Turns every effect on or off", settingsManager.getToggleKey(), [](const std::string& key) { settingsManager.setToggleKey(key); }, KeyBinding::Toggle},
             {"Apply", "Same as Apply on the Effects card", settingsManager.getReloadKey(),
@@ -43,6 +36,23 @@ namespace vkBasalt
              [](const std::string& key) { settingsManager.setFrameGenerationKey(key); }, KeyBinding::FrameGeneration},
             {"Hold to preview", isInputBlocked() ? "While held, the overlay hides and the game still gets no input" : "While held, the overlay hides", settingsManager.getPreviewKey(),
              [](const std::string& key) { settingsManager.setPreviewKey(key); }, KeyBinding::Preview}};
+    }
+
+    std::vector<KeyUse> ImGuiOverlay::keysInUse() const
+    {
+        std::vector<KeyUse> uses;
+        for (const LayerKeyBinding& binding : layerKeyBindings())
+            uses.push_back({binding.label, binding.key});
+        if (pEffectRegistry)
+            for (const auto& [row, key] : pEffectRegistry->rowKeys())
+                uses.push_back({rowKeyAction(rowLabelOf(row, pEffectRegistry->techniquesOf(row))), key});
+        return uses;
+    }
+
+    void ImGuiOverlay::renderKeysCard(const KeyboardState& keyboard)
+    {
+        const OverlayPalette&               palette  = activePalette();
+        const std::vector<LayerKeyBinding> bindings = layerKeyBindings();
 
         ui::heading("Keys");
         if (!keyBindingProblem.empty())
@@ -51,7 +61,7 @@ namespace vkBasalt
             ui::chip(keyBindingProblem.c_str(), palette.warn);
         }
         const float keyWidth = ui::px(150.0f);
-        const auto  row      = [&](const Binding& binding) {
+        const auto  row      = [&](const LayerKeyBinding& binding) {
             ui::panelRow();
             ImGui::PushID(binding.label);
             const bool listening = listeningForKey == binding.id;
@@ -64,10 +74,8 @@ namespace vkBasalt
             ImGui::SetItemTooltip(listening ? "Click again to cancel" : "Click, then press the new key");
             if (listening && !keyboard.lastKeyName.empty())
             {
-                std::vector<KeyUse> others;
-                for (const Binding& other : bindings)
-                    if (other.id != binding.id)
-                        others.push_back({other.label, other.key});
+                std::vector<KeyUse> others = keysInUse();
+                std::erase_if(others, [&](const KeyUse& use) { return use.action == binding.label; });
                 const std::string taken = keyTakenBy(keyboard.lastKeyName, others);
                 listeningForKey         = KeyBinding::None;
                 if (!taken.empty())

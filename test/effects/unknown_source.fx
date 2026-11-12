@@ -1,4 +1,4 @@
-uniform bool OverlayOpen < source = "overlay_open"; >;
+uniform bool FreePie < source = "freepie"; >;
 
 void UnknownSourceVS(uint id : SV_VertexID, out float4 pos : SV_Position, out float2 uv : TEXCOORD)
 {
@@ -9,7 +9,7 @@ void UnknownSourceVS(uint id : SV_VertexID, out float4 pos : SV_Position, out fl
 
 float4 UnknownSourcePS(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 {
-    return OverlayOpen ? float4(1.0, 1.0, 1.0, 1.0) : float4(0.0, 0.0, 0.0, 1.0);
+    return FreePie ? float4(1.0, 1.0, 1.0, 1.0) : float4(0.0, 0.0, 0.0, 1.0);
 }
 
 technique UnknownSource

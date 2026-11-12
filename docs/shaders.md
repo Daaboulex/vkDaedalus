@@ -16,9 +16,27 @@ When the corpus was last recorded, 513 of the 517 shaders in ReShade's package i
 something vkDaedalus runs. [SHADER-COMPATIBILITY.md](../SHADER-COMPATIBILITY.md) lists them all, why the
 other four do not, and which shaders have been run, since compiling is not rendering.
 
-Only a shader's first technique runs. Effects compute at full precision even where a shader asks for
-`half`; an effect that declares reduced precision gets a Half precision switch under This effect when
-its row is open.
+Effects compute at full precision even where a shader asks for `half`; an effect that declares reduced
+precision gets a Half precision switch under This effect when its row is open.
+
+## A file's techniques
+
+Every technique of a file in the profile has a row, as in ReShade. The file's own row runs its first
+technique. Each other technique joins after it, named `<effect>/<technique>` in the profile, off unless
+the profile lists it. A file's rows share its parameters, textures and uniform values, and each runs
+where it sits in the chain. The overlay reads the annotations ReShade reads on a technique:
+
+| Annotation | What the row does |
+|---|---|
+| `ui_label`, `ui_tooltip` | the row reads `<effect>: <label>` and shows the tooltip |
+| `enabled` | on at every start, whatever the profile says; switched off, it stays off for the run |
+| `timeout` | switched off that many milliseconds after it is turned on |
+| `hidden` | no row; it still runs while the profile lists it on |
+
+A row's menu sets a key that turns the row on and off while the game runs, saved as `<row>.key`.
+The key works while the effects are on and nothing in the overlay is being typed into, as in ReShade.
+Remove takes the file out with every technique it has. With Safe Anti-Cheat on, only a technique that
+reads the depth buffer is left out; the file's other techniques run.
 
 ## A pack's parameters
 
@@ -70,6 +88,29 @@ Every shader gets the macros ReShade defines, with the values ReShade would give
 
 A texture declared with `Format = BUFFER_COLOR_FORMAT` takes the back buffer's format, a BGRA one
 included.
+
+## Values a shader reads
+
+A uniform with a `source` annotation gets its value from vkDaedalus, computed once per frame for each
+file and converted to the type the uniform declares, as ReShade does:
+
+| `source` | Value |
+|---|---|
+| `timer` | milliseconds since the game's first frame in this window, kept through a resize |
+| `frametime` | milliseconds between the last two frames |
+| `framecount` | the frames before this one; a `bool` is true on every other frame |
+| `random` | a number from `min` to `max`, 0 to 32767 by default, new each frame |
+| `pingpong` | a value moving between `min` and `max`, 0 and 1 by default, at the speed in `step` |
+| `date` | the year, month, day and seconds since midnight |
+| `key`, `mousebutton` | whether the key or button named by `keycode` is down, or pressed this frame, or toggled, as the annotations ask |
+| `mousepoint`, `mousedelta` | where the pointer is in the frame, and how far it moved since the last frame |
+| `mousewheel` | the wheel's position, moved by `step` per notch and kept between `min` and `max` when they differ; the second value is this frame's notches |
+| `overlay_open`, `ui_open` | whether the overlay is shown |
+| `overlay_active`, `ui_active`, `overlay_hovered`, `ui_hovered` | 1 plus the index of the file's parameter being edited or under the pointer, 0 for none |
+| `screenshot` | always false: vkDaedalus takes no screenshots |
+| `bufready_depth` | whether a depth buffer reaches the effect |
+
+A source vkDaedalus does not provide is named in the log, and nothing writes that uniform.
 
 ## Compiled effects
 

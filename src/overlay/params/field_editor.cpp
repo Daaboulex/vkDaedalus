@@ -45,7 +45,7 @@ namespace vkBasalt
         return editors[type].get();
     }
 
-    bool renderFieldEditor(EffectParam& param)
+    bool renderFieldEditor(EffectParam& param, FieldInteraction& interaction)
     {
         FieldEditor* editor = FieldEditorFactory::instance().getEditor(param.getType());
         if (!editor)
@@ -55,6 +55,8 @@ namespace vkBasalt
         ImGui::BeginGroup();
         bool changed = editor->render(param);
         ImGui::EndGroup();
+        interaction.active  = ImGui::IsItemActive();
+        interaction.hovered = ImGui::IsItemHovered();
 
         const bool cut = !ui::parameterNameFits(param.label.c_str());
         if ((cut || !param.tooltip.empty()) && ImGui::BeginItemTooltip())

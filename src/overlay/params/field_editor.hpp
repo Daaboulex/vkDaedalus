@@ -53,7 +53,13 @@ namespace vkBasalt
         return shown;
     }
 
-    bool renderFieldEditor(EffectParam& param);
+    struct FieldInteraction
+    {
+        bool active  = false;
+        bool hovered = false;
+    };
+
+    bool renderFieldEditor(EffectParam& param, FieldInteraction& interaction);
 
 }
 

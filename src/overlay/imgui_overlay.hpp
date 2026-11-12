@@ -122,6 +122,7 @@ namespace vkBasalt
         bool isPreviewing() const { return previewingByKey || previewingByMouse; }
         void switchOff(const std::string& why);
         bool isVisible() const { return visible; }
+        bool holdsShortcuts() const { return visible && shortcutsHeld; }
         bool showsCard(OverlaySection section) const
         {
             return visible && !isPreviewing() && openSection == section && !(section == OverlaySection::Effects && inSelectionMode);
@@ -329,8 +330,23 @@ namespace vkBasalt
             Preview,
             FrameGeneration
         };
+        struct LayerKeyBinding
+        {
+            const char*                             label;
+            const char*                             tooltip;
+            std::string                             key;
+            std::function<void(const std::string&)> set;
+            KeyBinding                              id;
+        };
+        static std::vector<LayerKeyBinding> layerKeyBindings();
         KeyBinding listeningForKey = KeyBinding::None;
         std::string keyBindingProblem;
+        std::string listeningRow;
+        std::string rowKeyProblem;
+        bool shortcutsHeld = false;
+        std::vector<KeyUse> keysInUse() const;
+        static std::string rowKeyAction(const std::string& label) { return "the key of " + label; }
+        void bindRowKey(const KeyboardState& keyboard);
         bool settingsSaved = false;
         bool settingsSaveFailed = false;
         bool shaderPathsChanged = false;

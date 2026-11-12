@@ -13,6 +13,7 @@
 #include "wayland_display.hpp"
 #include "util.hpp"
 #include "config_value.hpp"
+#include "chain_rows.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -22,6 +23,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <limits>
+#include <optional>
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -187,6 +189,8 @@ namespace vkBasalt
         std::string category;
         bool        categoryOpen = true;
         bool        anyShown     = false;
+        std::string active;
+        std::string hovered;
         for (size_t i = 0; i < params.size(); i++)
         {
             if (params[i]->hidden)
@@ -214,10 +218,16 @@ namespace vkBasalt
             if (!categoryOpen)
                 continue;
             ImGui::PushID(static_cast<int>(i));
-            if (renderFieldEditor(*params[i]))
+            FieldInteraction interaction;
+            if (renderFieldEditor(*params[i], interaction))
                 markEffectValuesChanged(effectName);
+            if (interaction.active)
+                active = params[i]->name;
+            if (interaction.hovered)
+                hovered = params[i]->name;
             ImGui::PopID();
         }
+        pEffectRegistry->setEditedParameter(effectName, active, hovered);
 
         const bool                           halfShown = pEffectRegistry->effectUsesMinPrecision(effectName);
         std::vector<PreprocessorDefinition>& defs      = pEffectRegistry->getPreprocessorDefs(effectName);
@@ -696,6 +706,11 @@ namespace vkBasalt
         const ImGuiStyle&        style           = ImGui::GetStyle();
 
         ui::heading("Effects");
+        if (!rowKeyProblem.empty())
+        {
+            ImGui::SameLine();
+            ui::chip(rowKeyProblem.c_str(), palette.warn);
+        }
         ui::alignRight(ui::buttonWidth("Add effects..."));
         if (ui::button("Add effects..."))
         {
@@ -721,6 +736,7 @@ namespace vkBasalt
                 effectCompileJobs.cancel();
             ImGui::SetItemTooltip("Stops the effects still compiling. The one compiling now finishes\nand stays in compiled effects; the rest never start.");
         }
+        bindRowKey(keyboard);
 
         const float  listWidth = ImGui::GetContentRegionAvail().x;
         const float  margin    = ui::px(ui::Size::gap);
@@ -751,9 +767,18 @@ namespace vkBasalt
         if (selectedEffects.empty())
             ui::note("No effects yet");
 
+        std::vector<std::vector<TechniqueInfo>> rowTechniques;
+        for (const std::string& name : selectedEffects)
+            rowTechniques.push_back(pEffectRegistry->techniquesOf(name));
+        const std::vector<bool> drawn = rowsDrawn(selectedEffects, rowTechniques);
+
         for (size_t i = 0; i < selectedEffects.size(); i++)
         {
-            const std::string& effectName = selectedEffects[i];
+            if (!drawn[i])
+                continue;
+            const std::string&   effectName = selectedEffects[i];
+            const TechniqueInfo* technique  = techniqueOfRowIn(effectName, rowTechniques[i]);
+            const std::string    rowKey     = pEffectRegistry->getEffectKey(effectName);
             ImGui::PushID(effectName.c_str());
 
             const ImVec2 rowMin   = ImGui::GetCursorScreenPos();
@@ -824,7 +849,7 @@ namespace vkBasalt
                                           : !notes.empty()   ? " (runs differently on " + onGpu + ")"
                                           : refusedHere      ? " (on GPU 1)"
                                                              : "";
-            const std::string shown       = effectName + mark;
+            const std::string shown       = rowLabelOf(effectName, rowTechniques[i]) + (rowKey.empty() ? "" : " [" + rowKey + "]") + mark;
             ImGui::SameLine(0.0f, gap);
             const bool treeOpen = ui::disclosure("effect", shown.c_str(), ink, nameEnd - gap - ImGui::GetCursorScreenPos().x);
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
@@ -835,6 +860,8 @@ namespace vkBasalt
                 ImGui::SetItemTooltip("%s", leftOut.empty() ? notes.c_str() : leftOut.c_str());
             else if (refusedHere)
                 ImGui::SetItemTooltip("Planned for GPU %u, runs on GPU 1: %s", rowGpus[i], onDevice.gpuRefusal.c_str());
+            else if (technique != nullptr && !technique->tooltip.empty())
+                ImGui::SetItemTooltip("%s", technique->tooltip.c_str());
             if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0) && !isDragging)
             {
                 isDragging      = true;
@@ -924,20 +951,37 @@ namespace vkBasalt
                     pendingAddEffects.clear();
                 }
 
-                if (ui::option("Move up", false, i > 0))
-                    moveIndex = std::make_pair(i, i - 1);
-                if (i == 0)
+                const std::optional<size_t> above = drawnNeighbour(drawn, i, false);
+                const std::optional<size_t> below = drawnNeighbour(drawn, i, true);
+                if (ui::option("Move up", false, above.has_value()) && above)
+                    moveIndex = std::make_pair(i, *above);
+                if (!above)
                     ImGui::SetItemTooltip("First in the chain");
-                if (ui::option("Move down", false, i + 1 < selectedEffects.size()))
-                    moveIndex = std::make_pair(i, i + 1);
-                if (i + 1 == selectedEffects.size())
+                if (ui::option("Move down", false, below.has_value()) && below)
+                    moveIndex = std::make_pair(i, *below);
+                if (!below)
                     ImGui::SetItemTooltip("Last in the chain");
 
                 renderGpuMenu(effectName, i == 0 ? gameGpu : rowGpus[i - 1]);
 
                 ui::menuSeparator();
+                if (ui::option(rowKey.empty() ? "Set a key..." : ("Key " + rowKey + "...").c_str(), listeningRow == effectName))
+                {
+                    listeningRow = effectName;
+                    rowKeyProblem.clear();
+                }
+                ImGui::SetItemTooltip("Then press the key that turns this effect on and off while the game runs");
+                if (!rowKey.empty() && ui::option("Clear key", false))
+                {
+                    pEffectRegistry->setEffectKey(effectName, "");
+                    markDefinitionsEdited();
+                }
+
+                ui::menuSeparator();
                 if (ui::option("Remove", false, true, &palette.bad))
                     removeIndex = i;
+                if (rowTechniques[i].size() > 1)
+                    ImGui::SetItemTooltip("Removes %s with every technique it has", instanceOfRow(effectName).c_str());
 
                 ui::endPopup();
             }
@@ -968,10 +1012,10 @@ namespace vkBasalt
 
         if (removeIndex && *removeIndex < selectedEffects.size())
         {
-            const std::string removedName = selectedEffects[*removeIndex];
-            selectedEffects.erase(selectedEffects.begin() + static_cast<std::ptrdiff_t>(*removeIndex));
+            const std::string removed = instanceOfRow(selectedEffects[*removeIndex]);
+            std::erase_if(selectedEffects, [&](const std::string& row) { return instanceOfRow(row) == removed; });
             pEffectRegistry->setSelectedEffects(selectedEffects);
-            pEffectRegistry->removeEffect(removedName);
+            pEffectRegistry->removeEffect(removed);
             markEdited();
         }
 
@@ -1056,4 +1100,32 @@ namespace vkBasalt
         ImGui::SetItemTooltip("Apply (%s)", settingsManager.getReloadKey().c_str());
     }
 
+    void ImGuiOverlay::bindRowKey(const KeyboardState& keyboard)
+    {
+        if (listeningRow.empty() || !pEffectRegistry)
+            return;
+        const std::string label = rowLabelOf(listeningRow, pEffectRegistry->techniquesOf(listeningRow));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(activePalette().accent, "Press a key for %s", label.c_str());
+        ImGui::SameLine();
+        if (ui::lineButton("Cancel##rowkey"))
+        {
+            listeningRow.clear();
+            return;
+        }
+        if (keyboard.lastKeyName.empty())
+            return;
+        std::vector<KeyUse> others = keysInUse();
+        std::erase_if(others, [&](const KeyUse& use) { return use.action == rowKeyAction(label); });
+        const std::string taken = keyTakenBy(keyboard.lastKeyName, others);
+        if (taken.empty())
+        {
+            pEffectRegistry->setEffectKey(listeningRow, keyboard.lastKeyName);
+            markDefinitionsEdited();
+            rowKeyProblem.clear();
+        }
+        else
+            rowKeyProblem = keyboard.lastKeyName + " is " + taken;
+        listeningRow.clear();
+    }
 }

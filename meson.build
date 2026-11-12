@@ -165,6 +165,7 @@ if get_option('with_so')
             meson.project_source_root() / 'test' / 'language' / 'depth_through_parameter.fx', 'depth',
             meson.project_source_root() / 'test' / 'effects' / 'uniform_smoke.fx', 'none',
             meson.project_source_root() / 'test' / 'language' / 'uncalled_depth_helper.fx', 'none',
+            meson.project_source_root() / 'test' / 'language' / 'depth_in_one_technique.fx', 'none,depth',
         ],
         env : {'XDG_CACHE_HOME' : meson.current_build_dir() / 'test-uses-depth-cache'})
 

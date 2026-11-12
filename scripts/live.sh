@@ -3243,6 +3243,61 @@ off_cost_case() {
     fi
 }
 
+drive_techniques() {
+    local log="$1" map="$2" profile="$3" ui_log="$1.ui" window label absent="" base="technique_annotations: Base pass"
+    : >"$ui_log"
+    if ! wait_for_line 'present cycle' 30 "$log"; then
+        ui_result "$ui_log" FAIL "Effects: a file's techniques are rows" "the game never reached 30 presents"
+        return 0
+    fi
+    window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '' | tail -1) || true
+    ui_take_window "$window"
+    if ! hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || ! ui_wait "$map" "$base" "" "" "$log"; then
+        ui_result "$ui_log" FAIL "Effects: a file's techniques are rows" "the overlay never showed the row $base"
+        return 0
+    fi
+    for label in "technique_annotations: Keyed pass" "technique_annotations: AlwaysOn" "technique_annotations: Brief"; do
+        [ -n "$(ui_line "$map" "$label")" ] || absent+="${absent:+, }$label"
+    done
+    if [ -n "$absent" ]; then
+        ui_result "$ui_log" FAIL "Effects: a file's techniques are rows" "no row for $absent"
+    elif [ -n "$(ui_line "$map" "technique_annotations: Hidden")" ]; then
+        ui_result "$ui_log" FAIL "Effects: a file's techniques are rows" "the hidden technique has a row"
+    else
+        ui_result "$ui_log" PASS "Effects: a file's techniques are rows" "each technique of technique_annotations has a row labelled with its ui_label or name, and the hidden one none"
+    fi
+    ui_click "$map" "...##actions" 1 "$log" || true
+    ui_click "$map" "Set a key..." 1 "$log" || true
+    ui_key k || true
+    if file_says "$profile" '^technique_annotations\.key = k$' && ui_wait "$map" "$base [k]" "" "" "$log"; then
+        ui_result "$ui_log" PASS "Effects: a technique row's key" "Set a key... then k saved technique_annotations.key = k and the row shows [k]"
+    else
+        ui_result "$ui_log" FAIL "Effects: a technique row's key" "Set a key... then k left $(grep -m1 '^technique_annotations\.key' "$profile" || echo 'no key line') in the profile"
+    fi
+    hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || true
+    ui_key k || true
+    if wait_for_count 'technique_annotations off by its key' 1 "$log" && file_says "$profile" '^disabledEffects = (.*:)?technique_annotations(:|$)'; then
+        ui_result "$ui_log" PASS "a technique row's key turns it off in the game" "k with the overlay closed turned technique_annotations off and saved it"
+    else
+        ui_result "$ui_log" FAIL "a technique row's key turns it off in the game" "k with the overlay closed logged $(count 'technique_annotations off by its key' "$log") toggles and saved $(grep -m1 '^disabledEffects' "$profile" || echo 'no disabledEffects line')"
+    fi
+    hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || true
+    ui_click "$map" "...##actions" 1 "$log" || true
+    ui_click "$map" "Move down" 1 "$log" || true
+    if file_says "$profile" '^effects = technique_annotations/Keyed:technique_annotations:'; then
+        ui_result "$ui_log" PASS "Effects: a technique row moves" "Move down on the bare row put it below technique_annotations/Keyed, saved"
+    else
+        ui_result "$ui_log" FAIL "Effects: a technique row moves" "Move down left $(grep -m1 '^effects' "$profile")"
+    fi
+    ui_click "$map" "...##actions" 1 "$log" || true
+    ui_click "$map" "Remove" 1 "$log" || true
+    if file_says "$profile" '^effects = cas$' && wait_until_gone "$profile" '^technique_annotations\.key = ' && ! grep -q '^disabledEffects = .*technique_annotations' "$profile"; then
+        ui_result "$ui_log" PASS "Effects: Remove takes a file's every technique" "Remove on one technique's row took every row of technique_annotations out of the profile, its key with them"
+    else
+        ui_result "$ui_log" FAIL "Effects: Remove takes a file's every technique" "Remove left $(grep -m1 '^effects' "$profile"), $(count '^technique_annotations\.key' "$profile") key line(s) and $(grep -m1 '^disabledEffects' "$profile" || echo 'no disabledEffects line')"
+    fi
+}
+
 lane_ui() {
     local icd="$1" dir="$2" control="$2/overlay-control.log" log="$2/ui.log" home="$2/ui-home" map="$2/ui.map" driver why step name detail
     fresh_home "$home" cas:smaa
@@ -3376,6 +3431,24 @@ lane_ui() {
     done <"$efLog.ui"
     if ! why=$(plain_verdict "$efLog" "$control"); then
         record FAIL "the Effects page, cleanly" "$why"
+    fi
+    local tqLog="$dir/techniques.log" tqHome="$dir/techniques-home" tqMap="$dir/techniques.map"
+    fresh_home "$tqHome" cas
+    mkdir -p "$tqHome/.config/vkdaedalus/configs" "$tqHome/.config/vkdaedalus/profiles"
+    cp "$VKB_FIXTURES/effects/technique_annotations.fx" "$tqHome-fx/"
+    printf 'overlayKey = %s\nautoApplyDelay = 200\n' "$OVERLAY_KEY" >"$tqHome/.config/vkdaedalus/settings.conf"
+    printf 'effects = technique_annotations:cas\ntechnique_annotations = %s\n' "$tqHome-fx/technique_annotations.fx" >"$tqHome/.config/vkdaedalus/profiles/vkcube.conf"
+    printf 'safeAntiCheat = true\n' >"$tqHome/.config/vkdaedalus/configs/vkcube.conf"
+    printf 'vkcube=vkcube\n' >"$tqHome/.config/vkdaedalus/configs/.active_profiles"
+    background drive_techniques "$tqLog" "$tqMap" "$tqHome/.config/vkdaedalus/profiles/vkcube.conf"
+    driver=$!
+    run "$tqLog" "$tqHome" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$tqMap" vkcube --c "$UI_FRAMES" --wsi xcb --width 1280 --height 720
+    driver_finished "drive_techniques"
+    while IFS=$'\t' read -r step name detail; do
+        record "$step" "$name" "$detail"
+    done <"$tqLog.ui"
+    if ! why=$(plain_verdict "$tqLog" "$control"); then
+        record FAIL "a file's techniques, cleanly" "$why"
     fi
     off_cost_case "$icd" "$dir"
     local guLog="$dir/gpus-tab.log" guHome="$dir/gpus-tab-home" guMap="$dir/gpus-tab.map"
@@ -4015,6 +4088,55 @@ lane_config() {
         record PASS "safe anti-cheat keeps depth out" "a new game, with depth capture on and no file of its own: Safe Anti-Cheat on by default, no depth image captured, the depth-reading effect left out, validation clean"
     fi
 
+    local one_technique="safe anti-cheat leaves out only a technique that reads depth"
+    log="$dir/config-anticheat-technique.log" home="$dir/config-anticheat-technique-home" fx="$dir/config-anticheat-technique-home-fx"
+    fresh_home "$home" depth_in_one:depth_in_one/ReadsDepth
+    cp "$VKB_FIXTURES/language/depth_in_one_technique.fx" "$fx/"
+    printf 'depth_in_one = %s\n' "$fx/depth_in_one_technique.fx" >>"$home/.config/vkdaedalus/vkdaedalus.conf"
+    printf 'depthCapture = on\n' >"$home/.config/vkdaedalus/settings.conf"
+    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- vkcube --c "$CONFIG_FRAMES" --wsi xcb
+    if ! why=$(plain_verdict "$log" "$control"); then
+        record FAIL "$one_technique" "$why"
+    elif [ "$(count 'Safe Anti-Cheat keeps depth_in_one/ReadsDepth out of the chain' "$log")" -lt 1 ] || [ "$(count 'Safe Anti-Cheat keeps depth_in_one out of the chain' "$log")" -ne 0 ] \
+        || [ "$(count 'creating effect [0-9]+: depth_in_one$' "$log")" -lt 1 ]; then
+        record FAIL "$one_technique" "the depth technique's row refused $(count 'Safe Anti-Cheat keeps depth_in_one/ReadsDepth out of the chain' "$log") time(s), the plain technique's row refused $(count 'Safe Anti-Cheat keeps depth_in_one out of the chain' "$log") time(s) and built $(count 'creating effect [0-9]+: depth_in_one$' "$log") time(s)"
+    else
+        record PASS "$one_technique" "of one file's two techniques, with Safe Anti-Cheat on, the one reading the depth buffer was left out and the other ran, validation clean"
+    fi
+
+    log="$dir/config-technique-annotations.log" home="$dir/config-technique-annotations-home" fx="$dir/config-technique-annotations-home-fx"
+    fresh_home "$home" technique_annotations:technique_annotations/AlwaysOn:technique_annotations/Brief:technique_annotations/Hidden
+    cp "$VKB_FIXTURES/effects/technique_annotations.fx" "$fx/"
+    printf 'technique_annotations = %s\ndisabledEffects = technique_annotations/AlwaysOn\n' "$fx/technique_annotations.fx" >>"$home/.config/vkdaedalus/vkdaedalus.conf"
+    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- vkcube --c "$CONFIG_FRAMES" --wsi xcb
+    local timedOut built
+    timedOut=$(awk '/technique_annotations\/Brief off: its timeout ran out/ { print NR; exit }' "$log")
+    built=$(awk -v after="${timedOut:-0}" 'NR > after && /creating effect [0-9]+: / { c++ } END { print c + 0 }' "$log")
+    if ! why=$(plain_verdict "$log" "$control"); then
+        record FAIL "technique annotations" "$why"
+    else
+        if [ "$(count 'creating effect [0-9]+: technique_annotations/AlwaysOn$' "$log")" -ge 1 ]; then
+            record PASS "a technique marked enabled runs at every load" "technique_annotations/AlwaysOn ran although disabledEffects named it, as ReShade runs an enabled technique"
+        else
+            record FAIL "a technique marked enabled runs at every load" "technique_annotations/AlwaysOn, enabled = true, was never built while disabledEffects named it"
+        fi
+        if [ "$(count 'creating effect [0-9]+: technique_annotations/Hidden$' "$log")" -ge 1 ]; then
+            record PASS "a hidden technique runs when on" "technique_annotations/Hidden, hidden = true and listed in effects, was built"
+        else
+            record FAIL "a hidden technique runs when on" "technique_annotations/Hidden, hidden = true and listed in effects, was never built"
+        fi
+        if [ "$(count 'creating effect [0-9]+: technique_annotations/Keyed$' "$log")" -ne 0 ]; then
+            record FAIL "a file's other techniques join off" "technique_annotations/Keyed, which the profile never listed, was built"
+        else
+            record PASS "a file's other techniques join off" "technique_annotations/Keyed, which the profile never listed, stayed off"
+        fi
+        if [ -z "$timedOut" ] || [ "$built" -lt 1 ] || awk -v after="$timedOut" 'NR > after && /creating effect [0-9]+: technique_annotations\/Brief$/ { found = 1 } END { exit found ? 0 : 1 }' "$log"; then
+            record FAIL "a technique's timeout switches it off" "technique_annotations/Brief, timeout = 300, timed out at log line ${timedOut:-never}; $built effects were built after it, Brief among them: $(awk -v after="${timedOut:-0}" 'NR > after && /creating effect [0-9]+: technique_annotations\/Brief$/ { print "yes"; exit }' "$log")"
+        else
+            record PASS "a technique's timeout switches it off" "technique_annotations/Brief, timeout = 300, was switched off and the chain rebuilt without it"
+        fi
+    fi
+
     local moved="the move to shared profiles at the first start"
     log="$dir/config-shared-profiles.log" home="$dir/config-shared-profiles-home"
     fresh_home "$home" cas
@@ -4182,8 +4304,8 @@ lane_config() {
     elif [ "$(count 'vkDaedalus err:' "$log")" -ne 2 ] || [ "$(count 'vkDaedalus err: .*texture format 5 has no Vulkan equivalent here' "$log")" -ne 1 ] \
         || [ "$(count 'vkDaedalus err: +texture solid.png: only a .cube LUT fills a texture deeper than one layer' "$log")" -ne 1 ]; then
         record FAIL "texture declarations reach Vulkan valid" "want exactly two errors, refusing Format = 5 and an image file for a 4x4x4 texture; got: $(grep -m3 'vkDaedalus err:' "$log")"
-    elif [ "$(count 'vkDaedalus warn: .*OverlayOpen asks for source "overlay_open", which this layer does not provide' "$log")" -ne 1 ]; then
-        record FAIL "texture declarations reach Vulkan valid" "a uniform asking for the unprovided source overlay_open was not reported once"
+    elif [ "$(count 'vkDaedalus warn: .*FreePie asks for source "freepie", which this layer does not provide' "$log")" -ne 1 ]; then
+        record FAIL "texture declarations reach Vulkan valid" "a uniform asking for the unprovided source freepie, a ReShade add-on's, was not reported once"
     elif [ "$(count 'sampler DeclMipsSampler: MipLODBias 100\.0+ is held at' "$log")" -lt 1 ]; then
         record FAIL "texture declarations reach Vulkan valid" "MipLODBias = 100 was never reported held at this GPU's limit"
     elif [ "$(count 'texture DeclIntMips holds integers, so its mip levels are made from the nearest texel' "$log")" -lt 1 ] \
@@ -4260,7 +4382,7 @@ close_to() {
 
 lane_pixels() {
     local icd="$1" dir="$2" control="$2/overlay-control.log" log home fx why name chain want shot cache presser
-    for name in solid output-kept bindings compute-sees-writes mips-left-alone target-one-alone global-definition global-definition-empty macro-gated; do
+    for name in solid output-kept bindings compute-sees-writes mips-left-alone target-one-alone global-definition global-definition-empty macro-gated technique-in-place technique-chosen technique-state; do
         log="$dir/pixels-$name.log" home="$dir/pixels-$name-home" fx="$dir/pixels-$name-home-fx" shot="$dir/pixels-$name-shots"
         case "$name" in
             solid) chain=solid_fill want="64 128 191" ;;
@@ -4272,13 +4394,18 @@ lane_pixels() {
             global-definition) chain=global_definition want="0 0 255" ;;
             global-definition-empty) chain=global_definition want="255 0 0" ;;
             macro-gated) chain=macro_gated_parameter want="0 0 255" ;;
+            technique-in-place) chain=solid_fill:techniques:invert_input:techniques/Restore want="64 128 191" ;;
+            technique-chosen) chain=solid_fill:techniques/Tint want="0 255 0" ;;
+            technique-state) chain=technique_state:technique_state/Compare want="0 255 0" ;;
         esac
         fresh_home "$home" "$chain"
         cp "$VKB_FIXTURES/effects/solid_fill.fx" "$VKB_FIXTURES/effects/binding_colors.fx" "$VKB_FIXTURES/effects/compute_reads_back_buffer.fx" \
             "$VKB_FIXTURES/effects/mips_left_alone.fx" "$VKB_FIXTURES/effects/render_target_one_alone.fx" \
-            "$VKB_FIXTURES/language/shared_texture_producer.fx" "$VKB_FIXTURES/effects/global_definition.fx" "$VKB_FIXTURES/effects/macro_gated_parameter.fx" "$fx/"
-        printf 'solid_fill = %s\nbinding_colors = %s\ncompute_reads_back_buffer = %s\nmips_left_alone = %s\nrender_target_one_alone = %s\nshared_texture_producer = %s\nglobal_definition = %s\nmacro_gated_parameter = %s\n' \
+            "$VKB_FIXTURES/language/shared_texture_producer.fx" "$VKB_FIXTURES/effects/global_definition.fx" "$VKB_FIXTURES/effects/macro_gated_parameter.fx" \
+            "$VKB_FIXTURES/effects/techniques.fx" "$VKB_FIXTURES/effects/invert_input.fx" "$VKB_FIXTURES/effects/technique_state.fx" "$fx/"
+        printf 'solid_fill = %s\nbinding_colors = %s\ncompute_reads_back_buffer = %s\nmips_left_alone = %s\nrender_target_one_alone = %s\nshared_texture_producer = %s\nglobal_definition = %s\nmacro_gated_parameter = %s\ntechniques = %s\ninvert_input = %s\ntechnique_state = %s\n' \
             "$fx/solid_fill.fx" "$fx/binding_colors.fx" "$fx/compute_reads_back_buffer.fx" "$fx/mips_left_alone.fx" "$fx/render_target_one_alone.fx" "$fx/shared_texture_producer.fx" "$fx/global_definition.fx" "$fx/macro_gated_parameter.fx" \
+            "$fx/techniques.fx" "$fx/invert_input.fx" "$fx/technique_state.fx" \
             >>"$home/.config/vkdaedalus/vkdaedalus.conf"
         if [ "$name" = global-definition ]; then
             printf '@RESHADE_DEPTH_INPUT_IS_REVERSED = 0\n' >>"$home/.config/vkdaedalus/vkdaedalus.conf"
