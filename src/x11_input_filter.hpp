@@ -47,7 +47,9 @@ namespace vkBasalt
             case KeyRelease: return std::exchange(dropped.keys[detail], false);
             case ButtonPress: dropped.buttons[detail] = true; return true;
             case ButtonRelease: return std::exchange(dropped.buttons[detail], false);
-            case MotionNotify: return true;
+            case MotionNotify:
+            case EnterNotify:
+            case LeaveNotify: return true;
             case GenericEvent:
             {
                 if (xinputOpcode < 0 || event[1] != xinputOpcode)
@@ -65,7 +67,7 @@ namespace vkBasalt
                     return dropped.xiButtons[at] = true;
                 if (evtype == XI_ButtonRelease || evtype == XI_RawButtonRelease)
                     return std::exchange(dropped.xiButtons[at], false);
-                return evtype == XI_Motion || evtype == XI_RawMotion || (evtype >= XI_TouchBegin && evtype <= XI_TouchEnd) ||
+                return evtype == XI_Motion || evtype == XI_RawMotion || evtype == XI_Enter || evtype == XI_Leave || (evtype >= XI_TouchBegin && evtype <= XI_TouchEnd) ||
                        (evtype >= XI_RawTouchBegin && evtype <= XI_RawTouchEnd);
             }
             default: return false;

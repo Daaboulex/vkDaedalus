@@ -65,6 +65,12 @@ int main()
     expect(dropX11Input(core(ButtonPress | x11::sendEventBit, 1).data(), xi, dropped) && dropX11Input(core(ButtonRelease, 1).data(), xi, dropped),
            "a button press, sent or not, is dropped with its release");
     expect(dropX11Input(core(MotionNotify, 0).data(), xi, dropped), "pointer motion is dropped");
+    expect(dropX11Input(core(EnterNotify, 0).data(), xi, dropped) && dropX11Input(core(LeaveNotify, 0).data(), xi, dropped)
+               && dropX11Input(device(xi, XI_Enter, 0, 3000).data(), xi, dropped) && dropX11Input(device(xi, XI_Leave, 0, 3010).data(), xi, dropped),
+           "the pointer crossing a window is dropped, core or XI2, since Wine turns an EnterNotify into a mouse move");
+    expect(!dropX11Input(core(FocusIn, 0).data(), xi, dropped) && !dropX11Input(core(FocusOut, 0).data(), xi, dropped)
+               && !dropX11Input(device(xi, XI_FocusIn, 0, 3020).data(), xi, dropped),
+           "focus reaches the game, so the layer and the game agree on who has the keyboard");
     expect(!dropX11Input(core(12, 0).data(), xi, dropped) && !dropX11Input(core(22, 0).data(), xi, dropped), "an Expose or a ConfigureNotify reaches the game");
     expect(dropX11Input(generic(xi, XI_RawMotion, 0).data(), xi, dropped) && dropX11Input(generic(xi, XI_RawButtonPress, 3).data(), xi, dropped) &&
                dropX11Input(generic(xi, XI_RawButtonRelease, 3).data(), xi, dropped),
