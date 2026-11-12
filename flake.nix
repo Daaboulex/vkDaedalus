@@ -1737,6 +1737,17 @@
                   '';
                   dontInstall = true;
                 };
+                wineInputProbe = pkgs.pkgsCross.mingwW64.stdenv.mkDerivation {
+                  name = "vkdaedalus-wine-input-probe";
+                  src = ./test/wine-input-probe;
+                  dontConfigure = true;
+                  buildPhase = ''
+                    $CC -O2 -Wall -Werror -static -I${pkgs.vulkan-headers}/include -o wine-input-probe.exe wine_input_probe.c
+                  '';
+                  installPhase = ''
+                    install -Dm644 wine-input-probe.exe "$out/bin/wine-input-probe.exe"
+                  '';
+                };
               in
               pkgs.writeShellApplication {
                 name = "vkdaedalus-live";
@@ -1771,6 +1782,10 @@
                 }
                 // pkgs.lib.optionalAttrs (pkgs.lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.gamescope) {
                   VKB_GAMESCOPE_WSI = "${pkgs.gamescope-wsi}";
+                }
+                // pkgs.lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
+                  VKB_WINE = "${pkgs.wine64Packages.stable}";
+                  VKB_WINE_PROBE = "${wineInputProbe}/bin/wine-input-probe.exe";
                 };
                 text = builtins.readFile ./scripts/live.sh;
               };

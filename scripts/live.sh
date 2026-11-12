@@ -3542,6 +3542,61 @@ lane_focus() {
         record PASS "focus loss releases input" "the open overlay held the pointer; focus moved to the root window, the layer closed the overlay and the pointer came free"
     fi
     x11_hook_case "$icd" "$dir" "$control"
+    wine_hook_cases "$icd" "$dir"
+}
+
+drive_held_input() {
+    local log="$1" map="$2"
+    hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || return 0
+    sleep 0.5
+    head -1 "$map" >"$log.mouse-before" 2>/dev/null || true
+    DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove_relative 30 30 || true
+    sleep 0.5
+    head -1 "$map" >"$log.mouse-after" 2>/dev/null || true
+    ui_key a || true
+    click_briefly
+    sleep 0.5
+    hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || return 0
+    sleep 0.5
+    ui_key b || true
+    DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove_relative 30 30 || true
+    click_briefly
+}
+
+click_briefly() {
+    DISPLAY="$PRIVATE_DISPLAY" xdotool mousedown 1 || return 0
+    sleep 0.1
+    DISPLAY="$PRIVATE_DISPLAY" xdotool mouseup 1 || true
+}
+
+held_input_verdict() {
+    local log="$1" probe="$2" own_warp="$3" kind seen during="" silent="" moved opened closed
+    shift 3
+    opened=$(grep -n -m1 'overlay opened' "$log" | cut -d: -f1)
+    closed=$(grep -n -m1 'overlay closed' "$log" | cut -d: -f1)
+    if [ -z "$opened" ] || [ -z "$closed" ]; then
+        echo "the overlay key never opened and closed the overlay over the probe"
+        return 1
+    fi
+    for kind in "$@"; do
+        seen=$(awk -v a="$opened" -v b="$closed" -v k="$probe: $kind" -v w="$own_warp" \
+            'NR > a && NR < b && $0 != w && (index($0, k " ") == 1 || $0 == k) { print; exit }' "$log")
+        [ -z "$seen" ] || during+="${during:+; }$seen"
+        awk -v b="$closed" -v k="$probe: $kind" -v w="$own_warp" 'NR > b && $0 != w && (index($0, k " ") == 1 || $0 == k) { found = 1 } END { exit found ? 0 : 1 }' "$log" \
+            || silent+="${silent:+, }$kind"
+    done
+    moved=$(awk 'FNR == 1 && $3 == "mouse" { x[NR == FNR] = $4; y[NR == FNR] = $5; n++ } END { if (n == 2) print x[0] - x[1], y[0] - y[1] }' \
+        "$log.mouse-before" "$log.mouse-after" 2>/dev/null)
+    if [ -n "$during" ]; then
+        echo "the game read input while the overlay was open: $during"
+        return 1
+    elif [ -n "$silent" ]; then
+        echo "after the overlay closed the probe saw no $silent, so the case cannot show those are held while it is open"
+        return 1
+    elif ! awk -v m="$moved" 'BEGIN { split(m, d, " "); exit (m != "" && d[1] >= 29 && d[1] <= 31 && d[2] >= 29 && d[2] <= 31) ? 0 : 1 }'; then
+        echo "the overlay's pointer moved ${moved:-by an unreadable amount} for a move of 30 30 while the game re-centred its own, so the game's warp moved the overlay's pointer"
+        return 1
+    fi
 }
 
 drive_x11_hook() {
@@ -3549,22 +3604,12 @@ drive_x11_hook() {
     wait_for_line 'x11-input-probe: holds the pointer' 1 "$log" || return 0
     window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name 'x11-input-probe' | tail -1) || true
     ui_take_window "$window"
-    hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || return 0
-    sleep 0.5
-    head -1 "$map" >"$log.mouse-before" 2>/dev/null || true
-    DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove_relative 30 30 || true
-    sleep 0.5
-    head -1 "$map" >"$log.mouse-after" 2>/dev/null || true
-    DISPLAY="$PRIVATE_DISPLAY" xdotool key a click 1 || true
-    sleep 0.5
-    hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || return 0
-    sleep 0.5
-    DISPLAY="$PRIVATE_DISPLAY" xdotool key b mousemove_relative 30 30 click 1 || true
+    drive_held_input "$log" "$map"
 }
 
 x11_hook_case() {
     local icd="$1" dir="$2" control="$3" name="the input hook holds an X11 game's input" log="$2/x11-hook.log" home="$2/x11-hook-home" map="$2/x11-hook.map"
-    local driver why opened closed during kind silent moved own_warp='x11-input-probe: motion 320 240'
+    local driver why
     local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved")
     if [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then
         record SKIP "$name" "this build has no vkdaedalus-run (a plain meson build installs none)"
@@ -3576,36 +3621,121 @@ x11_hook_case() {
     driver=$!
     run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" "$VKB_LAYER/bin/vkdaedalus-run" x11-input-probe 900 recenter
     driver_finished "drive_x11_hook"
-    opened=$(grep -n -m1 'overlay opened' "$log" | cut -d: -f1)
-    closed=$(grep -n -m1 'overlay closed' "$log" | cut -d: -f1)
     if ! why=$(plain_verdict "$log" "$control"); then
         record FAIL "$name" "$why"
     elif ! file_says "$log" 'x11-input-probe: holds the pointer'; then
         record FAIL "$name" "the probe never held its own pointer grab, as Wine does, so the case proves nothing"
-    elif [ -z "$opened" ] || [ -z "$closed" ]; then
-        record FAIL "$name" "the overlay key never opened and closed the overlay over the probe"
+    elif ! why=$(held_input_verdict "$log" x11-input-probe 'x11-input-probe: motion 320 240' "${kinds[@]}"); then
+        record FAIL "$name" "$why"
     else
-        during=""
-        silent=""
-        for kind in "${kinds[@]}"; do
-            why=$(awk -v a="$opened" -v b="$closed" -v k="x11-input-probe: $kind" -v w="$own_warp" \
-                'NR > a && NR < b && $0 != w && (index($0, k " ") == 1 || $0 == k) { print; exit }' "$log")
-            [ -z "$why" ] || during+="${during:+; }$why"
-            awk -v b="$closed" -v k="x11-input-probe: $kind" -v w="$own_warp" 'NR > b && $0 != w && (index($0, k " ") == 1 || $0 == k) { found = 1 } END { exit found ? 0 : 1 }' "$log" \
-                || silent+="${silent:+, }$kind"
-        done
-        moved=$(awk 'FNR == 1 && $3 == "mouse" { x[NR == FNR] = $4; y[NR == FNR] = $5; n++ } END { if (n == 2) print x[0] - x[1], y[0] - y[1] }' \
-            "$log.mouse-before" "$log.mouse-after" 2>/dev/null)
-        if [ -n "$during" ]; then
-            record FAIL "$name" "the game read input while the overlay was open: $during"
-        elif [ -n "$silent" ]; then
-            record FAIL "$name" "after the overlay closed the probe saw no $silent, so the case cannot show those are held while it is open"
-        elif ! awk -v m="$moved" 'BEGIN { split(m, d, " "); exit (m != "" && d[1] >= 29 && d[1] <= 31 && d[2] >= 29 && d[2] <= 31) ? 0 : 1 }'; then
-            record FAIL "$name" "the overlay's pointer moved ${moved:-by an unreadable amount} for a move of 30 30 while the game re-centred its own, so the game's warp moved the overlay's pointer"
-        else
-            record PASS "$name" "a game reading input as Wine does (core and XInput2 raw events through Xlib, the pointer through XQueryPointer) and re-centring it with XWarpPointer, holding its own pointer grab and started with vkdaedalus-run, read nothing while the overlay was open, never moved the overlay's pointer, and read every kind again once it closed"
-        fi
+        record PASS "$name" "a game reading input as Wine does (core and XInput2 raw events through Xlib, the pointer through XQueryPointer) and re-centring it with XWarpPointer, holding its own pointer grab and started with vkdaedalus-run, read nothing while the overlay was open, never moved the overlay's pointer, and read every kind again once it closed"
     fi
+}
+
+wine_quiet=(WINEDEBUG=-all "WINEDLLOVERRIDES=mscoree,mshtml=")
+
+wine_server() {
+    local prefix="$1"
+    shift
+    env -i PATH="$PATH" HOME="$prefix-home" WINEPREFIX="$prefix" "${wine_quiet[@]}" "$VKB_WINE/bin/wineserver" "$@"
+}
+
+wine_prefix() {
+    local prefix="$1" log="$2"
+    mkdir -p "$prefix-home"
+    if ! timeout -s KILL "$HANG_SECONDS" env -i PATH="$PATH" HOME="$prefix-home" DISPLAY="$PRIVATE_DISPLAY" XDG_RUNTIME_DIR="$PRIVATE_RUNTIME" \
+        WINEPREFIX="$prefix" "${wine_quiet[@]}" "$VKB_WINE/bin/wineboot" -i >"$log" 2>&1; then
+        return 1
+    fi
+    wine_server "$prefix" -w >>"$log" 2>&1
+}
+
+wine_stopped() {
+    local prefix="$1"
+    if ! wine_server "$prefix" -k >>"$prefix.stop.log" 2>&1; then
+        echo "wineserver -k: no wineserver was left to stop" >>"$prefix.stop.log"
+    fi
+    wine_server "$prefix" -w >>"$prefix.stop.log" 2>&1
+}
+
+wine_stop_failure() {
+    echo "the wineserver of $1 did not stop: $(tail -1 "$1.stop.log")"
+}
+
+drive_wine_hook() {
+    local log="$1" map="$2" ready="$3" settled="$4" window="" tries=0
+    wait_for_line 'wine-input-probe: window shown' 1 "$log" || return 0
+    until [ -n "$window" ] || [ "$tries" -ge 50 ]; do
+        window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '^wine-input-probe$' | tail -1) || true
+        tries=$((tries + 1))
+        [ -n "$window" ] || sleep 0.1
+    done
+    ui_take_window "$window"
+    if [ -n "$window" ]; then DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove --window "$window" 320 240 || true; fi
+    wait_for_line "$ready" 1 "$log" || return 0
+    wait_for_line "$settled" 1 "$log" || return 0
+    drive_held_input "$log" "$map"
+}
+
+wine_hook_case() {
+    local icd="$1" dir="$2" mode="$3" control="$2/wine-control.log" prefix="$2/wine-prefix"
+    local name="the input hook holds a Wine game's input, $mode" log="$2/wine-$mode.log" home="$2/wine-$mode-home" map="$2/wine-$mode.map"
+    local driver why ready settled own_warp="" held
+    local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved" "async key")
+    if [ "$mode" = recenter ]; then
+        ready='wine-input-probe: clips the pointer'
+        settled="$ready"
+        own_warp='wine-input-probe: motion 320 240'
+        held="clipping the cursor to its window and re-centring it with SetCursorPos every frame, which Wine sends as XWarpPointer under its clip grab"
+    else
+        ready='wine-input-probe: foreground'
+        settled='wine-input-probe: pointer (at|moved) 320 240$'
+        held="polling GetCursorPos every frame and never warping, which Wine answers with XQueryPointer once the cursor is still for 100 ms"
+    fi
+    fresh_home "$home" cas
+    printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+    background drive_wine_hook "$log" "$map" "$ready" "$settled"
+    driver=$!
+    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" WINEPREFIX="$prefix" "${wine_quiet[@]}" \
+        "$VKB_LAYER/bin/vkdaedalus-run" "$VKB_WINE/bin/wine" "$VKB_WINE_PROBE" 900 "$mode"
+    driver_finished "drive_wine_hook"
+    if ! wine_stopped "$prefix"; then
+        record FAIL "$name" "$(wine_stop_failure "$prefix")"
+    elif ! why=$(plain_verdict "$log" "$control"); then
+        record FAIL "$name" "$why"
+    elif ! file_says "$log" "$ready"; then
+        record FAIL "$name" "the probe never logged '${ready#wine-input-probe: }', so the case proves nothing"
+    elif ! why=$(held_input_verdict "$log" wine-input-probe "$own_warp" "${kinds[@]}"); then
+        record FAIL "$name" "$why"
+    else
+        record PASS "$name" "a Windows program under Wine, $held, reading window messages, raw input and GetAsyncKeyState and started with vkdaedalus-run, read nothing while the overlay was open, never moved the overlay's pointer, and read every kind again once it closed"
+    fi
+}
+
+wine_hook_cases() {
+    local icd="$1" dir="$2" control="$2/wine-control.log" prefix="$2/wine-prefix" name="the input hook holds a Wine game's input" why mode
+    if [ -z "${VKB_WINE:-}" ]; then
+        record SKIP "$name" "Wine is part of the x86-64 live command only"
+        return 0
+    elif [ ! -x "$VKB_WINE/bin/wine" ] || [ ! -f "${VKB_WINE_PROBE:-}" ]; then
+        record FAIL "$name" "the live command names Wine $VKB_WINE and its probe ${VKB_WINE_PROBE:-(unset)}, and one of them is missing"
+        return 0
+    elif [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then
+        record SKIP "$name" "this build has no vkdaedalus-run (a plain meson build installs none)"
+        return 0
+    elif ! wine_prefix "$prefix" "$prefix.log"; then
+        record FAIL "$name" "wineboot could not make a Wine prefix: $(tail -1 "$prefix.log")"
+        return 0
+    fi
+    run "$control" "$dir/wine-control-home" "$icd" "$VALIDATION" 0 1 -- env WINEPREFIX="$prefix" "${wine_quiet[@]}" "$VKB_WINE/bin/wine" "$VKB_WINE_PROBE" 120 poll
+    if ! wine_stopped "$prefix"; then
+        record FAIL "$name" "$(wine_stop_failure "$prefix")"
+        return 0
+    elif ! why=$(exited_cleanly "$control"); then
+        record FAIL "$name" "the probe did not run under Wine without the layer: $why"
+        return 0
+    fi
+    for mode in poll recenter; do wine_hook_case "$icd" "$dir" "$mode"; done
 }
 
 drive_controls() {
