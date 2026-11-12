@@ -418,6 +418,15 @@ validation_verdict() {
     fi
 }
 
+instance_chain_with() {
+    awk -v layer="$2" '
+        function finish() { if (p && index(names, layer)) { print names; found = 1; exit } p = 0 }
+        /vkCreateInstance layer callstack setup to:/ { finish(); p = 1; names = ""; next }
+        p && /<Drivers>|<Physical Devices>|callstack setup/ { finish(); next }
+        p && match($0, /VK_LAYER_[A-Za-z0-9_]+$/) { names = names (names == "" ? "" : " ") substr($0, RSTART, RLENGTH) }
+        END { if (!found) finish() }' "$1"
+}
+
 native_wsi=wayland
 
 vkcube_of_run() {
@@ -772,7 +781,7 @@ lane_framegen() {
         mkdir -p "$home/.config/vkdaedalus/profiles"
         if [ "$order" = after ]; then printf 'effectsAfterFrameGeneration = true\n' >"$home/.config/vkdaedalus/profiles/default.conf"; fi
         run "$log" "$home" "$icd" "" 1 0 -- env LSFGVK_CONFIG="$LSFG_DIR/conf.toml" VK_ADD_IMPLICIT_LAYER_PATH="$LSFG_DIR" "$VKB_LAYER/bin/vkdaedalus-run" vkcube --c "$FRAMES" --wsi "$native_wsi"
-        chain=$(awk '/vkCreateInstance layer callstack setup to:/ { p = 1; next } p && /<Drivers>|<Physical Devices>|callstack setup/ { exit } p' "$log" | grep -oE 'VK_LAYER_[A-Za-z0-9_]+$' | tr '\n' ' ')
+        chain=$(instance_chain_with "$log" "$BASALT")
         top=$(grep -oE "$BASALT|$LSFG" <<<"$chain" | head -1)
         if ! why=$(lsfg_ran "$log"); then
             record FAIL "the order layers put lsfg-vk where the profile asks, effects $order" "$why"
@@ -1083,7 +1092,7 @@ gamescope_wsi_key_case() {
     run "$log" "$home" "$icd" "" 0 0 -- gamescope --backend headless -W 1280 -H 720 -- \
         env ENABLE_VKDAEDALUS=1 VK_ADD_IMPLICIT_LAYER_PATH="$VKB_GAMESCOPE_WSI/share/vulkan/implicit_layer.d" vkcube --c "$FRAMES" --wsi xcb
     driver_finished "$name"
-    chain=$(awk '/vkCreateInstance layer callstack setup to:/ { p = 1; next } p && /<Drivers>|<Physical Devices>|callstack setup/ { exit } p' "$log" | grep -oE 'VK_LAYER_[A-Za-z0-9_]+$' | tr '\n' ' ')
+    chain=$(instance_chain_with "$log" "$BASALT")
     if ! why=$(exited_cleanly "$log"); then
         record FAIL "$name" "$why"
     elif [[ "$chain" != *VK_LAYER_FROG_gamescope_wsi*"$BASALT"* ]]; then
