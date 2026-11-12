@@ -317,7 +317,8 @@ if get_option('with_so')
 
     x11_input_filter_test = executable('x11-input-filter-test',
         'test/x11_input_filter_test.cpp',
-        include_directories : include_directories('src'))
+        include_directories : include_directories('src'),
+        dependencies : [x11_dep.partial_dependency(compile_args : true, includes : true)])
     test('x11-input-filter', x11_input_filter_test)
 
     hud_test = executable('hud-test',
