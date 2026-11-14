@@ -143,3 +143,7 @@ nixpkgs.overlays = [ inputs.vkdaedalus.overlays.default ];
 
 <!-- BEGIN generated:footer -->
 <!-- END generated:footer -->
+
+## License
+
+zlib, see [LICENSE](LICENSE).
