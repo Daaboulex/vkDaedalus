@@ -1,8 +1,8 @@
 [wrap-file]
-directory = imgui-5c7c293a66d7a659d4e6a1abdf18291ce004c07e
-source_url = https://github.com/ocornut/imgui/archive/5c7c293a66d7a659d4e6a1abdf18291ce004c07e.tar.gz
-source_filename = imgui-5c7c293a66d7a659d4e6a1abdf18291ce004c07e.tar.gz
-source_hash = 1f46e242d7726b04e8fe8c1face2be9ab23b18bb39b82f1b10fc8fa3485ce30d
+directory = imgui-cf53467ab0db7a783f04b32dd9160e6aa5b720ef
+source_url = https://github.com/ocornut/imgui/archive/cf53467ab0db7a783f04b32dd9160e6aa5b720ef.tar.gz
+source_filename = imgui-cf53467ab0db7a783f04b32dd9160e6aa5b720ef.tar.gz
+source_hash = d4ee73f3f993f9ddf2fafd86c1b86ecba3eebe5146c432925118bc53cba5c63a
 patch_directory = imgui
 
 [provide]

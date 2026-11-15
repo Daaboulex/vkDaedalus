@@ -92,11 +92,11 @@
     "imgui": {
       "flake": false,
       "locked": {
-        "lastModified": 1793902012,
-        "narHash": "sha256-CidDAEhvKAC3tnR2vjdPBKY3OxshSubb8oLJZyuhCyc=",
+        "lastModified": 1794329057,
+        "narHash": "sha256-30eMJojciAEL9wF7E2tRh0JDjqJZVGoTtplvYOL6Wg4=",
         "owner": "ocornut",
         "repo": "imgui",
-        "rev": "5c7c293a66d7a659d4e6a1abdf18291ce004c07e",
+        "rev": "cf53467ab0db7a783f04b32dd9160e6aa5b720ef",
         "type": "github"
       },
       "original": {
@@ -141,11 +141,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1793876309,
-        "narHash": "sha256-Wojg9lIH/hDH91iDVH2/EPw8oDSpxjxhXONbU1yf4Zg=",
+        "lastModified": 1794537146,
+        "narHash": "sha256-Wpz/7x/YWnDIBu7yj6ixe8j6fIMsidd9Y+o1PqPF3iM=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "f9a75f41be3a74eab55d3a7679d34ad6cc0da977",
+        "rev": "d5cc6833999746cffdfe0598f7bc801a57b887a9",
         "type": "github"
       },
       "original": {
@@ -238,11 +238,11 @@
     "stb": {
       "flake": false,
       "locked": {
-        "lastModified": 1794037680,
-        "narHash": "sha256-8kUcP5UWqjX5WncA/fEKO1JzMm7Gp+PsGkb+PGBf6lQ=",
+        "lastModified": 1794508658,
+        "narHash": "sha256-rVbaXjuvmrPyRs8DoS8dMEYmqa7hD9eefqW49sAdN8o=",
         "owner": "nothings",
         "repo": "stb",
-        "rev": "4e9b368bfc071e97206ea5c6adba68dd0cbf8897",
+        "rev": "9600522de53973336fa033a289858a4354cbb04c",
         "type": "github"
       },
       "original": {
@@ -278,11 +278,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794702089,
-        "narHash": "sha256-iLkjpAx5IGtJDDgbOIbzVLcUHfQQtfSS0o6orYomCdk=",
+        "lastModified": 1794714279,
+        "narHash": "sha256-r1XtjLueN3/y4ycu84u/spswORgnn73NMZz3CpWy3fg=",
         "owner": "Daaboulex",
         "repo": "nix-packaging-standard",
-        "rev": "4faede3d2000376b7b22ff8f3b01ab9390d1de9d",
+        "rev": "0a928359c0b995126615270842f33424feef0b22",
         "type": "github"
       },
       "original": {
@@ -295,11 +295,11 @@
     "tomlplusplus": {
       "flake": false,
       "locked": {
-        "lastModified": 1794093325,
-        "narHash": "sha256-fhAQPpcy2STDcdFIDm23SFcCDuJH0jxHJJfPptRG1RI=",
+        "lastModified": 1794523670,
+        "narHash": "sha256-q/XYqLfZ/NgGHVQtBQOoeVt7khWHAGO15sCE8DEzc0c=",
         "owner": "marzer",
         "repo": "tomlplusplus",
-        "rev": "ad4b544ee519476948bf7d1d65bcd46fe9dff14c",
+        "rev": "cfd715973663275575701cd779fb60d303561cc1",
         "type": "github"
       },
       "original": {
