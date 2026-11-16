@@ -206,16 +206,18 @@ int main(int argc, char** argv)
         fs::remove(file);
         fs::create_symlink(target, file);
         problem.clear();
-        expect(!saveLsfgFile(file.string(), std::nullopt, peak, written, problem) && problem.find("link") != std::string::npos &&
-                   fs::is_symlink(file) && contents(target) == lsfgDefault,
-               "a file that is a link is not replaced by a plain file, and the file it links to is left alone");
+        const std::optional<std::string> throughTheLink = lsfgTextWith(lsfgDefault, std::nullopt, peak, problem);
+        expect(throughTheLink && saveLsfgFile(file.string(), std::nullopt, peak, written, problem) && fs::is_symlink(file) &&
+                   contents(target) == *throughTheLink,
+               "a file that is a link is written where the link points and stays a link, as lsfg-vk's own writer opens it");
         fs::remove(file);
         std::ofstream(file) << handWritten;
         fs::permissions(file, fs::perms::owner_read | fs::perms::group_read);
-        expect(saveLsfgFile(file.string(), std::nullopt, peak, written, problem) &&
-                   contents(file) == replacedOnce(handWritten, "multiplier = 2 # two times", "multiplier = 4 # two times") &&
+        problem.clear();
+        expect(!saveLsfgFile(file.string(), std::nullopt, peak, written, problem) &&
+                   problem == file.string() + " is read-only, so the overlay leaves lsfg-vk's file as it is" && contents(file) == handWritten &&
                    (fs::status(file).permissions() & fs::perms::all) == (fs::perms::owner_read | fs::perms::group_read),
-               "lsfg-vk's file keeps the rules it had: a read-only one is replaced and stays read-only");
+               "a read-only file is refused with the reason and left as it was, as lsfg-vk's own writer fails to open it");
         fs::permissions(file, fs::perms::owner_read | fs::perms::owner_write);
         std::ofstream(file, std::ios::trunc) << handWritten;
         fs::permissions(file, fs::perms::none);

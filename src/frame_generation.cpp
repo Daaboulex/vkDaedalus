@@ -24,7 +24,7 @@ namespace vkBasalt
         const std::string emptyLsfgText    = "version = 2\n\n[global]\n";
         const std::string lsfgFile         = "lsfg-vk's file";
         const std::string lsfgDllUnderCommon = "Lossless Scaling/lsfg-vk.dll";
-        const WriteRules  lsfgWriteRules;
+        const WriteRules  lsfgWriteRules{true, true, std::nullopt};
 
         std::string lowered(std::string text)
         {
