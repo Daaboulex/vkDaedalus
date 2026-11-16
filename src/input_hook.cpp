@@ -400,6 +400,7 @@ namespace
     }
     std::atomic<int>                xinputOpcode{-1};
     vkBasalt::X11DroppedPresses     droppedPresses;
+    vkBasalt::X11GameKeys           gameKeys;
 
     struct PrefixInput
     {
@@ -484,22 +485,23 @@ namespace
     {
         if (event == nullptr)
             return false;
-        const bool own = blocked.load(std::memory_order_acquire);
-        if (!own && !prefixHoldsInput())
-            return false;
         const uint8_t* bytes  = reinterpret_cast<const uint8_t*>(event);
         const int      opcode = knownXInputOpcode();
+        const bool     own    = blocked.load(std::memory_order_acquire);
+        const bool     prefix = !own && prefixHoldsInput();
+        if (!own && !prefix && !vkBasalt::x11KeyOf(bytes, opcode))
+            return false;
         std::lock_guard<std::mutex> lock(mutex);
         if (ownConnections.count(connection) > 0)
             return false;
-        if (own)
-            return vkBasalt::dropX11Input(bytes, opcode, droppedPresses);
+        if (!prefix)
+            return vkBasalt::filterX11Input(bytes, opcode, own, droppedPresses, gameKeys);
         if (const uint32_t hold = sharedField(prefixInput()->holds).load(std::memory_order_acquire); hold != holdSeen)
         {
             droppedPresses.clear();
             holdSeen = hold;
         }
-        return vkBasalt::isX11RawInput(bytes, opcode) && vkBasalt::dropX11Input(bytes, opcode, droppedPresses);
+        return vkBasalt::filterX11Input(bytes, opcode, vkBasalt::isX11RawInput(bytes, opcode), droppedPresses, gameKeys);
     }
 
     xcb_generic_event_t* readKept(XcbRead read, xcb_connection_t* connection)

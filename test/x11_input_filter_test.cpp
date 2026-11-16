@@ -94,5 +94,16 @@ int main()
     dropX11Input(core(KeyPress, 9).data(), xi, dropped);
     dropped.clear();
     expect(!dropX11Input(core(KeyRelease, 9).data(), xi, dropped), "once blocking ends, a release reaches the game whatever was dropped before");
+    X11DroppedPresses held;
+    X11GameKeys       game;
+    expect(!filterX11Input(core(KeyPress, 25).data(), xi, false, held, game) && !filterX11Input(core(KeyPress, 26).data(), xi, false, held, game)
+               && !filterX11Input(core(KeyRelease, 26).data(), xi, false, held, game) && filterX11Input(core(KeyPress, 25).data(), xi, true, held, game)
+               && !filterX11Input(core(KeyRelease, 25).data(), xi, true, held, game) && filterX11Input(core(KeyPress, 26).data(), xi, true, held, game)
+               && filterX11Input(core(KeyRelease, 26).data(), xi, true, held, game),
+           "a key the game holds keeps its release through a repeat while blocked, so it does not stick, and a key the game saw go up is dropped with its release");
+    expect(!filterX11Input(device(xi, XI_KeyPress, 27, 5000).data(), xi, false, held, game)
+               && filterX11Input(device(xi, XI_KeyPress, 27, 5600).data(), xi, true, held, game)
+               && !filterX11Input(device(xi, XI_KeyRelease, 27, 5700).data(), xi, true, held, game),
+           "an XI2 key the game holds keeps its release through a repeat while blocked");
     return failures ? 1 : 0;
 }

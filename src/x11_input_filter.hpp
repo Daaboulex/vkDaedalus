@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <utility>
 
 namespace vkBasalt
@@ -81,5 +82,48 @@ namespace vkBasalt
             }
             default: return false;
         }
+    }
+
+    struct X11Key
+    {
+        bool    xi      = false;
+        bool    pressed = false;
+        uint8_t code    = 0;
+    };
+
+    struct X11GameKeys
+    {
+        std::array<bool, 256> keys{};
+        std::array<bool, 256> xiKeys{};
+
+        bool& operator[](const X11Key& key) { return (key.xi ? xiKeys : keys)[key.code]; }
+    };
+
+    inline std::optional<X11Key> x11KeyOf(const uint8_t* event, int xinputOpcode)
+    {
+        const uint8_t type = event[0] & static_cast<uint8_t>(~x11::sendEventBit);
+        if (type == KeyPress || type == KeyRelease)
+            return X11Key{false, type == KeyPress, event[1]};
+        if (type != GenericEvent || xinputOpcode < 0 || event[1] != xinputOpcode)
+            return std::nullopt;
+        uint16_t evtype   = 0;
+        uint32_t xiDetail = 0;
+        std::memcpy(&evtype, event + x11::genericEventTypeAt, sizeof(evtype));
+        std::memcpy(&xiDetail, event + x11::xiDetailAt, sizeof(xiDetail));
+        const bool pressed = evtype == XI_KeyPress || evtype == XI_RawKeyPress;
+        if (!pressed && evtype != XI_KeyRelease && evtype != XI_RawKeyRelease)
+            return std::nullopt;
+        return X11Key{true, pressed, static_cast<uint8_t>(xiDetail & 0xFF)};
+    }
+
+    inline bool filterX11Input(const uint8_t* event, int xinputOpcode, bool holding, X11DroppedPresses& dropped, X11GameKeys& game)
+    {
+        const std::optional<X11Key> key = x11KeyOf(event, xinputOpcode);
+        if (holding && key && key->pressed && game[*key])
+            return true;
+        const bool drop = holding && dropX11Input(event, xinputOpcode, dropped);
+        if (key && !drop)
+            game[*key] = key->pressed;
+        return drop;
     }
 }

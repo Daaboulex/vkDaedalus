@@ -123,6 +123,9 @@ check's message or a test already says is not repeated here.
 - The pointer is held where it was when the overlay opened, read by the layer on its own display:
   Wine reads the pointer late.
 - Pointer crossing events are held too: Wine turns an EnterNotify into a mouse move.
+- A game that asks the X server for detectable autorepeat gets a held key's repeats as presses with
+  no release between. So a repeat dropped while the overlay is open never holds back the release of
+  a key the game saw go down, or that key sticks down in the game.
 - Proton's Wine, and builds that carry its patches such as wine-cachyos, read raw input for the whole
   prefix in explorer.exe's desktop thread and send it to the game through wineserver. Upstream Wine
   reads it in the game's own thread while the cursor is clipped. So the hooks of one prefix share the
