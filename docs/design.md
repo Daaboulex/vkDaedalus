@@ -134,8 +134,9 @@ check's message or a test already says is not repeated here.
   open overlay through a file named by the prefix's device and inode, as wineserver names its own
   folder, and every other process of the prefix holds raw input while it is set. Window events still
   go to the window's own process, so only raw input is held there.
-- A game that ends with its overlay open releases the prefix's raw input: the holder is a process id,
-  checked alive before every hold.
+- A game that ends or crashes with its overlay open releases the prefix's raw input: the holder is a
+  process id with its start time, which a later process given the same id does not match, and the
+  other processes check it at most every 100 ms and clear a holder that is gone.
 
 ## Second GPU
 

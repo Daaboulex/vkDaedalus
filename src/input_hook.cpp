@@ -1,4 +1,5 @@
 #include "input_hook.hpp"
+#include "prefix_holder.hpp"
 #include "wine_process.hpp"
 #include "x11_input_filter.hpp"
 
@@ -13,7 +14,6 @@
 
 #include <dlfcn.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -22,6 +22,7 @@
 #include <array>
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <climits>
 #include <cstdio>
 #include <cstdlib>
@@ -33,6 +34,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 namespace
 {
@@ -404,9 +406,9 @@ namespace
 
     struct PrefixInput
     {
-        int32_t  holder;
-        uint32_t holds;
-        int32_t  xinputOpcode;
+        alignas(std::atomic_ref<uint64_t>::required_alignment) uint64_t holder;
+        uint32_t                                                        holds;
+        int32_t                                                         xinputOpcode;
     };
 
     PrefixInput* mapPrefixInput()
@@ -460,13 +462,46 @@ namespace
         return std::atomic_ref<Field>(field);
     }
 
+    std::optional<std::string> statLineOf(const std::string& process)
+    {
+        const int fd = open(("/proc/" + process + "/stat").c_str(), O_RDONLY | O_CLOEXEC);
+        if (fd < 0)
+            return std::nullopt;
+        std::array<char, 1024> line{};
+        const ssize_t          length = read(fd, line.data(), line.size());
+        close(fd);
+        return length > 0 ? std::optional<std::string>(std::string(line.data(), static_cast<size_t>(length))) : std::nullopt;
+    }
+
+    constexpr std::chrono::milliseconds   holderCheckInterval{100};
+    uint64_t                              holderChecked = 0;
+    std::chrono::steady_clock::time_point holderCheckedAt{};
+    uint64_t                              heldAs = 0;
+
     bool prefixHoldsInput()
     {
         PrefixInput* const prefix = prefixInput();
         if (prefix == nullptr)
             return false;
-        const int32_t holder = sharedField(prefix->holder).load(std::memory_order_acquire);
-        return holder != 0 && holder != getpid() && (kill(holder, 0) == 0 || errno == EPERM);
+        uint64_t holder = sharedField(prefix->holder).load(std::memory_order_acquire);
+        if (holder == 0 || vkBasalt::prefixHolderPid(holder) == getpid())
+            return false;
+        const auto now = std::chrono::steady_clock::now();
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (holder == holderChecked && now - holderCheckedAt < holderCheckInterval)
+                return true;
+        }
+        const std::optional<std::string> stat = statLineOf(std::to_string(vkBasalt::prefixHolderPid(holder)));
+        if (!vkBasalt::prefixHolderAlive(holder, stat ? std::optional<std::string_view>(*stat) : std::nullopt))
+        {
+            sharedField(prefix->holder).compare_exchange_strong(holder, 0, std::memory_order_acq_rel);
+            return false;
+        }
+        std::lock_guard<std::mutex> lock(mutex);
+        holderChecked   = holder;
+        holderCheckedAt = now;
+        return true;
     }
 
     int knownXInputOpcode()
@@ -542,11 +577,19 @@ namespace
         if (block && prefix != nullptr)
         {
             sharedField(prefix->holds).fetch_add(1, std::memory_order_acq_rel);
-            sharedField(prefix->holder).store(getpid(), std::memory_order_release);
+            const std::optional<std::string>   stat  = statLineOf("self");
+            const std::optional<uint64_t>      start = stat ? vkBasalt::processStartTicks(*stat) : std::nullopt;
+            if (start)
+            {
+                heldAs = vkBasalt::prefixHolderOf(getpid(), *start);
+                sharedField(prefix->holder).store(heldAs, std::memory_order_release);
+            }
+            else
+                std::fprintf(stderr, "vkdaedalus input hook: /proc/self/stat gives no start time, so the raw input this Wine prefix reads elsewhere is not held for the game\n");
         }
         if (!block)
         {
-            if (int32_t self = getpid(); prefix != nullptr)
+            if (uint64_t self = std::exchange(heldAs, 0); prefix != nullptr && self != 0)
                 sharedField(prefix->holder).compare_exchange_strong(self, 0, std::memory_order_acq_rel);
             std::lock_guard<std::mutex> lock(mutex);
             droppedPresses.clear();

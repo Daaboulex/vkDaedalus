@@ -329,6 +329,11 @@ if get_option('with_so')
         dependencies : [x11_dep.partial_dependency(compile_args : true, includes : true)])
     test('x11-input-filter', x11_input_filter_test)
 
+    prefix_holder_test = executable('prefix-holder-test',
+        'test/prefix_holder_test.cpp',
+        include_directories : include_directories('src'))
+    test('prefix-holder', prefix_holder_test)
+
     hud_test = executable('hud-test',
         'test/hud_test.cpp',
         include_directories : include_directories('src'))
