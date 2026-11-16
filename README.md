@@ -130,6 +130,7 @@ nixpkgs.overlays = [ inputs.vkdaedalus.overlays.default ];
 | [How it works](docs/how-it-works.md) | the frame, input, layer order, a second GPU, failures |
 | [Performance](docs/performance.md) | what a frame costs with vkDaedalus, measured per GPU, and FPS counters under frame generation |
 | [Development](docs/development.md) | building and testing |
+| [Design](docs/design.md) | the decisions behind the code and the outside facts they rest on |
 | [TESTING.md](TESTING.md), [LATENCY.md](LATENCY.md), [SHADER-COMPATIBILITY.md](SHADER-COMPATIBILITY.md) | what is tested, every timing formula, every shader pack's result |
 
 ## Credits

@@ -5,6 +5,13 @@
 - vkDaedalus takes no screenshots, so a `screenshot` uniform reads false and a technique's
   `enabled_in_screenshot` changes nothing.
 - Depth access depends on the game's depth format and layout.
+- Depth capture assumes the game leaves its depth image in the depth-stencil attachment layout. A
+  game that keeps it in the general layout, or in a separate depth or stencil layout, gives the layer
+  a layout that disagrees with the real one, which Vulkan leaves undefined. The layer cannot detect
+  this: covering every layout means tracking each transition the game makes, and a setting that asks
+  the user to name the layout was declined.
+- A ReShade pass that draws to several render targets uses the first target's blend state and write
+  mask for all of them.
 - A game on Wayland needs `vkdaedalus-run` for the overlay to hold its input.
 - An X11 game started without `vkdaedalus-run` that holds the pointer, as a Proton game does while it
   captures the mouse, refuses the overlay's grab. It keeps getting the input while the overlay is open,
