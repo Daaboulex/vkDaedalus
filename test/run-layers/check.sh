@@ -81,6 +81,11 @@ expect_run() {
     [ -z "$(value_of ENABLE_MAKO "$home/environment")" ] || fail "$label: ENABLE_MAKO is still set for a profile running lsfg-vk"
     [ -z "$(value_of VKDAEDALUS_AFTER_MAKO "$home/environment")" ] || fail "$label: VKDAEDALUS_AFTER_MAKO is set for a profile running lsfg-vk"
   fi
+  local own=DISABLE_LSFGVK kept=0
+  if [ "$want_layer" = mako ]; then own=DISABLE_MAKO; fi
+  if [[ " $want_record " == *" $own "* ]]; then kept=1; fi
+  [ "$(names "$own" "$home/environment")" = "$kept" ] ||
+    fail "$label: $own is $( [ "$kept" = 1 ] && echo unset || echo set), but only the launch options may keep out the layer the profile runs"
   [ "$(value_of VKDAEDALUS_RUN_FRAME_GENERATION_LAYER "$home/environment")" = "$want_layer" ] ||
     fail "$label: VKDAEDALUS_RUN_FRAME_GENERATION_LAYER is '$(value_of VKDAEDALUS_RUN_FRAME_GENERATION_LAYER "$home/environment")', so the overlay cannot tell a layer kept out for the other from one the launch options disable"
   [ "$(names VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment")" = 1 ] && [ "$(value_of VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment")" = "$want_record" ] ||
@@ -104,6 +109,16 @@ expect_run "MAKO, the launch options keep MAKO out" $'frameGenerationLayer = mak
 expect_run "MAKO, the launch options keep lsfg-vk out" $'frameGenerationLayer = mako\neffectsAfterFrameGeneration = true\n' both mako after DISABLE_LSFGVK DISABLE_LSFGVK=
 expect_run "lsfg-vk, the launch options keep both out and name a record of their own" $'frameGenerationLayer = lsfg-vk\n' both lsfg-vk before 'DISABLE_LSFGVK DISABLE_MAKO' \
   DISABLE_MAKO=1 DISABLE_LSFGVK=1 VKDAEDALUS_RUN_CALLER_DISABLED=DISABLE_LSFGVK
+
+started_by() {
+  grep -E '^(VKDAEDALUS_RUN|VKDAEDALUS_RUN_CALLER_DISABLED|VKDAEDALUS_RUN_FRAME_GENERATION_LAYER|VKDAEDALUS_AFTER_LSFGVK|VKDAEDALUS_AFTER_MAKO|ENABLE_MAKO|DISABLE_LSFGVK|DISABLE_MAKO)=' "$work/case-$1/environment"
+}
+mapfile -t outer < <(started_by 3)
+expect_run "MAKO, started by a launcher vkdaedalus-run started for lsfg-vk" $'frameGenerationLayer = mako\n' both mako before '' "${outer[@]}"
+mapfile -t outer < <(started_by 1)
+expect_run "lsfg-vk, started by a launcher vkdaedalus-run started for MAKO" $'frameGenerationLayer = lsfg-vk\n' both lsfg-vk before '' "${outer[@]}"
+mapfile -t outer < <(started_by 12)
+expect_run "MAKO, started by a launcher whose launch options keep MAKO out" $'frameGenerationLayer = mako\n' both mako before DISABLE_MAKO "${outer[@]}"
 
 made="$work/case-9/.config/mako-render/conf.toml"
 want=$'version = 2\n\n[global]\n\n[[profile]]\nname = "vkdaedalus default"\nactive_in = "/Game.exe"\nframe_generation_enabled = false\n'

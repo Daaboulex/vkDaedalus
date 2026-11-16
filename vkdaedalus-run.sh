@@ -8,6 +8,7 @@ if [ $# -eq 0 ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "Loads only the frame generation layer the game's profile runs: for MAKO it sets ENABLE_MAKO=1 and DISABLE_LSFGVK=1,"
   echo "for lsfg-vk DISABLE_MAKO=1, and VKDAEDALUS_RUN_FRAME_GENERATION_LAYER names the layer it loads, lsfg-vk or mako."
   echo "VKDAEDALUS_RUN_CALLER_DISABLED names the DISABLE_LSFGVK and DISABLE_MAKO the game was started with, before it sets its own."
+  echo "Started by another vkdaedalus-run, it first drops the DISABLE_LSFGVK and DISABLE_MAKO that run set and did not record."
   echo "VKDAEDALUS_AFTER_MAKO=1 or VKDAEDALUS_AFTER_LSFGVK=1 is set when the profile runs its"
   echo "effects after frame generation; its order layers, read before any other, put vkDaedalus and that layer in that order."
   echo "With the profile's layer installed, a game it has no profile for gets one before it starts, so frame generation can"
@@ -25,6 +26,15 @@ if [ "$1" = "--profile" ]; then
   fi
   profile=$2
   shift 2
+fi
+
+if [ -n "${VKDAEDALUS_RUN+set}" ] && [ -n "${VKDAEDALUS_RUN_CALLER_DISABLED+set}" ]; then
+  for outer in DISABLE_LSFGVK DISABLE_MAKO; do
+    case " $VKDAEDALUS_RUN_CALLER_DISABLED " in
+      *" $outer "*) ;;
+      *) unset "$outer" ;;
+    esac
+  done
 fi
 
 export ENABLE_VKDAEDALUS=1
