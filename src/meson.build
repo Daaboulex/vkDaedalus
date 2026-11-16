@@ -80,6 +80,7 @@ vkBasalt_src = [
     'shader.cpp',
     'stb_image.c',
     'stb_image_resize2.c',
+    'toml_edit.cpp',
     'util.cpp',
     'vkdispatch.cpp',
 ]
@@ -215,7 +216,7 @@ executable('vkdaedalus-profile',
     install : true)
 
 executable('vkdaedalus-frame-order',
-    '../tools/frame_order.cpp', 'config_serializer.cpp', 'logger.cpp', 'frame_generation.cpp',
+    '../tools/frame_order.cpp', 'config_serializer.cpp', 'logger.cpp', 'frame_generation.cpp', 'toml_edit.cpp',
     include_directories : vkBasalt_include_path,
     dependencies : [tomlplusplus_dep, dl_dep, dependency('vulkan')],
     install : true)

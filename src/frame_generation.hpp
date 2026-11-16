@@ -94,7 +94,6 @@ namespace vkBasalt
 
     std::string lsfgConfigPath();
     LsfgRead    readLsfgFile(const std::string& path);
-    bool        writeLsfgText(const std::string& path, const std::string& text, std::string& problem);
     bool        saveLsfgFile(const std::string& path, const std::optional<FrameGenerationGlobal>& global,
                              const std::optional<FrameGenerationProfile>& profile, LsfgFile& written, std::string& problem);
 

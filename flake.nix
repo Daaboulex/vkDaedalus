@@ -1340,7 +1340,7 @@
                 mkdir -p ours theirs work
                 $CXX -std=c++20 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=undefined \
                   -I${./src} -I${inputs.tomlplusplus}/include -I${pkgs.vulkan-headers}/include \
-                  ${./test/lsfg-config/probe_vkdaedalus.cpp} ${./src/frame_generation.cpp} -ldl -o ours/lsfg-config-probe
+                  ${./test/lsfg-config/probe_vkdaedalus.cpp} ${./src/frame_generation.cpp} ${./src/toml_edit.cpp} -ldl -o ours/lsfg-config-probe
                 $CXX -std=c++20 -O1 -I${inputs.lsfg-vk}/lsfg-vk-config/include -isystem ${inputs.lsfg-vk}/thirdparty \
                   ${./test/lsfg-config/probe_lsfg_vk.cpp} ${inputs.lsfg-vk}/lsfg-vk-config/src/config.cpp -o theirs/lsfg-config-probe
                 bash ${./test/lsfg-config/compare.sh} "$PWD/ours/lsfg-config-probe" "$PWD/theirs/lsfg-config-probe" \

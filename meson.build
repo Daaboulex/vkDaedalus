@@ -89,7 +89,7 @@ if get_option('with_so')
     test('offload-hand-off', offload_hand_off_test)
 
     frame_generation_test = executable('frame-generation-test',
-        'test/frame_generation_test.cpp', 'src/frame_generation.cpp',
+        'test/frame_generation_test.cpp', 'src/frame_generation.cpp', 'src/toml_edit.cpp',
         include_directories : include_directories('src'),
         dependencies : [tomlplusplus_dep, dl_dep])
     test('frame-generation', frame_generation_test,
