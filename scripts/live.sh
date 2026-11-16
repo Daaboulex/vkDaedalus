@@ -10,6 +10,7 @@ fi
 BASALT=VK_LAYER_VKDAEDALUS_post_processing
 MOCK=VK_LAYER_MOCK_framegen
 LSFG=VK_LAYER_LSFGVK_frame_generation
+MAKO=VK_LAYER_MAKO_render
 VALIDATION=VK_LAYER_KHRONOS_validation
 FRAMES=300
 PERF_FRAMES=600
@@ -48,6 +49,7 @@ parallel=0
 gallery=""
 lsfg_manifest=""
 lsfg_dll=""
+mako_manifest=""
 extra_layers=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -77,6 +79,14 @@ while [ "$#" -gt 0 ]; do
             lsfg_dll=$(realpath -- "$2")
             shift
             ;;
+        --mako)
+            if [ "$#" -lt 2 ] || [ ! -f "$2" ]; then
+                echo "--mako needs the layer manifest of an installed MAKO, VkLayer_MAKO_render.json, to run it beside the layer and read the files the overlay writes" >&2
+                exit 2
+            fi
+            mako_manifest=$(realpath -- "$2")
+            shift
+            ;;
         --layer)
             if [ "$#" -lt 2 ] || [ ! -f "$2" ]; then
                 echo "--layer needs a Vulkan layer manifest, a .json file, for the layer lane to run beside vkDaedalus in every order" >&2
@@ -86,7 +96,7 @@ while [ "$#" -gt 0 ]; do
             shift
             ;;
         --*)
-            echo "unknown option $1: the options are --keep-logs, --parallel, --gallery <folder>, --lsfg-vk <manifest>, --lsfg-dll <dll> and --layer <manifest>, then any driver manifests" >&2
+            echo "unknown option $1: the options are --keep-logs, --parallel, --gallery <folder>, --lsfg-vk <manifest>, --lsfg-dll <dll>, --mako <manifest> and --layer <manifest>, then any driver manifests" >&2
             exit 2
             ;;
         *) break ;;
@@ -113,7 +123,14 @@ GALLERY_STATES=(ui-00-launch-notice ui-01-effects ui-13-fixed-file ui-04a-move-u
     fg-01-frame-generation fg-07-off fg-08-start-only gpus-01-gpu-menu gpus-02-gpus perf-01-timed-offload gpus-06-timed
     size-1080p-performance size-1080p-gpus size-1080p-frame-generation size-1440p-performance size-1440p-gpus size-1440p-frame-generation
     size-1080p-performance-timed size-1080p-gpus-timed size-1440p-performance-timed size-1440p-gpus-timed
-    size-720p-performance-three size-720p-gpus-three size-1080p-performance-three size-1080p-gpus-three size-1440p-performance-three size-1440p-gpus-three)
+    size-720p-performance-three size-720p-gpus-three size-1080p-performance-three size-1080p-gpus-three size-1440p-performance-three size-1440p-gpus-three
+    mako-01-only mako-02-on mako-03-adaptive mako-04-cadence-recovery mako-05-no-lossless mako-06-dll-in-library mako-07-ready-at-start-off
+    mako-08-next-launch mako-09-other-gpu mako-10-power-sets mako-11-scaling mako-12-refused
+    fgl-01-neither fgl-02-lsfg-vk-only fgl-03-both-lsfg-vk fgl-04-both-mako fgl-05-switched-mid-run fgl-06-launch-options
+    row-16x9-1-three row-16x9-2-four row-16x9-3-scaling row-16x10-1-three row-16x10-2-four row-16x10-3-scaling
+    row-4x3-1-three row-4x3-2-four row-4x3-3-scaling row-21x9-1-three row-21x9-2-four row-21x9-3-scaling
+    row-32x9-1-three row-32x9-2-four row-32x9-3-scaling row-portrait-1-three row-portrait-2-four row-portrait-3-scaling
+    row-800x600-1-three row-800x600-2-four row-800x600-3-scaling)
 if [ -n "$gallery" ]; then
     for tool in xwd xwdtopnm pamcut pnmtopng; do
         if ! command -v "$tool" >/dev/null; then
@@ -253,10 +270,10 @@ start_session() {
 }
 
 start_x_server() {
-    local logs="$1" n tries=0
+    local logs="$1" geometry="${2:-1296x784}" n tries=0
     : >"$logs/xwayland.display"
     env -u DISPLAY XDG_RUNTIME_DIR="$PRIVATE_RUNTIME" WAYLAND_DISPLAY="$PRIVATE_WAYLAND" \
-        Xwayland -displayfd 3 -geometry 1296x784 -nolisten tcp 3>"$logs/xwayland.display" >"$logs/xwayland.log" 2>&1 &
+        Xwayland -displayfd 3 -geometry "$geometry" -nolisten tcp 3>"$logs/xwayland.display" >"$logs/xwayland.log" 2>&1 &
     x_server_pid=$!
     compositor_pids+=("$x_server_pid")
     until grep -qE '^[0-9]+$' "$logs/xwayland.display" || [ "$tries" -ge 100 ]; do
@@ -276,7 +293,7 @@ x_server_answers() {
 }
 
 fresh_x_server() {
-    local logs="$1" pid
+    local logs="$1" geometry="${2:-1296x784}" pid
     local -a kept=()
     if ! x_server_answers; then
         record FAIL "the private X server answers" "X11 on $PRIVATE_DISPLAY stopped answering before this case; Xwayland said: $(grep -m1 -E 'MESA: error|Fatal|error' "$logs/xwayland.log" || tail -1 "$logs/xwayland.log")"
@@ -286,7 +303,7 @@ fresh_x_server() {
         if [ "$pid" != "$x_server_pid" ]; then kept+=("$pid"); fi
     done
     compositor_pids=("${kept[@]}")
-    if ! start_x_server "$logs"; then
+    if ! start_x_server "$logs" "$geometry"; then
         record FAIL "the private X server restarts" "$session_problem"
         return 1
     fi
@@ -353,6 +370,7 @@ run() {
         layer_path="${layer_path:+$layer_path:}$LSFG_DIR"
         vars+=(LSFGVK_CONFIG="$LSFG_DIR/conf.toml")
     fi
+    if [[ "$layers" == *"$MAKO"* ]]; then layer_path="${layer_path:+$layer_path:}$MAKO_DIR"; fi
     if [ -n "${EXTRA_LAYER_PATH:-}" ]; then layer_path="${layer_path:+$layer_path:}$EXTRA_LAYER_PATH"; fi
     if [ -n "$layer_path" ]; then vars+=(VK_ADD_LAYER_PATH="$layer_path"); fi
     if [ "$validate" = 1 ]; then
@@ -702,6 +720,329 @@ lsfg_live_case() {
     fi
 }
 
+mako_skip() {
+    echo "no MAKO named: --mako <its layer manifest, VkLayer_MAKO_render.json> runs this"
+}
+
+mako_library() {
+    local library
+    library=$(sed -n 's/.*"library_path": *"\(.*\)".*/\1/p' "$mako_manifest")
+    case "$library" in
+        /*) echo "$library" ;;
+        */*) echo "$(dirname "$mako_manifest")/$library" ;;
+        *) return 1 ;;
+    esac
+}
+
+mako_fg_absent() {
+    local library folder host
+    if ! library=$(mako_library); then
+        echo "the MAKO manifest names its library with no folder, so whether mako-fg-host sits beside it, where MAKO looks for MAKO FG, is unknown"
+        return 0
+    fi
+    folder=$(dirname "$(realpath -- "$library")")
+    for host in "$folder/../lib/mako-fg/mako-fg-host" "$folder/../../lib64/mako-fg/mako-fg-host" "$folder/mako-fg/mako-fg-host"; do
+        if [ -f "$host" ]; then return 1; fi
+    done
+    echo "this MAKO build has no MAKO FG: no mako-fg-host beside $library, where MAKO looks for it (MAKO publishes MAKO FG for x86-64 only)"
+}
+
+mako_beside_lsfg() {
+    local dir="$1" library
+    rm -rf "${dir:?}"
+    mkdir -p "$dir"
+    if [ -n "$lsfg_manifest" ]; then
+        cp "$lsfg_manifest" "$dir/"
+        return 0
+    fi
+    library=$(mktemp -d "$RUNNABLE/lsfg-vk-stand-in.XXXXXX")/liblsfg-vk-layer.so
+    cp "$VKB_FAULT/lib/libfault_inject.so" "$library"
+    printf '{ "file_format_version": "1.1.0", "layer": { "name": "%s", "description": "a pass-through layer the loader loads as lsfg-vk unless DISABLE_LSFGVK keeps it out", "implementation_version": "2", "library_path": "%s", "type": "GLOBAL", "api_version": "1.4.0", "disable_environment": { "DISABLE_LSFGVK": "1" } } }\n' \
+        "$LSFG" "$library" >"$dir/VkLayer_LSFGVK_frame_generation.json"
+}
+
+mako_ran() {
+    local log="$1" why fatal='^MAKO Renderer: (layer initialization|device creation|device initialization|swapchain creation|swapchain presentation) failed'
+    if ! why=$(exited_cleanly "$log"); then
+        echo "$why"
+        return 1
+    fi
+    if [ "$(count '^MAKO Renderer: render layer active; identity=VK_LAYER_MAKO_render;' "$log")" -lt 1 ]; then
+        echo "MAKO never said its render layer was active"
+        return 1
+    fi
+    if [ "$(count "$fatal" "$log")" -ne 0 ]; then
+        echo "MAKO said: $(grep -m1 -A1 -E "$fatal" "$log" | tr '\n' ' ')"
+        return 1
+    fi
+    if [ "$(count 'vkDaedalus err:' "$log")" -ne 0 ]; then
+        grep -m1 'vkDaedalus err:' "$log"
+        return 1
+    fi
+}
+
+game_maps() {
+    local log="$1" home="$2" pid
+    if ! wait_for_line 'present cycle' 30 "$log"; then return 0; fi
+    if pid=$(vkcube_of_run "$home"); then cat "/proc/$pid/maps" >"$log.maps"; fi
+}
+
+mako_loads_case() {
+    local icd="$1" dir="$2" order="$3" control="$4" log home chain top want why wrong=()
+    local name="vkdaedalus-run loads MAKO alone, effects $order"
+    log="$dir/mako-run-$order.log" home="$dir/mako-run-$order-home"
+    fresh_home "$home" cas
+    mkdir -p "$home/.config/vkdaedalus/profiles"
+    printf 'frameGenerationLayer = mako\n' >"$home/.config/vkdaedalus/profiles/default.conf"
+    want="$BASALT"
+    if [ "$order" = after ]; then
+        printf 'effectsAfterFrameGeneration = true\n' >>"$home/.config/vkdaedalus/profiles/default.conf"
+        want="$MAKO"
+    fi
+    background game_maps "$log" "$home"
+    driver=$!
+    run "$log" "$home" "$icd" "$VALIDATION" 1 1 -- env VK_ADD_IMPLICIT_LAYER_PATH="$MAKO_DIR:$dir/mako-lsfg-vk" "$VKB_LAYER/bin/vkdaedalus-run" vkcube --c "$FRAMES" --wsi "$native_wsi"
+    driver_finished "game_maps"
+    if ! why=$(mako_ran "$log"); then
+        record FAIL "$name" "$why"
+        return
+    fi
+    if [ ! -s "$log.maps" ]; then
+        wrong+=("the game's mapped libraries were never read")
+    elif [ "$(count '/libmako-render\.so$' "$log.maps")" -lt 1 ]; then
+        wrong+=("MAKO's libmako-render.so is not mapped in the game")
+    fi
+    if [ "$(count 'liblsfg-vk-layer' "${log}.maps")" -ne 0 ]; then wrong+=("lsfg-vk is mapped in the game: $(grep -m1 -o '/[^ ]*liblsfg-vk-layer[^ ]*' "$log.maps")"); fi
+    if [ "$(count "^MAKO Renderer: using profile with name 'vkdaedalus default' \\(identified via executable\\)" "$log")" -lt 1 ]; then
+        wrong+=("MAKO did not run the profile vkdaedalus-run makes for the game before it starts: $(grep -m1 'MAKO Renderer: using profile' "$log" || echo 'MAKO named no profile')")
+    fi
+    chain=$(instance_chain_with "$log" "$BASALT")
+    top=$(grep -oE "$BASALT|$MAKO" <<<"$chain" | head -1)
+    if [ "$top" != "$want" ]; then wrong+=("the loader's chain was: $chain, want $want nearer the game"); fi
+    if [ "$(count "creating effect [0-9]+: cas\$" "$log")" -lt 1 ]; then wrong+=("the layer never made cas"); fi
+    if ! why=$(validation_verdict "$log" "$control"); then wrong+=("validation: $why"); fi
+    if [ "${#wrong[@]}" -gt 0 ]; then
+        record FAIL "$name" "$(printf '%s; ' "${wrong[@]}")"
+    else
+        record PASS "$name" "with the profile running MAKO and lsfg-vk installed beside it, the game mapped libmako-render.so and no lsfg-vk, ran MAKO's profile vkdaedalus default made before it started, and the loader's chain was $chain; validation clean against MAKO alone"
+    fi
+}
+
+drive_mako_live() {
+    local log="$1" map="$2" reloads window
+    if ! wait_for_line 'present cycle' 60 "$log"; then return 0; fi
+    window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '' | tail -1) || true
+    ui_take_window "$window"
+    hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || return 0
+    ui_click "$map" "Frame generation" 1 "$log" || true
+    tile_says "$log" '^Frame generation tile: ' || true
+    tile_line "$log" >"$log.tile"
+    ui_click "$map" "Scaling" 1 "$log" || true
+    reloads=$(count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$log")
+    ui_set_value "$map" "##Sharpness" 0.5 "$log" || true
+    wait_for_count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$((reloads + 1))" "$log" || true
+    wait_for_count '^MAKO Renderer: spatial scaling model changed live: .*; sharpness=0\.5;' 1 "$log" || true
+    hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || true
+}
+
+mako_live_case() {
+    local icd="$1" dir="$2" control="$3" log home map config game scaled source presented live why wrong=() absent
+    local name="MAKO scales and takes a live change, effects before"
+    log="$dir/mako-live.log" home="$dir/mako-live-home" map="$dir/mako-live.map" config="$dir/mako-live-home/.config/mako-render/conf.toml"
+    fresh_home "$home" cas
+    mkdir -p "$home/.config/vkdaedalus/profiles" "$home/.config/mako-render"
+    printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+    printf 'frameGenerationLayer = mako\n' >"$home/.config/vkdaedalus/profiles/default.conf"
+    cp "$dir/mako-scaling.toml" "$config"
+    background drive_mako_live "$log" "$map"
+    driver=$!
+    run "$log" "$home" "$icd" "$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" VK_ADD_IMPLICIT_LAYER_PATH="$MAKO_DIR" "$VKB_LAYER/bin/vkdaedalus-run" vkcube --c 1200 --wsi xcb --width 1280 --height 720
+    driver_finished "drive_mako_live"
+    if ! why=$(mako_ran "$log"); then
+        record FAIL "$name" "$why"
+        return
+    fi
+    game=$(sed -n -E 's/.*swapchain create: .* extent=([0-9]+x[0-9]+).*/\1/p' "$log" | head -1)
+    scaled=$(grep -m1 '^MAKO Renderer: spatial scaling active: ' "$log" || true)
+    source=$(sed -n -E 's/.*: source=([0-9]+x[0-9]+);.*/\1/p' <<<"$scaled")
+    presented=$(sed -n -E 's/.*; presentation=([0-9]+x[0-9]+);.*/\1/p' <<<"$scaled")
+    if [[ "$scaled" != *'; active_method=mako;'* ]]; then
+        wrong+=("MAKO never said it scales with MAKO Scaler: ${scaled:-no spatial scaling line}")
+    elif [ -z "$game" ] || [ "$game" != "$source" ] || [ "$presented" != 1280x720 ]; then
+        wrong+=("the game drew at ${game:-an unread size} and MAKO scaled ${source:-nothing} to ${presented:-nothing}, want the game's size scaled to the 1280x720 window")
+    elif ! awk -v w="${game%x*}" -v h="${game#*x}" 'BEGIN { exit !(1280 / w >= 1.5 * 0.99 && 1280 / w <= 1.5 * 1.01 && 720 / h >= 1.5 * 0.99 && 720 / h <= 1.5 * 1.01) }'; then
+        wrong+=("the game drew at $game, want the 1280x720 window divided by the factor 1.5")
+    fi
+    live=$(grep -m1 '^MAKO Renderer: spatial scaling model changed live: .*; sharpness=0\.5;' "$log" || true)
+    if ! file_says "$config" '^scaling_sharpness = 0\.5$'; then
+        wrong+=("the overlay never wrote scaling_sharpness = 0.5 into MAKO's file")
+    elif [ "$(count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$log")" -lt 1 ] || [ -z "$live" ]; then
+        wrong+=("after the overlay wrote Sharpness 0.5 MAKO said: $(awk '/^MAKO Renderer: (updated configuration|spatial scaling model changed)/' "$log" | tr '\n' ' ')")
+    fi
+    if absent=$(mako_fg_absent); then
+        if [[ "$(cat "$log.tile")" != 'Frame generation tile: MAKO, needs a model ('* ]]; then wrong+=("without MAKO FG the tiles say: $(cat "$log.tile"), want MAKO, needs a model"); fi
+        if [ "$(count '^MAKO Renderer: frame-generation backend initialization failed; independent spatial scaling retained:' "$log")" -lt 1 ] ||
+            [ "$(count '^MAKO Renderer: frame generation disabled for this swapchain: ' "$log")" -lt 1 ]; then
+            wrong+=("without MAKO FG, MAKO asked for frame generation never said it keeps scaling with frame generation off")
+        fi
+    fi
+    if ! why=$(validation_verdict "$log" "$control"); then wrong+=("validation: $why"); fi
+    if [ "${#wrong[@]}" -gt 0 ]; then
+        record FAIL "$name" "$(printf '%s; ' "${wrong[@]}")"
+    else
+        record PASS "$name" "the game drew at $game and MAKO Scaler presented it at $presented; the Sharpness the overlay set while it ran was read in place and MAKO said: ${live#MAKO Renderer: }${absent:+; $absent, so the tiles say $(cat "$log.tile") and MAKO said: $(grep -m1 -A1 '^MAKO Renderer: frame-generation backend initialization failed' "$log" | tr '\n' ' ' | sed 's/MAKO Renderer: //')}; validation clean against MAKO alone"
+    fi
+}
+
+mako_kept_case() {
+    local icd="$1" dir="$2" control="$3" log="$2/mako-kept.log" home="$2/mako-kept-home" why name="DISABLE_MAKO in the launch options keeps MAKO out"
+    fresh_home "$home" cas
+    mkdir -p "$home/.config/vkdaedalus/profiles"
+    printf 'frameGenerationLayer = mako\n' >"$home/.config/vkdaedalus/profiles/default.conf"
+    background game_maps "$log" "$home"
+    driver=$!
+    run "$log" "$home" "$icd" "$VALIDATION" 1 1 -- env DISABLE_MAKO=1 VK_ADD_IMPLICIT_LAYER_PATH="$MAKO_DIR" "$VKB_LAYER/bin/vkdaedalus-run" vkcube --c "$FRAMES" --wsi "$native_wsi"
+    driver_finished "game_maps"
+    if ! why=$(exited_cleanly "$log"); then
+        record FAIL "$name" "$why"
+    elif [ ! -s "$log.maps" ]; then
+        record FAIL "$name" "the game's mapped libraries were never read"
+    elif [ "$(count 'libmako-render' "$log.maps")" -ne 0 ] || [ "$(count '^MAKO Renderer: ' "$log")" -ne 0 ]; then
+        record FAIL "$name" "the game, started through vkdaedalus-run with DISABLE_MAKO=1 for a profile running MAKO, ran MAKO: $(grep -m1 '^MAKO Renderer: ' "$log" || grep -m1 -o '/[^ ]*libmako-render[^ ]*' "$log.maps")"
+    elif ! why=$(validation_verdict "$log" "$control"); then
+        record FAIL "$name" "validation: $why"
+    else
+        record PASS "$name" "started through vkdaedalus-run with DISABLE_MAKO=1 for a profile running MAKO, the game mapped no libmako-render.so though MAKO's order layer was on; validation clean"
+    fi
+}
+
+mako_cases() {
+    local icd="$1" dir="$2" why order absent
+    local control="$dir/mako-control.log" chome="$dir/mako-control-home" MAKO_DIR="$dir/real-mako"
+    if [ -z "$mako_manifest" ]; then
+        for order in before after; do record SKIP "vkdaedalus-run loads MAKO alone, effects $order" "$(mako_skip)"; done
+        record SKIP "MAKO scales and takes a live change, effects before" "$(mako_skip)"
+        record SKIP "DISABLE_MAKO in the launch options keeps MAKO out" "$(mako_skip)"
+        for order in before after; do record SKIP "MAKO frame generation, effects $order" "$(mako_skip)"; done
+        return 0
+    fi
+    rm -rf "${MAKO_DIR:?}"
+    mkdir -p "$MAKO_DIR"
+    cp "$mako_manifest" "$MAKO_DIR/"
+    mako_beside_lsfg "$dir/mako-lsfg-vk"
+    printf '%s\n' 'version = 2' '' '[global]' '' '[[profile]]' 'name = "vkdaedalus default"' 'active_in = "/vkcube"' 'scaling_enabled = true' \
+        'scaling_method = "mako"' 'scaling_factor = 1.5' 'scaling_sharpness = 0.8' >"$dir/mako-scaling.toml"
+    fresh_home "$chome" cas
+    mkdir -p "$chome/.config/mako-render"
+    cp "$dir/mako-scaling.toml" "$chome/.config/mako-render/conf.toml"
+    run "$control" "$chome" "$icd" "$MAKO:$VALIDATION" 0 1 -- vkcube --c "$FRAMES" --wsi xcb --width 1280 --height 720
+    if ! why=$(mako_ran "$control"); then
+        record FAIL "MAKO alone" "$why"
+        return 0
+    fi
+    if [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then
+        for order in before after; do record SKIP "vkdaedalus-run loads MAKO alone, effects $order" "this build has no vkdaedalus-run (a plain meson build installs none)"; done
+        record SKIP "MAKO scales and takes a live change, effects before" "this build has no vkdaedalus-run (a plain meson build installs none)"
+        record SKIP "DISABLE_MAKO in the launch options keeps MAKO out" "this build has no vkdaedalus-run (a plain meson build installs none)"
+    else
+        for order in before after; do mako_loads_case "$icd" "$dir" "$order" "$control"; done
+        mako_live_case "$icd" "$dir" "$control"
+        mako_kept_case "$icd" "$dir" "$control"
+    fi
+    if absent=$(mako_fg_absent); then
+        for order in before after; do record SKIP "MAKO frame generation, effects $order" "$absent"; done
+        return 0
+    fi
+    for order in before after; do mako_frames_case "$icd" "$dir" "$order" "$control"; done
+}
+
+drive_mako_frames() {
+    local log="$1" conf="$2" step reloads reloaded='^MAKO Renderer: updated configuration in place; contexts=[1-9]'
+    : >"$log.marks"
+    if ! wait_for_line 'present cycle' 60 "$log"; then
+        echo "never presented" >>"$log.marks"
+        return 0
+    fi
+    sleep 2
+    lsfg_live_mark "$log" two-a
+    sleep 3
+    lsfg_live_mark "$log" two-b
+    for step in three:3 four:4 five:5; do
+        reloads=$(count "$reloaded" "$log")
+        sed -i "s/^multiplier = .*/multiplier = ${step#*:}/" "$conf"
+        wait_for_count "$reloaded" "$((reloads + 1))" "$log" || echo "MAKO never reloaded its file for ${step#*:}x" >>"$log.marks"
+        sleep 1
+        lsfg_live_mark "$log" "${step%%:*}-a"
+        sleep 3
+        lsfg_live_mark "$log" "${step%%:*}-b"
+    done
+    reloads=$(count "$reloaded" "$log")
+    hold_key_until Insert 'frame generation key: off$' 1 "$log" || echo "no off" >>"$log.marks"
+    wait_for_count "$reloaded" "$((reloads + 1))" "$log" || echo "MAKO never reloaded its file for off" >>"$log.marks"
+    sleep 1
+    lsfg_live_mark "$log" off-a
+    sleep 3
+    lsfg_live_mark "$log" off-b
+    reloads=$(count "$reloaded" "$log")
+    hold_key_until Insert 'frame generation key: MAKO 5x, on$' 1 "$log" || echo "no on" >>"$log.marks"
+    wait_for_count "$reloaded" "$((reloads + 1))" "$log" || echo "MAKO never reloaded its file for on" >>"$log.marks"
+    sleep 1
+    lsfg_live_mark "$log" on-a
+    sleep 3
+    lsfg_live_mark "$log" on-b
+    reloads=$(count "$reloaded" "$log")
+    printf '%s\n' 'adaptive = true' 'target_fps = 90' 'adaptive_max_multiplier = 3' >>"$conf"
+    wait_for_count "$reloaded" "$((reloads + 1))" "$log" || echo "MAKO never reloaded its file for Adaptive" >>"$log.marks"
+    sleep 2
+    lsfg_live_mark "$log" adaptive-a
+    sleep 4
+    lsfg_live_mark "$log" adaptive-b
+}
+
+mako_frames_case() {
+    local icd="$1" dir="$2" order="$3" control="$4" layers game log home conf phase want got why wrong=()
+    local name="MAKO frame generation, effects $order"
+    if [ "$order" = before ]; then
+        layers="$BASALT:$MAKO:$FAULT:$VALIDATION" game=layer
+    else
+        layers="$FAULT:$MAKO:$BASALT:$VALIDATION" game=fault
+    fi
+    log="$dir/mako-frames-$order.log" home="$dir/mako-frames-$order-home" conf="$dir/mako-frames-$order-home/.config/mako-render/conf.toml"
+    fresh_home "$home" cas:smaa:uniform_smoke
+    mkdir -p "$home/.config/vkdaedalus/profiles" "$home/.config/mako-render"
+    printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+    printf 'frameGenerationLayer = mako\n' >"$home/.config/vkdaedalus/profiles/default.conf"
+    printf '%s\n' 'version = 2' '' '[global]' '' '[[profile]]' 'name = "vkdaedalus default"' 'active_in = "/vkcube"' 'frame_generation_model = "mako-fg"' \
+        'frame_generation_enabled = true' 'multiplier = 2' >"$conf"
+    background drive_mako_frames "$log" "$conf"
+    driver=$!
+    run "$log" "$home" "$icd" "$layers" 1 1 -- env FAULT_INJECT_COUNT_PRESENTS=each vkcube --c 2000 --wsi xcb
+    driver_finished "drive_mako_frames"
+    if ! why=$(mako_ran "$log"); then
+        record FAIL "$name" "$why"
+        return
+    fi
+    if [ "$(count 'frame generation key: .*from the next launch' "$log")" -ne 0 ]; then wrong+=("the key said $(grep -m1 -o 'frame generation key: .*' "$log")"); fi
+    for phase in two:2 three:3 four:4 five:5 off:1 on:5; do
+        want=${phase#*:}
+        got=$(lsfg_live_ratio "$log" "${phase%%:*}" "$game")
+        record MEAS "$name: ${phase%%:*}" "$got frames shown for every frame the game drew, want $want"
+        if [ "$got" = none ] || ! awk -v g="$got" -v w="$want" 'BEGIN { exit !(g >= w * 0.85 && g <= w * 1.15) }'; then wrong+=("${phase%%:*} $got, want $want"); fi
+    done
+    got=$(lsfg_live_ratio "$log" adaptive "$game")
+    record MEAS "$name: adaptive to 90 FPS, at most 3x" "$got frames shown for every frame the game drew"
+    if [ "$got" = none ] || ! awk -v g="$got" 'BEGIN { exit !(g >= 1.15 && g <= 3 * 1.15) }'; then wrong+=("adaptive $got, want more than 1 and at most 3"); fi
+    if [ "$(count "frame rates over the swapchain's life: .*, adaptive to 90 FPS\$" "$log")" -lt 1 ]; then
+        wrong+=("the layer's last frame rates did not name Adaptive and its target: $(grep -m1 "frame rates over the swapchain's life" "$log" || echo none)")
+    fi
+    if ! why=$(validation_verdict "$log" "$control"); then wrong+=("validation: $why"); fi
+    if [ "${#wrong[@]}" -gt 0 ]; then
+        record FAIL "$name" "shown per drawn frame: $(printf '%s; ' "${wrong[@]}")marks: $(tr '\n' ' ' <"$log.marks")"
+    else
+        record PASS "$name" "while vkcube ran with cas, smaa and uniform_smoke, MAKO's file went from 2x to 3x, 4x and 5x, the frame generation key turned it off and on, then Adaptive aimed at 90 FPS: 2, 3, 4, 5, 1, 5 and $got frames shown for each drawn, counted on both sides of MAKO, and the layer named Adaptive and its target; validation clean against MAKO alone"
+    fi
+}
+
 lane_framegen() {
     local icd="$1" dir="$2" why order layers want log presents frames ratio anomalies hooked nested
     local control="$dir/framegen-control.log"
@@ -743,6 +1084,7 @@ lane_framegen() {
             record FAIL "layer $order framegen" "ratio=$ratio want=$want anomalies=$anomalies hooked=$hooked nested=$nested"
         fi
     done
+    mako_cases "$icd" "$dir"
     local LSFG_DIR="$dir/real-lsfg-frames" lsfgControl="$dir/lsfg-frames-control.log"
     if ! lsfg_frames_ready "$LSFG_DIR"; then
         record SKIP "lsfg-vk frames with the layer" "$(lsfg_frames_skip)"
@@ -2920,6 +3262,528 @@ write_lsfg_stand_in() {
     printf '%s\n' '{ "file_format_version": "1.1.0", "layer": { "name": "VK_LAYER_LSFGVK_frame_generation", "description": "an lsfg-vk the loader lists and never loads", "implementation_version": "2", "library_path": "liblsfg-vk-layer-stand-in.so", "type": "GLOBAL", "api_version": "1.4.350", "disable_environment": { "VKDAEDALUS_LIVE_LSFGVK_STAND_IN": "1" } } }' >"$1/.local/share/vulkan/implicit_layer.d/VkLayer_LSFGVK_frame_generation.json"
 }
 
+write_mako_stand_in() {
+    mkdir -p "$1/.local/share/vulkan/implicit_layer.d"
+    printf '%s\n' '{ "file_format_version": "1.1.0", "layer": { "name": "VK_LAYER_MAKO_render", "description": "a MAKO the loader lists and never loads", "implementation_version": "5", "library_path": "libmako-render-stand-in.so", "type": "GLOBAL", "api_version": "1.4.350", "disable_environment": { "VKDAEDALUS_LIVE_MAKO_STAND_IN": "1" } } }' >"$1/.local/share/vulkan/implicit_layer.d/VkLayer_MAKO_render.json"
+}
+
+ui_pick() {
+    local map="$1" row="$2" choice="$3" log="$4"
+    if [ -n "$(ui_line "$map" "##$row")" ]; then
+        ui_click "$map" "##$row" 1 "$log" || return 1
+        ui_wait "$map" "$choice##$row" "" "" "$log" || return 1
+    fi
+    ui_click "$map" "$choice##$row" 1 "$log"
+}
+
+tile_says() {
+    local log="$1" pattern="$2" tries=0
+    until [ -f "$log" ] && [[ "$(tile_line "$log")" =~ $pattern ]]; do
+        if [ "$tries" -ge 100 ]; then return 1; fi
+        tries=$((tries + 1))
+        sleep 0.1
+    done
+}
+
+tile_line() {
+    grep 'Frame generation tile: ' "$1" | tail -1 | sed -E 's/.*(Frame generation tile: )/\1/'
+}
+
+machine_battery() {
+    local entry
+    for entry in /sys/class/power_supply/*; do
+        if [ ! -f "$entry/type" ] || { [ -f "$entry/scope" ] && [ "$(head -n 1 "$entry/scope")" = Device ]; }; then continue; fi
+        if [ "$(head -n 1 "$entry/type")" = Battery ] && { [ ! -f "$entry/present" ] || [ "$(head -n 1 "$entry/present")" != 0 ]; }; then return 0; fi
+    done
+    return 1
+}
+
+mako_says() {
+    local config="$1" pattern="$2" ui_log="$3" name="$4" why="$5"
+    if file_says "$config" "$pattern"; then
+        ui_result "$ui_log" PASS "$name" "$why"
+    else
+        ui_result "$ui_log" FAIL "$name" "$why, but MAKO's file holds no line matching $pattern"
+    fi
+}
+
+mako_lacks() {
+    local config="$1" pattern="$2" tries=0
+    while [ "$(count "$pattern" "$config")" -gt 0 ]; do
+        if [ "$tries" -ge 100 ]; then return 1; fi
+        tries=$((tries + 1))
+        sleep 0.1
+    done
+}
+
+greyed_says() {
+    local map="$1" label="$2" want="$3" log="$4" ui_log="$5" name="$6" why="$7"
+    if ui_wait "$map" "$label" 7 "$want" "$log"; then
+        ui_result "$ui_log" PASS "$name" "$why"
+    else
+        ui_result "$ui_log" FAIL "$name" "$why, but $label is $( [ "$(ui_field "$map" "$label" 7)" = 1 ] && echo greyed || echo "${label} $( [ -n "$(ui_line "$map" "$label")" ] && echo usable || echo 'not on the page')")"
+    fi
+}
+
+drive_mako() {
+    local log="$1" map="$2" config="$3" home="$4" ui_log="$1.ui" window library want
+    : >"$ui_log"
+    if ! wait_for_line 'present cycle' 30 "$log"; then
+        ui_result "$ui_log" FAIL "MAKO: the card" "the game never reached 30 presents"
+        return 0
+    fi
+    window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '' | tail -1) || true
+    ui_take_window "$window"
+    if ! hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log"; then
+        ui_result "$ui_log" FAIL "MAKO: the card" "$OVERLAY_KEY was held but the overlay never opened"
+        return 0
+    fi
+    ui_click "$map" "Frame generation" 1 "$log" || true
+    if ui_wait "$map" "Scaling" "" "" "$log" && ui_wait "$map" "lsfg-vk##Layer" 7 1 "$log" && ui_wait "$map" "MAKO##Layer" 8 1 "$log" && tile_says "$log" '^Frame generation tile: Off; Scaling tile: Off$'; then
+        ui_result "$ui_log" PASS "MAKO alone: a new profile runs MAKO" "with only MAKO installed the profile runs MAKO, the Scaling tile shows, lsfg-vk is greyed in the layer choice and the tiles say: $(tile_line "$log")"
+    else
+        ui_result "$ui_log" FAIL "MAKO alone: a new profile runs MAKO" "Scaling tile $( [ -n "$(ui_line "$map" Scaling)" ] && echo shown || echo missing), lsfg-vk choice greyed $(ui_field "$map" "lsfg-vk##Layer" 7), MAKO chosen $(ui_field "$map" "MAKO##Layer" 8), tiles: $(tile_line "$log")"
+    fi
+    ui_state "$map" mako-01-only "$ui_log" "MAKO alone installed: the profile runs MAKO, lsfg-vk greyed with its reason, the Scaling tile shown"
+    ui_click "$map" "On###frameGeneration" 1 "$log" || true
+    if ! file_says "$config" '^name = "vkdaedalus default"$' || ! file_says "$config" '^active_in = "/vkcube"$' || [ "$(count '^frame_generation_enabled = false$' "$config")" -gt 0 ]; then
+        ui_result "$ui_log" FAIL "MAKO: On" "switching it on never wrote MAKO's profile vkdaedalus default listing vkcube with frame generation on: $(tr '\n' ' ' <"$config")"
+        return 0
+    fi
+    if [ "$(uname -m)" = x86_64 ]; then want='^Frame generation tile: MAKO, next launch; Scaling tile: Off$'; else want='^Frame generation tile: MAKO, needs a model \(MAKO FG is published for x86-64 only\); Scaling tile: Off$'; fi
+    if tile_says "$log" "$want"; then
+        ui_result "$ui_log" PASS "MAKO: On" "it wrote MAKO's profile vkdaedalus default listing vkcube, frame generation on, and the tiles say: $(tile_line "$log")"
+    else
+        ui_result "$ui_log" FAIL "MAKO: On" "the tiles say: $(tile_line "$log"), want $want"
+    fi
+    ui_hover "$map" "Lossless Scaling##Model" "$log" || true
+    ui_state "$map" mako-02-on "$ui_log" "MAKO switched on: its profile written; MAKO is not loaded in this game, so it runs from the next launch"
+
+    ui_pick "$map" Mode Adaptive "$log" || true
+    mako_says "$config" '^adaptive = true$' "$ui_log" "MAKO: Mode" "Adaptive picked"
+    if ui_wait "$map" "##Target" "" "" "$log" && [ -z "$(ui_line "$map" "##Multiplier")" ]; then
+        ui_result "$ui_log" PASS "MAKO: Adaptive replaces the multiplier" "Target, Display refresh, Max multiplier, Real frames and Stable cadence show and Multiplier does not"
+    else
+        ui_result "$ui_log" FAIL "MAKO: Adaptive replaces the multiplier" "Target $( [ -n "$(ui_line "$map" "##Target")" ] && echo shown || echo missing), Multiplier $( [ -n "$(ui_line "$map" "##Multiplier")" ] && echo shown || echo hidden)"
+    fi
+    ui_set_value "$map" "##Target" 90 "$log" || true
+    mako_says "$config" '^target_fps = 90$' "$ui_log" "MAKO: Target" "90 typed into it"
+    ui_click "$map" "Display refresh" 1 "$log" || true
+    mako_says "$config" '^adaptive_target_refresh_rate = true$' "$ui_log" "MAKO: Display refresh" "ticked"
+    ui_set_value "$map" "##Max multiplier" 4 "$log" || true
+    mako_says "$config" '^adaptive_max_multiplier = 4$' "$ui_log" "MAKO: Max multiplier" "4 typed into it"
+    ui_pick "$map" "Real frames" High "$log" || true
+    mako_says "$config" '^adaptive_fractional_real_frame_priority = "high"$' "$ui_log" "MAKO: Real frames" "High picked"
+    ui_click "$map" "Stable cadence" 1 "$log" || true
+    mako_says "$config" '^adaptive_stable_cadence = false$' "$ui_log" "MAKO: Stable cadence" "unticked"
+    ui_hover "$map" "##Target" "$log" || true
+    ui_state "$map" mako-03-adaptive "$ui_log" "Adaptive: target, display refresh, max multiplier, real frames and stable cadence in place of the multiplier"
+    ui_pick "$map" Mode Fixed "$log" || true
+    mako_says "$config" '^adaptive = false$' "$ui_log" "MAKO: Mode back to Fixed" "Fixed picked"
+    ui_set_value "$map" "##Multiplier" 4 "$log" || true
+    mako_says "$config" '^multiplier = 4$' "$ui_log" "MAKO: Multiplier" "4 typed into it"
+    ui_set_value "$map" "##Multiplier" 99 "$log" || true
+    mako_says "$config" '^multiplier = 5$' "$ui_log" "MAKO: Multiplier stays in MAKO's range" "99 typed into it saved 5, MAKO's highest"
+    ui_set_value "$map" "##Flow scale" 0.5 "$log" || true
+    mako_says "$config" '^flow_scale = 0\.5$' "$ui_log" "MAKO: Flow scale" "0.5 typed into it"
+    ui_set_value "$map" "##Flow scale" 0.1 "$log" || true
+    mako_says "$config" '^flow_scale = 0\.25$' "$ui_log" "MAKO: Flow scale stays in MAKO's range" "0.1 typed into it saved 0.25, MAKO's lowest"
+    ui_pick "$map" "MAKO FG mode" Quality "$log" || true
+    mako_says "$config" '^mako_fg_mode = "quality"$' "$ui_log" "MAKO: MAKO FG mode" "Quality picked"
+    greyed_says "$map" "Performance mode" 1 "$log" "$ui_log" "MAKO: Performance mode follows the model" "with the MAKO FG model Performance mode is greyed"
+
+    ui_set_value "$map" "##Base FPS cap" 60 "$log" || true
+    mako_says "$config" '^base_fps_cap = 60$' "$ui_log" "MAKO: Base FPS cap" "60 typed into it"
+    ui_click "$map" "Auto base cap" 1 "$log" || true
+    mako_says "$config" '^adaptive_auto_base_fps_cap = true$' "$ui_log" "MAKO: Auto base cap" "ticked"
+    ui_set_value "$map" "##Refresh threshold" 100 "$log" || true
+    mako_says "$config" '^frame_generation_refresh_threshold = 100$' "$ui_log" "MAKO: Refresh threshold" "100 typed into it"
+    ui_set_value "$map" "##Probe interval" 0.5 "$log" || true
+    mako_says "$config" '^dynamic_cadence_probe_interval_seconds = 0\.5$' "$ui_log" "MAKO: Probe interval" "0.5 typed into it"
+    ui_click "$map" "Cadence recovery" 1 "$log" || true
+    mako_says "$config" '^dynamic_cadence_recovery = true$' "$ui_log" "MAKO: Cadence recovery" "ticked"
+    if ui_wait "$map" "##Base FPS cap" 7 1 "$log" && ui_wait "$map" "Auto base cap" 7 1 "$log"; then
+        ui_result "$ui_log" PASS "MAKO: Cadence recovery greys what MAKO zeroes" "the base cap and the auto base cap are greyed with the reason"
+    else
+        ui_result "$ui_log" FAIL "MAKO: Cadence recovery greys what MAKO zeroes" "base cap greyed $(ui_field "$map" "##Base FPS cap" 7), auto base cap greyed $(ui_field "$map" "Auto base cap" 7)"
+    fi
+    ui_hover "$map" "##Base FPS cap" "$log" || true
+    ui_state "$map" mako-04-cadence-recovery "$ui_log" "Cadence recovery on: the base cap, auto base cap and headroom greyed, as MAKO zeroes them"
+    ui_click "$map" "Cadence recovery" 1 "$log" || true
+    mako_says "$config" '^dynamic_cadence_recovery = false$' "$ui_log" "MAKO: Cadence recovery off" "unticked again"
+    if [[ "$LANE_GPU_ID" == 0x1002:* ]]; then
+        ui_pick "$map" "GPU headroom" "10 %" "$log" || true
+        mako_says "$config" '^gpu_headroom_percent = 10$' "$ui_log" "MAKO: GPU headroom" "10 % picked on an AMD GPU"
+    elif [ -z "$(ui_line "$map" "##GPU headroom")" ] && [ -z "$(ui_line "$map" "Off##GPU headroom")" ]; then
+        ui_result "$ui_log" PASS "MAKO: GPU headroom only on AMD" "on $LANE_GPU_ID, not AMD's, the row is not drawn"
+    else
+        ui_result "$ui_log" FAIL "MAKO: GPU headroom only on AMD" "on $LANE_GPU_ID, not AMD's, the row is drawn"
+    fi
+    ui_pick "$map" "Gamescope VRR" Off "$log" || true
+    mako_says "$config" '^gamescope_vrr_mode = "off"$' "$ui_log" "MAKO: Gamescope VRR" "Off picked with GAMESCOPE_WAYLAND_DISPLAY set"
+    if [ -z "$(ui_line "$map" "##HDR quality")" ] && [ -z "$(ui_line "$map" "Quality##HDR quality")" ]; then
+        ui_result "$ui_log" PASS "MAKO: HDR quality only on an HDR swapchain" "vkcube's sRGB swapchain draws no HDR quality row"
+    else
+        ui_result "$ui_log" FAIL "MAKO: HDR quality only on an HDR swapchain" "vkcube's sRGB swapchain drew the HDR quality row"
+    fi
+
+    greyed_says "$map" "Lossless Scaling##Model" 1 "$log" "$ui_log" "MAKO: Lossless Scaling greyed without Lossless.dll" "with no Lossless.dll anywhere the Lossless Scaling model is greyed with the reason"
+    if [ "$(uname -m)" != x86_64 ]; then
+        greyed_says "$map" "MAKO FG##Model" 1 "$log" "$ui_log" "MAKO: MAKO FG greyed off x86-64" "on $(uname -m) the MAKO FG model is greyed: published for x86-64 only"
+    fi
+    ui_hover "$map" "Lossless Scaling##Model" "$log" || true
+    ui_state "$map" mako-05-no-lossless "$ui_log" "no Lossless.dll: the Lossless Scaling model greyed with the reason; off x86-64 MAKO FG greyed too"
+    library="$home/games/steamapps/common/Lossless Scaling"
+    mkdir -p "$library" "$home/.local/share/Steam/steamapps"
+    : >"$library/Lossless.dll"
+    printf '"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"%s"\n\t}\n}\n' "$home/games" >"$home/.local/share/Steam/steamapps/libraryfolders.vdf"
+    ui_click "$map" "Look again" 1 "$log" || true
+    if ui_wait "$map" "Set" "" "" "$log"; then
+        ui_hover "$map" "Set" "$log" || true
+        ui_state "$map" mako-06-dll-in-library "$ui_log" "Lossless.dll found in a Steam library MAKO does not search, with one action to set it"
+        ui_click "$map" "Set" 1 "$log" || true
+        mako_says "$config" "^dll = \"$library/Lossless.dll\"$" "$ui_log" "MAKO: Lossless.dll in a Steam library" "Look again found it in the library libraryfolders.vdf lists and Set wrote it into MAKO's [global]"
+        restart_mark_says "$map" "Lossless.dll" 1 "$log" "$ui_log" "MAKO: Lossless.dll waits for the next start" "Set wrote it"
+    else
+        ui_result "$ui_log" FAIL "MAKO: Lossless.dll in a Steam library" "Look again never offered Set for $library/Lossless.dll"
+    fi
+    ui_pick "$map" Model "Lossless Scaling" "$log" || true
+    mako_says "$config" '^frame_generation_model = "lossless-scaling"$' "$ui_log" "MAKO: Model" "Lossless Scaling picked once Lossless.dll is set"
+    restart_mark_says "$map" "Model" 1 "$log" "$ui_log" "MAKO: Model waits for the next start" "Lossless Scaling picked"
+    greyed_says "$map" "Performance mode" 0 "$log" "$ui_log" "MAKO: the model frees Performance mode" "with the Lossless Scaling model Performance mode can be ticked"
+    ui_click "$map" "Performance mode" 1 "$log" || true
+    mako_says "$config" '^performance_mode = true$' "$ui_log" "MAKO: Performance mode" "ticked"
+    if [ "$(ui_field "$map" "Quality##MAKO FG mode" 7)" = 1 ] || [ "$(ui_field "$map" "##MAKO FG mode" 7)" = 1 ]; then
+        ui_result "$ui_log" PASS "MAKO: the model greys MAKO FG mode" "with the Lossless Scaling model MAKO FG mode is greyed"
+    else
+        ui_result "$ui_log" FAIL "MAKO: the model greys MAKO FG mode" "with the Lossless Scaling model MAKO FG mode can still be changed"
+    fi
+    ui_click "$map" "Ready at start" 1 "$log" || true
+    mako_says "$config" '^frame_generation_provisioned = false$' "$ui_log" "MAKO: Ready at start" "unticked"
+    restart_mark_says "$map" "Ready at start" 1 "$log" "$ui_log" "MAKO: Ready at start waits for the next start" "unticked"
+    ui_hover "$map" "Fixed##Mode" "$log" || true
+    ui_state "$map" mako-07-ready-at-start-off "$ui_log" "Ready at start off: the card says On works only from a launch with it on"
+    ui_click "$map" "Ready at start" 1 "$log" || true
+    mako_says "$config" '^frame_generation_provisioned = true$' "$ui_log" "MAKO: Ready at start back on" "ticked again"
+    ui_click "$map" "Ultra performance" 1 "$log" || true
+    mako_says "$config" '^ultra_performance = true$' "$ui_log" "MAKO: Ultra performance" "ticked"
+    ui_click "$map" "Keep swapchain image count" 1 "$log" || true
+    mako_says "$config" '^swapchain_image_count_compatibility = true$' "$ui_log" "MAKO: Keep swapchain image count" "ticked"
+    ui_click "$map" "Mailbox compatibility" 1 "$log" || true
+    mako_says "$config" '^mailbox_presentation_compatibility = true$' "$ui_log" "MAKO: Mailbox compatibility" "ticked"
+    restart_mark_says "$map" "Mailbox compatibility" 1 "$log" "$ui_log" "MAKO: Mailbox compatibility waits for the next start" "ticked"
+    ui_click "$map" "Effects after frame generation" 1 "$log" || true
+    if file_says "$home/.config/vkdaedalus/profiles/default.conf" '^effectsAfterFrameGeneration = true$'; then
+        ui_result "$ui_log" PASS "MAKO: effects after frame generation" "ticking it saved effectsAfterFrameGeneration = true in default, the profile vkcube runs"
+    else
+        ui_result "$ui_log" FAIL "MAKO: effects after frame generation" "ticking it never saved effectsAfterFrameGeneration = true in default"
+    fi
+    ui_click "$map" "##Half precision" 1 "$log" || true
+    mako_says "$config" '^allow_fp16 = false$' "$ui_log" "MAKO: Half precision" "unticked, for every game"
+    restart_mark_says "$map" "Half precision" 1 "$log" "$ui_log" "MAKO: Half precision waits for the next start" "unticked"
+    ui_hover "$map" "##Half precision" "$log" || true
+    ui_state "$map" mako-08-next-launch "$ui_log" "the next-launch and all-games settings changed, each marked as waiting"
+
+    sed -i 's/^name = "vkdaedalus default"$/&\ngpu = "Another GPU"/' "$config"
+    if ui_wait "$map" "Use the game's GPU" "" "" "$log"; then
+        ui_hover "$map" "Use the game's GPU" "$log" || true
+        ui_state "$map" mako-09-other-gpu "$ui_log" "MAKO's file names another GPU: the strip says so, with one action"
+        ui_click "$map" "Use the game's GPU" 1 "$log" || true
+        if mako_lacks "$config" '^gpu = '; then
+            ui_result "$ui_log" PASS "MAKO: a file naming another GPU" "the card named it with Use the game's GPU, which cleared the key"
+        else
+            ui_result "$ui_log" FAIL "MAKO: a file naming another GPU" "Use the game's GPU left $(grep '^gpu = ' "$config")"
+        fi
+    else
+        ui_result "$ui_log" FAIL "MAKO: a file naming another GPU" "with gpu = \"Another GPU\" in MAKO's profile the card offered no Use the game's GPU"
+    fi
+
+    printf '[profile.handheld]\n[profile.docked]\n' >>"$config"
+    if ui_wait "$map" "On battery##Power" "" "" "$log"; then
+        ui_click "$map" "On battery##Power" 1 "$log" || true
+        ui_set_value "$map" "##Multiplier" 3 "$log" || true
+        if file_says "$config" '^multiplier = 3$' && awk '/^\[profile\.handheld\]$/ { s = 1; next } /^\[/ { s = 0 } s && /^multiplier = 3$/ { found = 1 } END { exit !found }' "$config"; then
+            ui_result "$ui_log" PASS "MAKO: the On battery set" "with both power tables in MAKO's profile, On battery picked, 3 typed into Multiplier went into [profile.handheld] alone"
+        else
+            ui_result "$ui_log" FAIL "MAKO: the On battery set" "3 typed into Multiplier on the On battery tab left: $(tr '\n' ' ' <"$config")"
+        fi
+        ui_hover "$map" "On battery##Power" "$log" || true
+        ui_state "$map" mako-10-power-sets "$ui_log" "both power sets: Plugged in and On battery, the set MAKO uses now marked"
+        ui_click "$map" "Separate settings on battery" 1 "$log" || true
+        if mako_lacks "$config" '^\[profile\.(handheld|docked)\]$'; then
+            ui_result "$ui_log" PASS "MAKO: separate settings on battery, off" "unticked, both power tables were folded back into the profile"
+        else
+            ui_result "$ui_log" FAIL "MAKO: separate settings on battery, off" "unticked, MAKO's file still holds a power table"
+        fi
+        if machine_battery; then
+            ui_click "$map" "Separate settings on battery" 1 "$log" || true
+            if file_says "$config" '^\[profile\.handheld\]$' && file_says "$config" '^\[profile\.docked\]$'; then
+                ui_result "$ui_log" PASS "MAKO: separate settings on battery, on" "on a machine with a battery by MAKO's rule, ticked, it made both power tables, as MAKO needs both"
+            else
+                ui_result "$ui_log" FAIL "MAKO: separate settings on battery, on" "on a machine with a battery by MAKO's rule, ticked, MAKO's file holds no handheld and docked tables"
+            fi
+            ui_click "$map" "Separate settings on battery" 1 "$log" || true
+            mako_lacks "$config" '^\[profile\.(handheld|docked)\]$' || true
+        elif ui_gone "$map" "Separate settings on battery" "$log" && ui_gone "$map" "On battery##Power" "$log"; then
+            ui_result "$ui_log" PASS "MAKO: separate settings on battery, on" "this machine has no battery by MAKO's rule, none whose scope is not Device, so once the tables were folded the switch and the tabs are gone and nothing is offered to tick"
+        else
+            ui_result "$ui_log" FAIL "MAKO: separate settings on battery, on" "this machine has no battery by MAKO's rule, yet with the tables folded the card still shows the switch ($( [ -n "$(ui_line "$map" "Separate settings on battery")" ] && echo yes || echo no)) or the tabs ($( [ -n "$(ui_line "$map" "On battery##Power")" ] && echo yes || echo no))"
+        fi
+    else
+        ui_result "$ui_log" FAIL "MAKO: the power sets" "with both power tables in MAKO's profile the card showed no On battery tab"
+    fi
+
+    ui_click "$map" "On###frameGeneration" 1 "$log" || true
+    mako_says "$config" '^frame_generation_enabled = false$' "$ui_log" "MAKO: Off" "the switch unticked"
+    hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || true
+    if hold_key_until Insert 'frame generation key: ' 1 "$log" && file_says "$config" '^frame_generation_enabled = true$'; then
+        ui_result "$ui_log" PASS "MAKO: the frame generation key" "Insert, the overlay closed, switched MAKO's frame generation on and the notice said $(grep 'frame generation key: ' "$log" | tail -1 | sed -E 's/.*frame generation key: //')"
+    else
+        ui_result "$ui_log" FAIL "MAKO: the frame generation key" "Insert left $(grep '^frame_generation_enabled' "$config" || echo 'no frame_generation_enabled') and the layer said: $(grep 'frame generation key: ' "$log" | tail -1)"
+    fi
+    if ! hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log"; then
+        ui_result "$ui_log" FAIL "MAKO: the Scaling card" "the overlay never opened again"
+        return 0
+    fi
+    ui_click "$map" "Scaling" 1 "$log" || true
+    ui_click "$map" "On###scaling" 1 "$log" || true
+    mako_says "$config" '^scaling_enabled = true$' "$ui_log" "Scaling: On" "ticked"
+    restart_mark_says "$map" "Scaling" 1 "$log" "$ui_log" "Scaling: On waits for the next start" "ticked"
+    ui_pick "$map" Method LS1 "$log" || true
+    mako_says "$config" '^scaling_method = "ls1"$' "$ui_log" "Scaling: Method" "LS1 picked, Lossless.dll set"
+    ui_set_value "$map" "##Sharpness" 0.5 "$log" || true
+    mako_says "$config" '^scaling_sharpness = 0\.5$' "$ui_log" "Scaling: Sharpness" "0.5 typed into it"
+    ui_set_value "$map" "##Factor" 2 "$log" || true
+    mako_says "$config" '^scaling_factor = 2\.0$' "$ui_log" "Scaling: Factor" "2 typed into it"
+    ui_click "$map" "Supersampling" 1 "$log" || true
+    mako_says "$config" '^scaling_supersampling = true$' "$ui_log" "Scaling: Supersampling" "ticked"
+    if tile_says "$log" '; Scaling tile: Next launch$'; then
+        ui_result "$ui_log" PASS "Scaling: the tile" "the tiles say: $(tile_line "$log")"
+    else
+        ui_result "$ui_log" FAIL "Scaling: the tile" "the tiles say: $(tile_line "$log"), want the Scaling tile at Next launch"
+    fi
+    ui_state "$map" mako-11-scaling "$ui_log" "the Scaling card: method, sharpness, factor and supersampling"
+    grep -v '^allow_fp16 = ' "$config.seed" >"$config.kept"
+    if [ -n "$(diff --old-line-format='%L' --new-line-format='' --unchanged-line-format='' "$config.kept" "$config")" ]; then
+        ui_result "$ui_log" FAIL "MAKO: its file keeps every other byte" "the overlay removed or changed lines MAKO's file held before it: $(diff --old-line-format='%L' --new-line-format='' --unchanged-line-format='' "$config.kept" "$config" | head -3 | tr '\n' ' ')"
+    else
+        ui_result "$ui_log" PASS "MAKO: its file keeps every other byte" "every line MAKO's file held before the overlay but the Half precision it was asked to change, comment and other profile included, is still there"
+    fi
+    cp "$config" "$config.written"
+    printf 'version = 2\n\n[[profile]]\nname = "vkdaedalus default"\nactive_in = "/vkcube"\nmultiplier = 9\n' >"$config.refused"
+    cp "$config.refused" "$config"
+    if tile_says "$log" '^Frame generation tile: Unavailable \(MAKO refuses its file .*: multiplier must be between 2 and 5\.\); Scaling tile: Unavailable$'; then
+        ui_result "$ui_log" PASS "MAKO: a file MAKO refuses" "the tiles say: $(tile_line "$log")"
+    else
+        ui_result "$ui_log" FAIL "MAKO: a file MAKO refuses" "the tiles say: $(tile_line "$log")"
+    fi
+    ui_click "$map" "Frame generation" 1 "$log" || true
+    ui_state "$map" mako-12-refused "$ui_log" "a file MAKO refuses: MAKO's own message, the file left alone"
+    if cmp -s "$config" "$config.refused"; then
+        ui_result "$ui_log" PASS "MAKO: a refused file is left alone" "the overlay did not touch the file MAKO refuses"
+    else
+        ui_result "$ui_log" FAIL "MAKO: a refused file is left alone" "the overlay changed the file MAKO refuses"
+    fi
+    ui_states_verdict "$ui_log"
+    hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || true
+}
+
+drive_layer_state() {
+    local log="$1" map="$2" state="$3" home="$4" ui_log="$1.ui" window profile="$4/.config/vkdaedalus/profiles/default.conf"
+    : >"$ui_log"
+    if ! wait_for_line 'present cycle' 30 "$log"; then
+        ui_result "$ui_log" FAIL "frame generation, $state" "the game never reached 30 presents"
+        return 0
+    fi
+    window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '' | tail -1) || true
+    ui_take_window "$window"
+    if ! hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log"; then
+        ui_result "$ui_log" FAIL "frame generation, $state" "$OVERLAY_KEY was held but the overlay never opened"
+        return 0
+    fi
+    ui_click "$map" "Frame generation" 1 "$log" || true
+    case "$state" in
+        neither)
+            if tile_says "$log" '^Frame generation tile: Not installed \(Neither lsfg-vk nor MAKO is installed where this game.s Vulkan loader looks for layers\.\); no Scaling tile$' && [ -z "$(ui_line "$map" "MAKO##Layer")" ]; then
+                ui_result "$ui_log" PASS "frame generation, neither layer installed" "no layer choice, no Scaling tile, and the tiles say: $(tile_line "$log")"
+            else
+                ui_result "$ui_log" FAIL "frame generation, neither layer installed" "layer choice $( [ -n "$(ui_line "$map" "MAKO##Layer")" ] && echo shown || echo hidden), the tiles say: $(tile_line "$log")"
+            fi
+            ui_state "$map" fgl-01-neither "$ui_log" "neither layer installed: one line per layer with where it comes from, no controls"
+            ;;
+        lsfg-vk)
+            if tile_says "$log" '^Frame generation tile: Unavailable \(lsfg-vk\.dll is in no Steam library\); no Scaling tile$' && ui_wait "$map" "MAKO##Layer" 7 1 "$log" && ui_wait "$map" "lsfg-vk##Layer" 8 1 "$log"; then
+                ui_result "$ui_log" PASS "frame generation, lsfg-vk alone installed" "the profile runs lsfg-vk, MAKO is greyed in the layer choice, no Scaling tile, and without lsfg-vk.dll the tiles say: $(tile_line "$log")"
+            else
+                ui_result "$ui_log" FAIL "frame generation, lsfg-vk alone installed" "MAKO choice greyed $(ui_field "$map" "MAKO##Layer" 7), lsfg-vk chosen $(ui_field "$map" "lsfg-vk##Layer" 8), the tiles say: $(tile_line "$log")"
+            fi
+            ui_state "$map" fgl-02-lsfg-vk-only "$ui_log" "lsfg-vk alone installed, its DLL missing: MAKO greyed, lsfg-vk.dll not found, no Scaling tile"
+            ;;
+        both)
+            if tile_says "$log" '; no Scaling tile$' && ui_wait "$map" "lsfg-vk##Layer" 8 1 "$log" && ui_wait "$map" "MAKO##Layer" 7 0 "$log"; then
+                ui_result "$ui_log" PASS "frame generation, both installed" "a profile with no choice runs lsfg-vk, MAKO can be chosen, no Scaling tile"
+            else
+                ui_result "$ui_log" FAIL "frame generation, both installed" "lsfg-vk chosen $(ui_field "$map" "lsfg-vk##Layer" 8), MAKO greyed $(ui_field "$map" "MAKO##Layer" 7), the tiles say: $(tile_line "$log")"
+            fi
+            ui_state "$map" fgl-03-both-lsfg-vk "$ui_log" "both installed: a new profile runs lsfg-vk, MAKO a click away"
+            ui_click "$map" "MAKO##Layer" 1 "$log" || true
+            if file_says "$profile" '^frameGenerationLayer = mako$' && tile_says "$log" '; Scaling tile: Off$'; then
+                ui_result "$ui_log" PASS "frame generation, the layer choice" "MAKO picked saved frameGenerationLayer = mako in default and brought the Scaling tile"
+            else
+                ui_result "$ui_log" FAIL "frame generation, the layer choice" "MAKO picked left $(grep '^frameGenerationLayer' "$profile" || echo 'no frameGenerationLayer') in default, the tiles say: $(tile_line "$log")"
+            fi
+            ui_state "$map" fgl-04-both-mako "$ui_log" "both installed, MAKO picked: MAKO's groups and the Scaling tile"
+            ui_click "$map" "lsfg-vk##Layer" 1 "$log" || true
+            if file_says "$profile" '^frameGenerationLayer = lsfg-vk$' && tile_says "$log" '; no Scaling tile$'; then
+                ui_result "$ui_log" PASS "frame generation, the layer choice back" "lsfg-vk picked saved frameGenerationLayer = lsfg-vk and took the Scaling tile away"
+            else
+                ui_result "$ui_log" FAIL "frame generation, the layer choice back" "lsfg-vk picked left $(grep '^frameGenerationLayer' "$profile" || echo 'no frameGenerationLayer'), the tiles say: $(tile_line "$log")"
+            fi
+            ;;
+        switched)
+            ui_click "$map" "MAKO##Layer" 1 "$log" || true
+            ui_click "$map" "On###frameGeneration" 1 "$log" || true
+            if tile_says "$log" '^Frame generation tile: MAKO, (next launch|needs a model .*); Scaling tile: Off$' && file_says "$profile" '^frameGenerationLayer = mako$'; then
+                ui_result "$ui_log" PASS "frame generation, the layer switched in the run" "vkdaedalus-run kept MAKO out for lsfg-vk with DISABLE_MAKO; MAKO picked and switched on is no blocker and the tiles say: $(tile_line "$log")"
+            else
+                ui_result "$ui_log" FAIL "frame generation, the layer switched in the run" "after MAKO was picked in a run vkdaedalus-run started for lsfg-vk, the tiles say: $(tile_line "$log")"
+            fi
+            if { ui_wait "$map" "Fixed##Mode" "" "" "$log" || ui_wait "$map" "##Mode" "" "" "$log"; } && [ -z "$(ui_line "$map" "Follow Steam##Gamescope VRR")" ] && [ -z "$(ui_line "$map" "##Gamescope VRR")" ]; then
+                ui_result "$ui_log" PASS "MAKO: Gamescope VRR only under gamescope" "with no GAMESCOPE_WAYLAND_DISPLAY in the game's environment, MAKO's card draws its groups and no Gamescope VRR row"
+            else
+                ui_result "$ui_log" FAIL "MAKO: Gamescope VRR only under gamescope" "with no GAMESCOPE_WAYLAND_DISPLAY in the game's environment, MAKO's card $( [ -n "$(ui_line "$map" "Follow Steam##Gamescope VRR")$(ui_line "$map" "##Gamescope VRR")" ] && echo 'drew the Gamescope VRR row' || echo 'never drew its Mode row')"
+            fi
+            ui_state "$map" fgl-05-switched-mid-run "$ui_log" "MAKO picked in a run started for lsfg-vk: it starts at the next launch, not a blocker"
+            ;;
+        disabled)
+            if tile_says "$log" '^Frame generation tile: Unavailable \(DISABLE_MAKO in the game.s launch options keeps MAKO out of it\.\); no Scaling tile$'; then
+                ui_result "$ui_log" PASS "frame generation, the launch options keep its layer out" "started through vkdaedalus-run with DISABLE_MAKO=1 for a profile running MAKO, the variable is the reason and the tiles say: $(tile_line "$log")"
+            else
+                ui_result "$ui_log" FAIL "frame generation, the launch options keep its layer out" "started through vkdaedalus-run with DISABLE_MAKO=1 for a profile running MAKO, the tiles say: $(tile_line "$log")"
+            fi
+            ui_state "$map" fgl-06-launch-options "$ui_log" "DISABLE_MAKO in the launch options of a game whose profile runs MAKO: the variable named as the reason, no Scaling tile"
+            ;;
+    esac
+    ui_states_verdict "$ui_log"
+    hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || true
+}
+
+drive_tile_row() {
+    local log="$1" map="$2" tag="$3" display="$4" ui_log="$1.ui" window
+    : >"$ui_log"
+    if ! wait_for_line 'present cycle' 30 "$log"; then
+        ui_result "$ui_log" FAIL "the tile row at $display" "the game never reached 30 presents"
+        return 0
+    fi
+    window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '' | tail -1) || true
+    ui_take_window "$window"
+    if ! hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log"; then
+        ui_result "$ui_log" FAIL "the tile row at $display" "$OVERLAY_KEY was held but the overlay never opened"
+        return 0
+    fi
+    ui_click "$map" "Frame generation" 1 "$log" || true
+    ui_wait "$map" "lsfg-vk##Layer" 8 1 "$log" || true
+    DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove --window "$window" 1 1 || true
+    ui_state "$map" "row-$tag-1-three" "$ui_log" "$display, three section tiles: the Frame generation card running lsfg-vk"
+    ui_click "$map" "MAKO##Layer" 1 "$log" || true
+    if ! ui_wait "$map" "Scaling" "" "" "$log"; then
+        ui_result "$ui_log" FAIL "the tile row at $display" "MAKO picked never brought the Scaling tile"
+        return 0
+    fi
+    DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove --window "$window" 1 1 || true
+    ui_state "$map" "row-$tag-2-four" "$ui_log" "$display, four section tiles: the Frame generation card running MAKO"
+    ui_click "$map" "Scaling" 1 "$log" || true
+    ui_click "$map" "On###scaling" 1 "$log" || true
+    ui_wait "$map" "##Factor" "" "" "$log" || true
+    DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove --window "$window" 1 1 || true
+    ui_state "$map" "row-$tag-3-scaling" "$ui_log" "$display, four section tiles: the Scaling card switched on"
+    ui_states_verdict "$ui_log"
+    hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || true
+}
+
+lane_ui_layers() {
+    local icd="$1" dir="$2" control="$3" log home map config step name detail state spec tag width height display why
+    log="$dir/mako.log" home="$dir/mako-home" map="$dir/mako.map" config="$dir/mako-home/mako.toml"
+    fresh_home "$home" cas
+    printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+    write_mako_stand_in "$home"
+    printf '# kept as it is\nversion = 2\n\n[global]\nallow_fp16 = true\n\n[[profile]]\nname = "another game"\nactive_in = "/Other.exe"\nmultiplier = 3\n' >"$config.seed"
+    cp "$config.seed" "$config"
+    background drive_mako "$log" "$map" "$config" "$home"
+    driver=$!
+    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" MAKO_CONFIG="$config" VKDAEDALUS_LIVE_MAKO_STAND_IN=1 GAMESCOPE_WAYLAND_DISPLAY=gamescope-0 vkcube --c "$((UI_FRAMES * 2))" --wsi xcb --width 1280 --height 720
+    driver_finished "drive_mako"
+    while IFS=$'\t' read -r step name detail; do
+        record "$step" "$name" "$detail"
+    done <"$log.ui"
+    if ! why=$(plain_verdict "$log" "$control"); then
+        record FAIL "MAKO's card and the Scaling card, cleanly" "$why"
+    fi
+    real_mako_reads_case "$dir" "$config.written" "$icd"
+    for state in neither lsfg-vk both switched disabled; do
+        log="$dir/layers-$state.log" home="$dir/layers-$state-home" map="$dir/layers-$state.map"
+        if { [ "$state" = switched ] || [ "$state" = disabled ]; } && [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then
+            record SKIP "frame generation, $state" "this build has no vkdaedalus-run (a plain meson build installs none)"
+            continue
+        fi
+        fresh_home "$home" cas
+        printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+        local -a extra=()
+        case "$state" in
+            lsfg-vk) write_lsfg_stand_in "$home" ;;
+            both) write_lsfg_stand_in "$home" && write_mako_stand_in "$home" ;;
+            switched)
+                write_lsfg_stand_in "$home"
+                write_mako_stand_in "$home"
+                extra=("$VKB_LAYER/bin/vkdaedalus-run")
+                ;;
+            disabled)
+                write_lsfg_stand_in "$home"
+                write_mako_stand_in "$home"
+                mkdir -p "$home/.config/vkdaedalus/profiles"
+                printf 'frameGenerationLayer = mako\n' >"$home/.config/vkdaedalus/profiles/default.conf"
+                extra=(DISABLE_MAKO=1 "$VKB_LAYER/bin/vkdaedalus-run")
+                ;;
+        esac
+        background drive_layer_state "$log" "$map" "$state" "$home"
+        driver=$!
+        run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" MAKO_CONFIG="$home/mako.toml" LSFGVK_CONFIG="$home/lsfg-vk.toml" \
+            LSFGVK_DLL_PATH="$home/lsfg-vk.dll" VKDAEDALUS_LIVE_LSFGVK_STAND_IN=1 VKDAEDALUS_LIVE_MAKO_STAND_IN=1 "${extra[@]}" vkcube --c "$((UI_FRAMES / 2))" --wsi xcb --width 1280 --height 720
+        driver_finished "drive_layer_state"
+        while IFS=$'\t' read -r step name detail; do
+            record "$step" "$name" "$detail"
+        done <"$log.ui"
+        if ! why=$(plain_verdict "$log" "$control"); then
+            record FAIL "frame generation, $state, cleanly" "$why"
+        fi
+    done
+    if ! fresh_x_server "$dir" 3840x2160; then
+        record FAIL "the tile row on every display shape" "the private X server did not restart at 3840x2160"
+        return
+    fi
+    for spec in "16x9|1920|1080|16:9 at 1920x1080" "16x10|1920|1200|16:10 at 1920x1200" "4x3|1600|1200|4:3 at 1600x1200" "21x9|3440|1440|21:9 at 3440x1440" \
+        "32x9|3840|1080|32:9 at 3840x1080" "portrait|1080|1920|portrait at 1080x1920" "800x600|800|600|800x600"; do
+        IFS='|' read -r tag width height display <<<"$spec"
+        log="$dir/row-$tag.log" home="$dir/row-$tag-home" map="$dir/row-$tag.map"
+        fresh_home "$home" cas
+        printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+        write_lsfg_stand_in "$home"
+        write_mako_stand_in "$home"
+        background drive_tile_row "$log" "$map" "$tag" "$display"
+        driver=$!
+        run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" MAKO_CONFIG="$home/mako.toml" LSFGVK_CONFIG="$home/lsfg-vk.toml" \
+            LSFGVK_DLL_PATH="$home/lsfg-vk.dll" VKDAEDALUS_LIVE_LSFGVK_STAND_IN=1 VKDAEDALUS_LIVE_MAKO_STAND_IN=1 vkcube --c "$((UI_FRAMES / 2))" --wsi xcb --width "$width" --height "$height"
+        driver_finished "drive_tile_row"
+        while IFS=$'\t' read -r step name detail; do
+            record "$step" "$name" "$detail"
+        done <"$log.ui"
+        if ! why=$(plain_verdict "$log" "$control"); then
+            record FAIL "the tile row at $display, cleanly" "$why"
+        fi
+    done
+    fresh_x_server "$dir" || record FAIL "the private X server returns to its size" "it did not restart at 1296x784"
+}
+
 real_lsfg_reads_case() {
     local dir="$1" written="$2" icd="$3" library output errors
     if [ -z "$lsfg_manifest" ]; then
@@ -2942,6 +3806,34 @@ real_lsfg_reads_case() {
         record FAIL "lsfg-vk reads the file the overlay wrote" "$library refused it: $errors"
     else
         record PASS "lsfg-vk reads the file the overlay wrote" "$library read $written with no configuration error"
+    fi
+}
+
+real_mako_reads_case() {
+    local dir="$1" written="$2" icd="$3" library output status=0 name="MAKO reads the file the overlay wrote"
+    if [ -z "$mako_manifest" ]; then
+        record SKIP "$name" "$(mako_skip)"
+        return 0
+    fi
+    if [ ! -s "$written" ]; then
+        record FAIL "$name" "the MAKO card's run left no file at $written"
+        return 0
+    fi
+    mkdir -p "$dir/real-mako-reads"
+    cp "$mako_manifest" "$dir/real-mako-reads/"
+    library=$(sed -n 's/.*"library_path": *"\(.*\)".*/\1/p' "$mako_manifest")
+    output=$(env -u DISABLE_MAKO ENABLE_MAKO=1 VK_DRIVER_FILES="$icd" VK_IMPLICIT_LAYER_PATH="$dir/real-mako-reads" MAKO_CONFIG="$written" VK_LOADER_DEBUG=layer \
+        vulkaninfo --summary 2>&1) || status=$?
+    if [ "$(count '^MAKO Renderer: layer initialization failed' /dev/stdin <<<"$output")" -ne 0 ]; then
+        record FAIL "$name" "MAKO refused it: $(grep -A1 '^MAKO Renderer: layer initialization failed' <<<"$output" | tail -1)"
+    elif [ "$status" -ne 0 ]; then
+        record FAIL "$name" "vulkaninfo exited with $status: $(tail -1 <<<"$output")"
+    elif [ -z "$library" ] || [ "$(count "Loading layer library $library\$" /dev/stdin <<<"$output")" -lt 1 ]; then
+        record FAIL "$name" "the loader never loaded MAKO from $mako_manifest (library ${library:-not named})"
+    elif [ "$(count '^MAKO Renderer: render layer active; identity=VK_LAYER_MAKO_render;' /dev/stdin <<<"$output")" -lt 1 ]; then
+        record FAIL "$name" "MAKO never said its render layer was active"
+    else
+        record PASS "$name" "$library read $written with no configuration error"
     fi
 }
 
@@ -3545,6 +4437,7 @@ lane_ui() {
             record FAIL "the cards at $szDisplay, cleanly" "$why"
         fi
     done
+    lane_ui_layers "$icd" "$dir" "$control"
 }
 
 probe_ask() {
