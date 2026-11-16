@@ -867,8 +867,7 @@ namespace vkBasalt
 
     bool makoLayerLoaded()
     {
-        static const bool loaded = libraryMapped(makoLayerLibrary);
-        return loaded;
+        return loadedFrameGenerationLayer() == FrameGenerationLayer::Mako;
     }
 
     std::optional<bool> makoLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate)
@@ -921,10 +920,5 @@ namespace vkBasalt
 #else
         return std::string("MAKO FG is published for x86-64 only");
 #endif
-    }
-
-    std::string_view loadedFrameGenerationLayerName()
-    {
-        return makoLayerLoaded() ? "MAKO" : "lsfg-vk";
     }
 }

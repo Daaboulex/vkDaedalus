@@ -1171,9 +1171,8 @@ namespace vkBasalt
             if (dladdr(reinterpret_cast<void*>(link->pfnNextGetInstanceProcAddr), &below) && below.dli_fname)
                 librariesBelow.emplace_back(below.dli_fname);
         }
-        const bool                 makoLoaded = makoLayerLoaded();
-        const FrameGenerationPlace place      = makoLoaded ? frameGenerationPlace(librariesBelow, true, makoLayerLibrary)
-                                                           : frameGenerationPlace(librariesBelow, frameGenerationLayerLoaded(), lsfgLayerLibrary);
+        const std::optional<FrameGenerationLayer> loaded = loadedFrameGenerationLayer();
+        const FrameGenerationPlace                place  = frameGenerationPlace(librariesBelow, loaded.has_value(), loaded == FrameGenerationLayer::Mako ? makoLayerLibrary : lsfgLayerLibrary);
         if (place != FrameGenerationPlace::NotLoaded && hooked)
             Logger::info(frameGenerationPlaceWords(place, loadedFrameGenerationLayerName()));
 

@@ -45,6 +45,13 @@ int main()
                vkBasalt::frameGenerationLayerNamed(vkBasalt::frameGenerationLayerName(FrameGenerationLayer::LsfgVk)) == FrameGenerationLayer::LsfgVk &&
                !vkBasalt::frameGenerationLayerNamed("MAKO") && vkBasalt::frameGenerationLayerName(FrameGenerationLayer::Mako) == "mako",
            "each layer reads back by its name, and no other name is a layer");
+    expect(vkBasalt::loadedFrameGenerationLayerOf(true, true) == FrameGenerationLayer::Mako && vkBasalt::loadedFrameGenerationLayerOf(false, true) == FrameGenerationLayer::Mako
+               && vkBasalt::loadedFrameGenerationLayerOf(true, false) == FrameGenerationLayer::LsfgVk && !vkBasalt::loadedFrameGenerationLayerOf(false, false),
+           "with both layers mapped MAKO is the one loaded, as the log, the HUD and the run's order name it");
+    expect(!vkBasalt::layerChangeWaits(vkBasalt::loadedFrameGenerationLayerOf(true, true), FrameGenerationLayer::Mako)
+               && vkBasalt::layerChangeWaits(vkBasalt::loadedFrameGenerationLayerOf(true, true), FrameGenerationLayer::LsfgVk)
+               && !vkBasalt::layerChangeWaits(std::nullopt, FrameGenerationLayer::Mako),
+           "so with both mapped and the profile on MAKO no layer change waits for the next launch, in the card's list and at its Layer mark alike");
     expect(!vkBasalt::loadedAtNextLaunch(FrameGenerationLayer::Mako, false, false),
            "MAKO loads only with ENABLE_MAKO=1, which vkdaedalus-run sets, so a game started without either never runs MAKO, at its next launch either");
     expect(vkBasalt::loadedAtNextLaunch(FrameGenerationLayer::Mako, true, false) && vkBasalt::loadedAtNextLaunch(FrameGenerationLayer::Mako, false, true),

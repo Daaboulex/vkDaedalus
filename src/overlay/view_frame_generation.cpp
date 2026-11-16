@@ -358,7 +358,8 @@ namespace vkBasalt
                 effectGpus[i] = gameGpu;
         const std::optional<uint32_t> multiplier = frameGenerationMultiplierHere();
         const std::string             running(loadedFrameGenerationLayerName());
-        const bool                    makoHere   = makoLayerLoaded() && readMakoOnce() && makoLiveHere() && makoAtStart;
+        const bool                    makoRuns   = loadedFrameGenerationLayer() == FrameGenerationLayer::Mako;
+        const bool                    makoHere   = makoRuns && readMakoOnce() && makoLiveHere() && makoAtStart;
         const MakoSettings*           makoNow    = makoHere ? &makoSettingsFor(*makoProfileInUse(), powerSupplies.source) : nullptr;
         const bool                    adaptive   = frameGenerationAdaptiveHere().has_value();
         std::vector<PipelineStep>     steps      = pipelineSteps(pLogicalDevice->frameGenerationPlace, multiplier.has_value() || adaptive,
@@ -413,7 +414,7 @@ namespace vkBasalt
             const float  w     = std::max(ui::px(96.0f), std::max(named.x, sub.x) + 2.0f * padX);
             const float  textY = at.y + (h - named.y - sub.y) * 0.5f;
             draw->AddRectFilled(at, ImVec2(at.x + w, at.y + h), ImGui::GetColorU32(generation ? ui::mix(palette.row, palette.accent, 0.16f) : palette.row), ui::px(ui::Size::surface));
-            if (generation && elsewhere && running == "MAKO")
+            if (generation && elsewhere && makoRuns)
                 draw->AddRect(at, ImVec2(at.x + w, at.y + h), ImGui::GetColorU32(palette.warn), ui::px(ui::Size::surface), ui::px(1.5f));
             draw->AddText(fonts.bold, title, ImVec2(at.x + padX, textY), ImGui::GetColorU32(generation ? palette.accent : palette.text), name.c_str());
             draw->AddText(fonts.body, under, ImVec2(at.x + padX, textY + named.y), ImGui::GetColorU32(palette.faint), where.c_str());
@@ -421,7 +422,7 @@ namespace vkBasalt
             const std::string item = name + " step";
             UiMap::nameNextItem(item.c_str());
             ImGui::ItemAdd(ImRect(at, ImVec2(at.x + w, at.y + h)), ImGui::GetID(item.c_str()));
-            if (generation && running == "MAKO")
+            if (generation && makoRuns)
                 ImGui::SetItemTooltip("%s", ("MAKO generates frames on " + frameGenerationGpuName + ", the GPU the game renders on: MAKO does not support\n"
                                              "frame generation on another GPU than the game's.")
                                                 .c_str());
@@ -468,7 +469,7 @@ namespace vkBasalt
         std::vector<std::string> waiting;
         if (blocker.empty() && effectsAfterFrameGenerationSaved() != thisRunAfter)
             waiting.push_back("Effects after frame generation");
-        if ((makoLayerLoaded() && !mako) || (frameGenerationLayerLoaded() && mako))
+        if (layerChangeWaits(loadedFrameGenerationLayer(), fg.layer))
             waiting.push_back("Layer");
         if (mako && blocker.empty())
             for (const std::string& changed : makoWaiting(makoInUse))
@@ -583,9 +584,6 @@ namespace vkBasalt
         const OverlayPalette&      palette = activePalette();
         const std::string          tip     = "The frame generation layer of the vkDaedalus profile " + activeProfileName
                                 + ". Read when a game starts: vkdaedalus-run loads this layer alone and keeps the other out.";
-        const std::optional<FrameGenerationLayer> running = makoLayerLoaded()             ? std::optional(FrameGenerationLayer::Mako)
-                                                            : frameGenerationLayerLoaded() ? std::optional(FrameGenerationLayer::LsfgVk)
-                                                                                           : std::nullopt;
         ui::label("Layer");
         ImGui::SetItemTooltip("%s", tip.c_str());
         for (const auto& [choice, shown] : {std::pair{FrameGenerationLayer::LsfgVk, "lsfg-vk"}, std::pair{FrameGenerationLayer::Mako, "MAKO"}})
@@ -605,7 +603,7 @@ namespace vkBasalt
             ImGui::EndDisabled();
             ImGui::SetItemTooltip("%s", why.empty() ? tip.c_str() : why.c_str());
         }
-        restartMark("Layer", running && *running != layer, palette);
+        restartMark("Layer", layerChangeWaits(loadedFrameGenerationLayer(), layer), palette);
     }
 
     void ImGuiOverlay::renderFrameOrderNote()

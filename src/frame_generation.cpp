@@ -834,6 +834,17 @@ namespace vkBasalt
         return loaded;
     }
 
+    std::optional<FrameGenerationLayer> loadedFrameGenerationLayer()
+    {
+        static const std::optional<FrameGenerationLayer> loaded = loadedFrameGenerationLayerOf(frameGenerationLayerLoaded(), libraryMapped(makoLayerLibrary));
+        return loaded;
+    }
+
+    std::string_view loadedFrameGenerationLayerName()
+    {
+        return loadedFrameGenerationLayer() == FrameGenerationLayer::Mako ? "MAKO" : "lsfg-vk";
+    }
+
     std::optional<bool> lsfgLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate)
     {
         return layerListedBy(enumerate, lsfgLayerName);

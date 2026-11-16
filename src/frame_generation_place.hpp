@@ -41,6 +41,18 @@ namespace vkBasalt
         return makoInstalled && (makoEnabledByCaller || !lsfgVkInstalled) ? FrameGenerationLayer::Mako : FrameGenerationLayer::LsfgVk;
     }
 
+    inline std::optional<FrameGenerationLayer> loadedFrameGenerationLayerOf(bool lsfgVkMapped, bool makoMapped)
+    {
+        if (makoMapped)
+            return FrameGenerationLayer::Mako;
+        return lsfgVkMapped ? std::optional<FrameGenerationLayer>(FrameGenerationLayer::LsfgVk) : std::nullopt;
+    }
+
+    inline bool layerChangeWaits(std::optional<FrameGenerationLayer> loaded, FrameGenerationLayer profile)
+    {
+        return loaded && *loaded != profile;
+    }
+
     inline bool loadedAtNextLaunch(FrameGenerationLayer layer, bool startedWithVkdaedalusRun, bool makoEnabled)
     {
         return layer == FrameGenerationLayer::LsfgVk || startedWithVkdaedalusRun || makoEnabled;

@@ -73,10 +73,11 @@ namespace vkBasalt
 
     std::optional<uint32_t> ImGuiOverlay::frameGenerationMultiplierHere()
     {
-        if (!activeGameName.empty() && makoLayerLoaded())
-            return makoMultiplierHere();
-        if (activeGameName.empty() || !frameGenerationLayerLoaded())
+        const std::optional<FrameGenerationLayer> loaded = loadedFrameGenerationLayer();
+        if (activeGameName.empty() || !loaded)
             return std::nullopt;
+        if (*loaded == FrameGenerationLayer::Mako)
+            return makoMultiplierHere();
         readFrameGenerationOnce();
         if (!cardsDrawn())
             refreshFrameGenerationFile(false);
@@ -87,7 +88,7 @@ namespace vkBasalt
 
     std::optional<AdaptiveTarget> ImGuiOverlay::frameGenerationAdaptiveHere()
     {
-        if (activeGameName.empty() || !makoLayerLoaded())
+        if (activeGameName.empty() || loadedFrameGenerationLayer() != FrameGenerationLayer::Mako)
             return std::nullopt;
         return makoAdaptiveHere();
     }
@@ -218,7 +219,7 @@ namespace vkBasalt
             const FrameGenerationPlace place     = pLogicalDevice->frameGenerationPlace;
             const bool                 lsfgFirst = effectsRunAfterFrameGeneration(place);
             const std::string          layer(loadedFrameGenerationLayerName());
-            const bool                 loaded = frameGenerationLayerLoaded() || makoLayerLoaded();
+            const bool                 loaded = loadedFrameGenerationLayer().has_value();
             fact("Image", std::to_string(currentWidth) + "x" + std::to_string(currentHeight) + ", " + formatName(currentFormat) + ", " + colourSpaceName(swapchainColorSpace),
                  nullptr);
             const std::string asked   = "What " + layer + " asked for: it runs before vkDaedalus";

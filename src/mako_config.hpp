@@ -207,7 +207,6 @@ namespace vkBasalt
     bool                makoEnabledByCaller();
     bool                underGamescope();
     std::optional<std::string> makoFgMissing();
-    std::string_view    loadedFrameGenerationLayerName();
 }
 
 #endif

@@ -169,6 +169,8 @@ namespace vkBasalt
     std::optional<bool>        layerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate, std::string_view layer);
     std::optional<bool>        layerVisible(std::string_view layer);
     bool                       frameGenerationLayerLoaded();
+    std::optional<FrameGenerationLayer> loadedFrameGenerationLayer();
+    std::string_view                    loadedFrameGenerationLayerName();
     std::optional<bool>        lsfgLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate);
     std::optional<bool>        frameGenerationLayerVisible();
     std::optional<FrameGenerationLayer> frameGenerationLayerOfThisRun();
