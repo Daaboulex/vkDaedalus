@@ -167,8 +167,9 @@ check's message or a test already says is not repeated here.
 - A `DISABLE_` variable does not say who set it, so `vkdaedalus-run` records the ones the game was
   started with before it sets its own. Only those are named as the reason a layer is out; one it set
   for the other layer leaves the profile's new layer to the next launch. A run started by another
-  run, as a game by its launcher, drops the `DISABLE_` variables the outer run set and did not record:
-  they kept out the layer of the launcher's profile, not of the game's.
+  run, as a game by its launcher, drops the `DISABLE_` variables and the `ENABLE_MAKO=1` the outer run
+  set and did not record: they chose the layer of the launcher's profile, not of the game's. An
+  `ENABLE_MAKO=1` the outer run's caller set is recorded too and counts for the game.
 - `mako-launch` is not used: it replaces `VK_IMPLICIT_LAYER_PATH`, which drops vkDaedalus.
   `vkdaedalus-run` sets the one variable of it MAKO needs, `ENABLE_MAKO=1`.
 - MAKO generates frames only on the game's GPU, so the card offers no GPU and never writes MAKO's
