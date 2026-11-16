@@ -53,6 +53,43 @@ static void* VKAPI_PTR probe_realloc(void* user, void* block, size_t size, size_
     return moved;
 }
 
+static int makeDeviceWithoutGraphics(VkPhysicalDevice physical, const VkAllocationCallbacks* callbacks)
+{
+    uint32_t families = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(physical, &families, NULL);
+    VkQueueFamilyProperties* properties = calloc(families ? families : 1, sizeof(*properties));
+    if (!properties)
+        return -1;
+    vkGetPhysicalDeviceQueueFamilyProperties(physical, &families, properties);
+    uint32_t family = families;
+    for (uint32_t i = 0; i < families && family == families; i++)
+        if (!(properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && (properties[i].queueFlags & (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT)))
+            family = i;
+    free(properties);
+    if (family == families)
+    {
+        fprintf(stderr, "api-probe: no queue family without graphics on this device\n");
+        return 0;
+    }
+    const float                   priority  = 1.0f;
+    const VkDeviceQueueCreateInfo queueInfo = {
+        .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = family,
+        .queueCount       = 1,
+        .pQueuePriorities = &priority,
+    };
+    const VkDeviceCreateInfo deviceInfo = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queueInfo};
+    VkDevice                 device     = VK_NULL_HANDLE;
+    if (vkCreateDevice(physical, &deviceInfo, callbacks, &device) != VK_SUCCESS)
+    {
+        fprintf(stderr, "api-probe: a device on a queue family without graphics could not be made\n");
+        return -1;
+    }
+    vkDestroyDevice(device, callbacks);
+    fprintf(stderr, "api-probe: a device on a queue family without graphics made and destroyed\n");
+    return 1;
+}
+
 int main(void)
 {
     const VkAllocationCallbacks callbacks = {NULL, probe_alloc, probe_realloc, probe_free, NULL, NULL};
@@ -242,6 +279,11 @@ int main(void)
     vkFreeMemory(device, boundMemory, &callbacks);
 
     vkDestroyDevice(device, &callbacks);
+    if (makeDeviceWithoutGraphics(physical, &callbacks) < 0)
+    {
+        vkDestroyInstance(instance, &callbacks);
+        return 1;
+    }
     vkDestroyInstance(instance, &callbacks);
     printf("api-probe: null swapchain and image destroyed, a transient depth attachment made, a depth image bound with vkBindImageMemory2, the application's features left as given, device and instance made and destroyed with application "
            "allocation callbacks, %zu blocks left\n",

@@ -5284,6 +5284,9 @@ lane_config() {
         record FAIL "valid API uses vkcube never makes" "the probe did not finish: $(tail -1 "$log.stdout")"
     elif [ "$(count 'created depth image view' "$log")" -ne 1 ]; then
         record FAIL "valid API uses vkcube never makes" "a depth image bound with vkBindImageMemory2 got $(count 'created depth image view' "$log") depth views from depth capture, want 1"
+    elif [ "$(count '^api-probe: a device on a queue family without graphics made and destroyed$' "$log")" -eq 1 ] \
+        && [ "$(count 'vkDaedalus info: +the layer stays out of a device that asks for no graphics queue' "$log")" -ne 1 ]; then
+        record FAIL "valid API uses vkcube never makes" "a device on a queue family without graphics was not left alone: $(grep -m1 -E 'graphics queue' "$log" || echo the layer said nothing of it)"
     else
         record PASS "valid API uses vkcube never makes" "a null swapchain and image destroyed, a transient depth attachment left alone and a depth image bound with vkBindImageMemory2 captured by depth capture, the application's feature struct given back unchanged, a device made and destroyed with the application's allocation callbacks, validation clean"
     fi

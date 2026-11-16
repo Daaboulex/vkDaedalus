@@ -1272,7 +1272,18 @@ namespace vkBasalt
             return created;
         };
 
-        if (programBypassed() || !pInstance->presents)
+        uint32_t offeredCount = 0;
+        pInstance->vki.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &offeredCount, nullptr);
+        std::vector<VkQueueFamilyProperties> offered(offeredCount);
+        pInstance->vki.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &offeredCount, offered.data());
+        const bool asksGraphics = std::any_of(pCreateInfo->pQueueCreateInfos, pCreateInfo->pQueueCreateInfos + pCreateInfo->queueCreateInfoCount,
+                                              [&](const VkDeviceQueueCreateInfo& asked) {
+                                                  return asked.queueFamilyIndex < offered.size() && (offered[asked.queueFamilyIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT);
+                                              });
+        if (!asksGraphics && !programBypassed() && pInstance->presents)
+            Logger::info("the layer stays out of a device that asks for no graphics queue: it can neither run the effects nor present on it");
+
+        if (programBypassed() || !pInstance->presents || !asksGraphics)
         {
             VkResult ret = createFunc(physicalDevice, pCreateInfo, pAllocator, pDevice);
             if (ret != VK_SUCCESS)
