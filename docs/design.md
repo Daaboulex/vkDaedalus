@@ -158,7 +158,8 @@ check's message or a test already says is not repeated here.
   The choice lives in the vkDaedalus profile, and `vkdaedalus-run` loads that layer and keeps the
   other out with its `DISABLE_` variable.
 - A new profile runs lsfg-vk when both are installed, so nothing changes for anyone until they pick
-  MAKO.
+  MAKO: launch options that set `ENABLE_MAKO=1` without `DISABLE_MAKO` still get MAKO, as they did
+  before the choice existed. A layer the profile names wins over them.
 - Exactly one order layer is on in a game started with `vkdaedalus-run`. The two that put
   vkDaedalus first are keyed on the layer `vkdaedalus-run` names, never on a `DISABLE_` variable:
   the launch options can set those too, and `DISABLE_MAKO` from them once turned on the lsfg-vk order

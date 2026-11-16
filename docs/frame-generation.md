@@ -8,8 +8,9 @@ MAKO), found by the layer's own rules.
 ## Pick the layer
 
 Each vkDaedalus profile runs one of the two. `vkdaedalus-run` loads that one alone and keeps the other out of the
-game, so a change of layer applies from the next launch. A new profile runs lsfg-vk when both are installed, so nothing
-changes for anyone until they pick MAKO, and the one installed when only one is.
+game, so a change of layer applies from the next launch. A profile that names no layer runs lsfg-vk when both are
+installed and the one installed when only one is, so nothing changes for anyone until they pick MAKO: launch options
+that set `ENABLE_MAKO=1` without `DISABLE_MAKO` keep getting MAKO. A layer the profile names always wins.
 
 ## Turn it on
 

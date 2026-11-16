@@ -36,9 +36,9 @@ namespace vkBasalt
         return std::nullopt;
     }
 
-    inline FrameGenerationLayer defaultFrameGenerationLayer(bool lsfgVkInstalled, bool makoInstalled)
+    inline FrameGenerationLayer defaultFrameGenerationLayer(bool lsfgVkInstalled, bool makoInstalled, bool makoEnabledByCaller)
     {
-        return makoInstalled && !lsfgVkInstalled ? FrameGenerationLayer::Mako : FrameGenerationLayer::LsfgVk;
+        return makoInstalled && (makoEnabledByCaller || !lsfgVkInstalled) ? FrameGenerationLayer::Mako : FrameGenerationLayer::LsfgVk;
     }
 
     inline bool loadedAtNextLaunch(FrameGenerationLayer layer, bool startedWithVkdaedalusRun, bool makoEnabled)

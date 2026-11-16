@@ -33,11 +33,14 @@ int main()
                vkBasalt::frameGenerationPlaceWords(FrameGenerationPlace::AboveTheLayer, "lsfg-vk") == "lsfg-vk runs above the layer: effects after frame generation",
            "the log names the layer that generates the frames");
     using vkBasalt::FrameGenerationLayer;
-    expect(vkBasalt::defaultFrameGenerationLayer(false, false) == FrameGenerationLayer::LsfgVk &&
-               vkBasalt::defaultFrameGenerationLayer(true, false) == FrameGenerationLayer::LsfgVk &&
-               vkBasalt::defaultFrameGenerationLayer(false, true) == FrameGenerationLayer::Mako &&
-               vkBasalt::defaultFrameGenerationLayer(true, true) == FrameGenerationLayer::LsfgVk,
+    expect(vkBasalt::defaultFrameGenerationLayer(false, false, false) == FrameGenerationLayer::LsfgVk &&
+               vkBasalt::defaultFrameGenerationLayer(true, false, false) == FrameGenerationLayer::LsfgVk &&
+               vkBasalt::defaultFrameGenerationLayer(false, true, false) == FrameGenerationLayer::Mako &&
+               vkBasalt::defaultFrameGenerationLayer(true, true, false) == FrameGenerationLayer::LsfgVk,
            "a profile with no choice runs the layer that is installed, lsfg-vk when both are or neither is");
+    expect(vkBasalt::defaultFrameGenerationLayer(true, true, true) == FrameGenerationLayer::Mako,
+           "and MAKO when both are and the launch options set ENABLE_MAKO=1 without DISABLE_MAKO, as they did before the layer choice");
+    expect(vkBasalt::defaultFrameGenerationLayer(true, false, true) == FrameGenerationLayer::LsfgVk, "but not when MAKO is not installed");
     expect(vkBasalt::frameGenerationLayerNamed(vkBasalt::frameGenerationLayerName(FrameGenerationLayer::Mako)) == FrameGenerationLayer::Mako &&
                vkBasalt::frameGenerationLayerNamed(vkBasalt::frameGenerationLayerName(FrameGenerationLayer::LsfgVk)) == FrameGenerationLayer::LsfgVk &&
                !vkBasalt::frameGenerationLayerNamed("MAKO") && vkBasalt::frameGenerationLayerName(FrameGenerationLayer::Mako) == "mako",

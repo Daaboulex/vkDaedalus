@@ -7,6 +7,7 @@ if [ $# -eq 0 ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   echo "Sets ENABLE_VKDAEDALUS=1 and preloads the input hook that lets the overlay block the game's Wayland input."
   echo "Loads only the frame generation layer the game's profile runs: for MAKO it sets ENABLE_MAKO=1 and DISABLE_LSFGVK=1,"
   echo "for lsfg-vk DISABLE_MAKO=1, and VKDAEDALUS_RUN_FRAME_GENERATION_LAYER names the layer it loads, lsfg-vk or mako."
+  echo "A profile that names no layer runs MAKO when the game is started with ENABLE_MAKO=1 and no DISABLE_MAKO and MAKO is installed."
   echo "VKDAEDALUS_RUN_CALLER_DISABLED names the DISABLE_LSFGVK and DISABLE_MAKO the game was started with, before it sets its own."
   echo "Started by another vkdaedalus-run, it first drops the DISABLE_LSFGVK and DISABLE_MAKO that run set and did not record."
   echo "VKDAEDALUS_AFTER_MAKO=1 or VKDAEDALUS_AFTER_LSFGVK=1 is set when the profile runs its"

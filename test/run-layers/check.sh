@@ -119,6 +119,10 @@ mapfile -t outer < <(started_by 1)
 expect_run "lsfg-vk, started by a launcher vkdaedalus-run started for MAKO" $'frameGenerationLayer = lsfg-vk\n' both lsfg-vk before '' "${outer[@]}"
 mapfile -t outer < <(started_by 12)
 expect_run "MAKO, started by a launcher whose launch options keep MAKO out" $'frameGenerationLayer = mako\n' both mako before DISABLE_MAKO "${outer[@]}"
+expect_run "no choice, both installed, the launch options enable MAKO" '' both mako before '' ENABLE_MAKO=1
+expect_run "no choice, lsfg-vk alone installed, the launch options enable MAKO" '' lsfg-vk lsfg-vk before '' ENABLE_MAKO=1
+expect_run "no choice, both installed, the launch options enable MAKO and keep it out" '' both lsfg-vk before DISABLE_MAKO ENABLE_MAKO=1 DISABLE_MAKO=1
+expect_run "lsfg-vk, both installed, the launch options enable MAKO" $'frameGenerationLayer = lsfg-vk\n' both lsfg-vk before '' ENABLE_MAKO=1
 
 made="$work/case-9/.config/mako-render/conf.toml"
 want=$'version = 2\n\n[global]\n\n[[profile]]\nname = "vkdaedalus default"\nactive_in = "/Game.exe"\nframe_generation_enabled = false\n'

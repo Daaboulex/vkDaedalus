@@ -185,7 +185,8 @@ namespace vkBasalt
         effectsAfterFrameGenerationSaved();
         if (frameOrderProfilePath == activeProfilePath && frameGenerationLayerChoice)
             return *frameGenerationLayerChoice;
-        return defaultFrameGenerationLayer(frameGenerationLayerInstalled(FrameGenerationLayer::LsfgVk), frameGenerationLayerInstalled(FrameGenerationLayer::Mako));
+        return defaultFrameGenerationLayer(frameGenerationLayerInstalled(FrameGenerationLayer::LsfgVk), frameGenerationLayerInstalled(FrameGenerationLayer::Mako),
+                                           makoEnabledByCaller());
     }
 
     std::string ImGuiOverlay::frameGenerationBlocker(FrameGenerationLayer layer, bool& notInstalled)

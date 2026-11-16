@@ -138,7 +138,7 @@ int main(int argc, char** argv)
     }
     const ProfileSettings      settings = ConfigSerializer::profileSettingsFor(program);
     const FrameGenerationLayer layer    = settings.frameGenerationLayer.value_or(defaultFrameGenerationLayer(
-        lsfgLayerListedBy(vkEnumerateInstanceLayerProperties) == true, makoLayerListedBy(vkEnumerateInstanceLayerProperties) == true));
+        lsfgLayerListedBy(vkEnumerateInstanceLayerProperties) == true, makoLayerListedBy(vkEnumerateInstanceLayerProperties) == true, makoEnabledByCaller()));
     const ActiveProfile        active   = ConfigSerializer::getActiveProfile(program);
     if (program != UNKNOWN_PROGRAM_NAME && !ConfigSerializer::isWineLoaderName(program) && active.kind != ProfileKind::Bypass)
     {
