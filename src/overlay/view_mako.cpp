@@ -67,7 +67,6 @@ namespace vkBasalt
         useMakoFile(read.file);
         makoFileProblem = read.problem;
         makoFileTime    = writeTimeOf(path);
-        makoCheckedAt   = std::chrono::steady_clock::now();
         if (read.file)
             makoGlobalAtStart = read.file->global;
         if (makoProfileHere)
@@ -78,20 +77,15 @@ namespace vkBasalt
     void ImGuiOverlay::refreshMakoFile(bool now)
     {
         const auto clock = std::chrono::steady_clock::now();
-        if (powerReadAt == std::chrono::steady_clock::time_point{} || clock - powerReadAt >= std::chrono::seconds(2))
+        if (powerPoll.due(clock))
         {
-            const bool          first = powerReadAt == std::chrono::steady_clock::time_point{};
-            const PowerSupplies read  = readPowerSupplies("/sys/class/power_supply");
-            powerSupplies.battery     = read.battery;
-            if (first || read.source != MakoPowerSource::Unknown)
+            const PowerSupplies read = readPowerSupplies("/sys/class/power_supply");
+            powerSupplies.battery    = read.battery;
+            if (read.source != MakoPowerSource::Unknown)
                 powerSupplies.source = read.source;
-            powerReadAt = clock;
         }
-        if (!makoRead)
+        if (!makoRead || (!makoFilePoll.due(clock) && !now))
             return;
-        if (!now && clock - makoCheckedAt < std::chrono::milliseconds(500))
-            return;
-        makoCheckedAt                                                = clock;
         const std::string                                    path    = makoConfigPath();
         const std::optional<std::filesystem::file_time_type> written = writeTimeOf(path);
         if (!now && written == makoFileTime)
@@ -197,7 +191,12 @@ namespace vkBasalt
 
     const MakoSettings* ImGuiOverlay::makoGeneratingHere()
     {
-        if (!makoLayerLoaded() || !readMakoOnce() || !makoLiveHere() || !makoAtStart)
+        if (!makoLayerLoaded())
+            return nullptr;
+        readMakoOnce();
+        if (!cardsDrawn())
+            refreshMakoFile(false);
+        if (!makoLiveHere() || !makoAtStart)
             return nullptr;
         const MakoSettings& then = makoSettingsFor(*makoAtStart, powerSupplies.source);
         const MakoSettings& now  = makoSettingsFor(*makoProfileInUse(), powerSupplies.source);

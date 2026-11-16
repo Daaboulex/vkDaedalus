@@ -1,5 +1,6 @@
 #include "mako_config.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -679,6 +680,20 @@ static void detection()
     unsetenv("MAKO_ENV");
 }
 
+static void polls()
+{
+    using std::chrono::milliseconds;
+    const std::chrono::steady_clock::time_point start{std::chrono::hours(1)};
+    Poll                                        file(makoFilePollInterval);
+    expect(file.due(start), "a reader with the overlay closed reads MAKO's file");
+    expect(!file.due(start + milliseconds(249)) && file.due(start + milliseconds(250)), "and again no sooner than MAKO looks at it, every 250 ms");
+    expect(!file.due(start + milliseconds(499)) && file.due(start + milliseconds(500)), "counted from the last look");
+    Poll power(makoPowerPollInterval);
+    expect(power.due(start) && !power.due(start + milliseconds(1999)) && power.due(start + milliseconds(2000)), "and the power source every 2 s, as MAKO does");
+    Poll lsfg(lsfgFilePollInterval);
+    expect(lsfg.due(start) && !lsfg.due(start + milliseconds(499)) && lsfg.due(start + milliseconds(500)), "lsfg-vk's file every half second");
+}
+
 static void overlayFacts(const fs::path& dir)
 {
     MakoProfile plain;
@@ -749,6 +764,7 @@ int main(int argc, char** argv)
     detection();
     paths(dir);
     overlayFacts(dir);
+    polls();
     if (failures)
         std::printf("%d MAKO file check(s) failed\n", failures);
     return failures ? 1 : 0;

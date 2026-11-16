@@ -2,6 +2,7 @@
 #define FRAME_GENERATION_HPP_INCLUDED
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -23,11 +24,30 @@ namespace vkBasalt
     inline constexpr float    highestFlowScale         = 1.0f;
 
     inline constexpr std::string_view lsfgLayerName = sizeof(void*) == 8 ? "VK_LAYER_LSFGVK_frame_generation" : "VK_LAYER_LSFGVK_frame_generation_x86";
+    inline constexpr std::chrono::milliseconds lsfgFilePollInterval{500};
 
     inline constexpr std::array<std::string_view, 5> steamCommonFolders = {".local/share/Steam/steamapps/common", ".steam/steam/steamapps/common",
                                                                          ".steam/debian-installation/steamapps/common",
                                                                          ".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common",
                                                                          "snap/steam/common/.local/share/Steam/steamapps/common"};
+
+    class Poll
+    {
+    public:
+        explicit Poll(std::chrono::milliseconds every) : every(every) {}
+
+        bool due(std::chrono::steady_clock::time_point now)
+        {
+            if (last && now - *last < every)
+                return false;
+            last = now;
+            return true;
+        }
+
+    private:
+        std::chrono::milliseconds                            every;
+        std::optional<std::chrono::steady_clock::time_point> last;
+    };
 
     struct FrameGenerationChoice
     {

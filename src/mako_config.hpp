@@ -16,6 +16,8 @@
 namespace vkBasalt
 {
     inline constexpr std::string_view makoLayerName = "VK_LAYER_MAKO_render";
+    inline constexpr std::chrono::milliseconds makoFilePollInterval{250};
+    inline constexpr std::chrono::milliseconds makoPowerPollInterval{2000};
 
     inline constexpr std::array<FrameGenerationChoice, 2> makoFrameGenerationModels = {
         {{"lossless-scaling", "Lossless Scaling"}, {"mako-fg", "MAKO FG"}}};

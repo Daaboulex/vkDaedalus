@@ -75,8 +75,12 @@ namespace vkBasalt
     {
         if (!activeGameName.empty() && makoLayerLoaded())
             return makoMultiplierHere();
-        if (activeGameName.empty() || !frameGenerationLayerLoaded() || !readFrameGenerationOnce() || !frameGenerationLiveHere()
-            || !generatesFrames(frameGenerationProfileInUse()))
+        if (activeGameName.empty() || !frameGenerationLayerLoaded())
+            return std::nullopt;
+        readFrameGenerationOnce();
+        if (!cardsDrawn())
+            refreshFrameGenerationFile(false);
+        if (!frameGenerationLiveHere() || !generatesFrames(frameGenerationProfileInUse()))
             return std::nullopt;
         return frameGenerationProfileInUse()->multiplier;
     }

@@ -65,7 +65,6 @@ namespace vkBasalt
         frameGenerationFile        = read.file;
         frameGenerationFileProblem = read.problem;
         frameGenerationFileTime    = writeTimeOf(lsfgConfigPath());
-        frameGenerationCheckedAt   = std::chrono::steady_clock::now();
         if (read.file)
         {
             frameGenerationGlobalAtStart = read.file->global;
@@ -79,12 +78,8 @@ namespace vkBasalt
 
     void ImGuiOverlay::refreshFrameGenerationFile(bool now)
     {
-        if (!frameGenerationRead)
+        if (!frameGenerationRead || (!frameGenerationPoll.due(std::chrono::steady_clock::now()) && !now))
             return;
-        const auto clock = std::chrono::steady_clock::now();
-        if (!now && clock - frameGenerationCheckedAt < std::chrono::milliseconds(500))
-            return;
-        frameGenerationCheckedAt                                     = clock;
         const std::string                                    path    = lsfgConfigPath();
         const std::optional<std::filesystem::file_time_type> written = writeTimeOf(path);
         if (!now && written == frameGenerationFileTime)

@@ -291,6 +291,7 @@ namespace vkBasalt
         bool launchNoticeShowing(std::chrono::steady_clock::time_point now);
         void renderLaunchNotice(std::chrono::steady_clock::time_point now);
         bool hudShowing() const;
+        bool cardsDrawn() const { return visible && !isPreviewing(); }
         std::optional<std::string> fixedConfigFile() const;
         void renderHud();
         bool shortNoticeShowing(std::chrono::steady_clock::time_point now);
@@ -437,7 +438,7 @@ namespace vkBasalt
         bool                                  frameGenerationRead = false;
         std::optional<LsfgFile>               frameGenerationFile;
         std::optional<std::filesystem::file_time_type> frameGenerationFileTime;
-        std::chrono::steady_clock::time_point          frameGenerationCheckedAt{};
+        Poll                                           frameGenerationPoll{lsfgFilePollInterval};
         std::string                           frameGenerationFileProblem;
         std::optional<std::string>            frameGenerationProfileHere;
         std::string                           frameGenerationProblem;
@@ -458,7 +459,7 @@ namespace vkBasalt
         bool                                               makoRead = false;
         std::optional<MakoFile>                            makoFile;
         std::optional<std::filesystem::file_time_type>     makoFileTime;
-        std::chrono::steady_clock::time_point              makoCheckedAt{};
+        Poll                                               makoFilePoll{makoFilePollInterval};
         std::string                                        makoFileProblem;
         std::optional<std::string>                         makoProfileHere;
         std::string                                        makoProblem;
@@ -467,7 +468,7 @@ namespace vkBasalt
         std::optional<MakoGlobal>                          makoGlobalAtStart;
         std::optional<DllStatus>                           makoDll;
         PowerSupplies                                      powerSupplies;
-        std::chrono::steady_clock::time_point              powerReadAt{};
+        Poll                                               powerPoll{makoPowerPollInterval};
         std::optional<MakoPowerSource>                     makoTab;
         bool                                               makoFgChecked = false;
         std::string                                        tilesLogged;
