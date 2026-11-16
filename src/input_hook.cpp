@@ -13,6 +13,7 @@
 #include <xcb/xcb.h>
 
 #include <dlfcn.h>
+#include <link.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -35,9 +36,53 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace
 {
+    struct LibrarySearch
+    {
+        const char*              library;
+        std::vector<std::string> paths;
+    };
+
+    int collectLibrary(dl_phdr_info* info, size_t, void* data)
+    {
+        LibrarySearch& search = *static_cast<LibrarySearch*>(data);
+        const char*    path   = info->dlpi_name;
+        if (path == nullptr || *path == '\0')
+            return 0;
+        const char* const slash = std::strrchr(path, '/');
+        if (std::strncmp(slash != nullptr ? slash + 1 : path, search.library, std::strlen(search.library)) == 0)
+            search.paths.emplace_back(path);
+        return 0;
+    }
+
+    void* definedIn(const char* library, const char* name)
+    {
+        LibrarySearch search{library, {}};
+        dl_iterate_phdr(collectLibrary, &search);
+        for (const std::string& path : search.paths)
+        {
+            void* const handle = dlopen(path.c_str(), RTLD_NOW | RTLD_NOLOAD);
+            if (handle == nullptr)
+                continue;
+            void* const at = dlsym(handle, name);
+            dlclose(handle);
+            Dl_info where{};
+            if (at != nullptr && dladdr(at, &where) != 0 && where.dli_fname != nullptr && path == where.dli_fname)
+                return at;
+        }
+        return nullptr;
+    }
+
+    template<typename Function>
+    Function realFunction(const char* library, const char* name)
+    {
+        void* const next = dlsym(RTLD_NEXT, name);
+        return reinterpret_cast<Function>(next != nullptr ? next : definedIn(library, name));
+    }
+
     using AddListener = int (*)(wl_proxy*, void (**)(void), void*);
     using GetClass    = const char* (*)(wl_proxy*);
 
@@ -50,11 +95,9 @@ namespace
     const Wayland& wayland()
     {
         static const Wayland found = [] {
-            Wayland      functions;
-            void* const  library = dlopen("libwayland-client.so.0", RTLD_NOW | RTLD_NOLOAD);
-            void* const  from    = library != nullptr ? library : RTLD_NEXT;
-            functions.addListener = reinterpret_cast<AddListener>(dlsym(from, "wl_proxy_add_listener"));
-            functions.getClass    = reinterpret_cast<GetClass>(dlsym(from, "wl_proxy_get_class"));
+            Wayland functions;
+            functions.addListener = realFunction<AddListener>("libwayland-client.so", "wl_proxy_add_listener");
+            functions.getClass    = realFunction<GetClass>("libwayland-client.so", "wl_proxy_get_class");
             if (functions.addListener == nullptr || functions.getClass == nullptr)
                 std::fprintf(stderr, "vkdaedalus input hook: libwayland-client's wl_proxy_add_listener was not found, so no listener can be added\n");
             return functions;
@@ -336,6 +379,7 @@ namespace
     using XcbGrabPointerReply = xcb_grab_pointer_reply_t* (*)(xcb_connection_t*, xcb_grab_pointer_cookie_t, xcb_generic_error_t**);
     using XcbUngrabPointer    = xcb_void_cookie_t (*)(xcb_connection_t*, xcb_timestamp_t);
     using XcbFlush            = int (*)(xcb_connection_t*);
+    using XcbDisconnect       = void (*)(xcb_connection_t*);
 
     struct Xcb
     {
@@ -346,21 +390,21 @@ namespace
         XcbGrabPointerReply grabPointerReply = nullptr;
         XcbUngrabPointer    ungrabPointer    = nullptr;
         XcbFlush            flush            = nullptr;
+        XcbDisconnect       disconnect       = nullptr;
     };
 
     const Xcb& xcb()
     {
         static const Xcb found = [] {
-            Xcb         functions;
-            void* const library = dlopen("libxcb.so.1", RTLD_NOW | RTLD_NOLOAD);
-            void* const from    = library != nullptr ? library : RTLD_NEXT;
-            functions.poll       = reinterpret_cast<XcbRead>(dlsym(from, "xcb_poll_for_event"));
-            functions.pollQueued = reinterpret_cast<XcbRead>(dlsym(from, "xcb_poll_for_queued_event"));
-            functions.wait       = reinterpret_cast<XcbRead>(dlsym(from, "xcb_wait_for_event"));
-            functions.grabPointer      = reinterpret_cast<XcbGrabPointer>(dlsym(from, "xcb_grab_pointer"));
-            functions.grabPointerReply = reinterpret_cast<XcbGrabPointerReply>(dlsym(from, "xcb_grab_pointer_reply"));
-            functions.ungrabPointer    = reinterpret_cast<XcbUngrabPointer>(dlsym(from, "xcb_ungrab_pointer"));
-            functions.flush            = reinterpret_cast<XcbFlush>(dlsym(from, "xcb_flush"));
+            Xcb functions;
+            functions.poll             = realFunction<XcbRead>("libxcb.so", "xcb_poll_for_event");
+            functions.pollQueued       = realFunction<XcbRead>("libxcb.so", "xcb_poll_for_queued_event");
+            functions.wait             = realFunction<XcbRead>("libxcb.so", "xcb_wait_for_event");
+            functions.grabPointer      = realFunction<XcbGrabPointer>("libxcb.so", "xcb_grab_pointer");
+            functions.grabPointerReply = realFunction<XcbGrabPointerReply>("libxcb.so", "xcb_grab_pointer_reply");
+            functions.ungrabPointer    = realFunction<XcbUngrabPointer>("libxcb.so", "xcb_ungrab_pointer");
+            functions.flush            = realFunction<XcbFlush>("libxcb.so", "xcb_flush");
+            functions.disconnect       = realFunction<XcbDisconnect>("libxcb.so", "xcb_disconnect");
             return functions;
         }();
         return found;
@@ -388,8 +432,8 @@ namespace
         Window       confineTo    = None;
         Cursor       cursor       = None;
     };
-    std::mutex                                    grabMutex;
-    std::unordered_map<Display*, GamePointerGrab> gamePointerGrabs;
+    std::mutex                                            grabMutex;
+    std::unordered_map<xcb_connection_t*, GamePointerGrab> gamePointerGrabs;
 
     using QueryPointer         = Bool (*)(Display*, Window, Window*, Window*, int*, int*, int*, int*, unsigned int*);
     using WarpPointer          = int (*)(Display*, Window, Window, int, int, unsigned int, unsigned int, int, int);
@@ -397,7 +441,6 @@ namespace
     using ConnectionOf         = xcb_connection_t* (*)(Display*);
     using GrabPointer          = int (*)(Display*, Window, Bool, unsigned int, int, int, Window, Cursor, Time);
     using UngrabPointer        = int (*)(Display*, Time);
-    using CloseDisplay         = int (*)(Display*);
 
     struct Xlib
     {
@@ -407,23 +450,18 @@ namespace
         ConnectionOf         connectionOf = nullptr;
         GrabPointer          grab         = nullptr;
         UngrabPointer        ungrab       = nullptr;
-        CloseDisplay         close        = nullptr;
     };
 
     const Xlib& xlib()
     {
         static const Xlib found = [] {
-            Xlib        functions;
-            void* const x11  = dlopen("libX11.so.6", RTLD_NOW | RTLD_NOLOAD);
-            void* const from = x11 != nullptr ? x11 : RTLD_NEXT;
-            void* const xcb  = dlopen("libX11-xcb.so.1", RTLD_NOW | RTLD_NOLOAD);
-            functions.query        = reinterpret_cast<QueryPointer>(dlsym(from, "XQueryPointer"));
-            functions.warp         = reinterpret_cast<WarpPointer>(dlsym(from, "XWarpPointer"));
-            functions.translate    = reinterpret_cast<TranslateCoordinates>(dlsym(from, "XTranslateCoordinates"));
-            functions.grab         = reinterpret_cast<GrabPointer>(dlsym(from, "XGrabPointer"));
-            functions.ungrab       = reinterpret_cast<UngrabPointer>(dlsym(from, "XUngrabPointer"));
-            functions.close        = reinterpret_cast<CloseDisplay>(dlsym(from, "XCloseDisplay"));
-            functions.connectionOf = reinterpret_cast<ConnectionOf>(dlsym(xcb != nullptr ? xcb : RTLD_DEFAULT, "XGetXCBConnection"));
+            Xlib functions;
+            functions.query        = realFunction<QueryPointer>("libX11.so", "XQueryPointer");
+            functions.warp         = realFunction<WarpPointer>("libX11.so", "XWarpPointer");
+            functions.translate    = realFunction<TranslateCoordinates>("libX11.so", "XTranslateCoordinates");
+            functions.grab         = realFunction<GrabPointer>("libX11.so", "XGrabPointer");
+            functions.ungrab       = realFunction<UngrabPointer>("libX11.so", "XUngrabPointer");
+            functions.connectionOf = realFunction<ConnectionOf>("libX11-xcb.so", "XGetXCBConnection");
             return functions;
         }();
         return found;
@@ -607,13 +645,11 @@ namespace
 
     void releaseGamePointerGrabs()
     {
-        const Xcb&         calls        = xcb();
-        const ConnectionOf connectionOf = xlib().connectionOf;
-        if (calls.ungrabPointer == nullptr || calls.flush == nullptr || connectionOf == nullptr)
+        const Xcb& calls = xcb();
+        if (calls.ungrabPointer == nullptr || calls.flush == nullptr)
             return;
-        for (const auto& [display, grab] : gamePointerGrabs)
+        for (const auto& [connection, grab] : gamePointerGrabs)
         {
-            xcb_connection_t* const connection = connectionOf(display);
             calls.ungrabPointer(connection, XCB_CURRENT_TIME);
             calls.flush(connection);
         }
@@ -621,13 +657,11 @@ namespace
 
     void restoreGamePointerGrabs()
     {
-        const Xcb&         calls        = xcb();
-        const ConnectionOf connectionOf = xlib().connectionOf;
-        if (calls.grabPointer == nullptr || calls.grabPointerReply == nullptr || connectionOf == nullptr)
+        const Xcb& calls = xcb();
+        if (calls.grabPointer == nullptr || calls.grabPointerReply == nullptr)
             return;
-        for (const auto& [display, grab] : gamePointerGrabs)
+        for (const auto& [connection, grab] : gamePointerGrabs)
         {
-            xcb_connection_t* const         connection = connectionOf(display);
             xcb_generic_error_t*            error      = nullptr;
             const xcb_grab_pointer_cookie_t asked      = calls.grabPointer(
                 connection, grab.ownerEvents, static_cast<xcb_window_t>(grab.window), static_cast<uint16_t>(grab.eventMask), static_cast<uint8_t>(grab.pointerMode),
@@ -787,18 +821,19 @@ extern "C" __attribute__((visibility("default"))) int XGrabPointer(Display* disp
     const Xlib& functions = xlib();
     if (functions.grab == nullptr)
         return GrabNotViewable;
-    if (ownDisplay(display))
+    xcb_connection_t* const connection = functions.connectionOf != nullptr ? functions.connectionOf(display) : nullptr;
+    if (connection == nullptr || ownDisplay(display))
         return functions.grab(display, window, ownerEvents, eventMask, pointerMode, keyboardMode, confineTo, cursor, time);
     const GamePointerGrab       asked{window, ownerEvents != False, eventMask, pointerMode, keyboardMode, confineTo, cursor};
     std::lock_guard<std::mutex> grabLock(grabMutex);
     if (blocked.load(std::memory_order_acquire))
     {
-        gamePointerGrabs.insert_or_assign(display, asked);
+        gamePointerGrabs.insert_or_assign(connection, asked);
         return GrabSuccess;
     }
     const int status = functions.grab(display, window, ownerEvents, eventMask, pointerMode, keyboardMode, confineTo, cursor, time);
     if (status == GrabSuccess)
-        gamePointerGrabs.insert_or_assign(display, asked);
+        gamePointerGrabs.insert_or_assign(connection, asked);
     return status;
 }
 
@@ -807,24 +842,23 @@ extern "C" __attribute__((visibility("default"))) int XUngrabPointer(Display* di
     const Xlib& functions = xlib();
     if (functions.ungrab == nullptr)
         return 0;
-    if (!ownDisplay(display))
+    if (functions.connectionOf != nullptr && !ownDisplay(display))
     {
         std::lock_guard<std::mutex> grabLock(grabMutex);
-        gamePointerGrabs.erase(display);
+        gamePointerGrabs.erase(functions.connectionOf(display));
     }
     return functions.ungrab(display, time);
 }
 
-extern "C" __attribute__((visibility("default"))) int XCloseDisplay(Display* display)
+extern "C" __attribute__((visibility("default"))) void xcb_disconnect(xcb_connection_t* connection)
 {
-    const Xlib& functions = xlib();
-    if (functions.close == nullptr)
-        return 0;
+    const XcbDisconnect disconnect = xcb().disconnect;
     {
         std::lock_guard<std::mutex> grabLock(grabMutex);
-        gamePointerGrabs.erase(display);
+        gamePointerGrabs.erase(connection);
     }
-    return functions.close(display);
+    if (disconnect != nullptr)
+        disconnect(connection);
 }
 
 extern "C" __attribute__((visibility("default"))) xcb_generic_event_t* xcb_poll_for_event(xcb_connection_t* connection)

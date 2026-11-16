@@ -4609,6 +4609,7 @@ lane_focus() {
         record PASS "focus loss releases input" "the open overlay held the pointer; focus moved to the root window, the layer closed the overlay and the pointer came free"
     fi
     x11_hook_case "$icd" "$dir" "$control"
+    x11_hook_case "$icd" "$dir" "$control" "$VKB_MOCK/lib/libvkdaedalus-test-grab-interposer.so"
     wine_hook_cases "$icd" "$dir"
 }
 
@@ -4693,9 +4694,14 @@ drive_x11_hook() {
 }
 
 x11_hook_case() {
-    local icd="$1" dir="$2" control="$3" name="the input hook holds an X11 game's input" log="$2/x11-hook.log" home="$2/x11-hook-home" map="$2/x11-hook.map"
-    local driver why
-    local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved")
+    local icd="$1" dir="$2" control="$3" beside="${4:-}" name="the input hook holds an X11 game's input" log="$2/x11-hook.log" home="$2/x11-hook-home" map="$2/x11-hook.map"
+    local driver why where=""
+    local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved") preload=()
+    if [ -n "$beside" ]; then
+        name+=", another library hooking XGrabPointer before it" log="$2/x11-hook-beside.log" home="$2/x11-hook-beside-home" map="$2/x11-hook-beside.map"
+        preload=(LD_PRELOAD="$beside")
+        where=", with another library that hooks XGrabPointer and XUngrabPointer and passes them on, as Steam's overlay does, preloaded before the hook"
+    fi
     if [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then
         record SKIP "$name" "this build has no vkdaedalus-run (a plain meson build installs none)"
         return 0
@@ -4704,16 +4710,18 @@ x11_hook_case() {
     printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
     background drive_x11_hook "$log" "$map"
     driver=$!
-    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" "$VKB_LAYER/bin/vkdaedalus-run" x11-input-probe 900 recenter
+    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env "${preload[@]}" VKDAEDALUS_UI_MAP="$map" "$VKB_LAYER/bin/vkdaedalus-run" x11-input-probe 900 recenter
     driver_finished "drive_x11_hook"
     if ! why=$(plain_verdict "$log" "$control"); then
         record FAIL "$name" "$why"
+    elif [ -n "$beside" ] && [ "$(count '^grab-interposer: XGrabPointer passed on$' "$log")" -lt 1 ]; then
+        record FAIL "$name" "the other library never saw the probe's XGrabPointer, so the case proves nothing"
     elif ! file_says "$log" 'x11-input-probe: holds the pointer'; then
         record FAIL "$name" "the probe never held its own pointer grab, as Wine does, so the case proves nothing"
     elif ! why=$(held_input_verdict "$log" x11-input-probe 'x11-input-probe: motion 320 240' "${kinds[@]}"); then
         record FAIL "$name" "$why"
     else
-        record PASS "$name" "a game reading input as Wine does (core and XInput2 raw events through Xlib, the pointer through XQueryPointer) and re-centring it with XWarpPointer, holding its own pointer grab and started with vkdaedalus-run, read nothing while the overlay was open, never moved the overlay's pointer, and read every kind again once it closed"
+        record PASS "$name" "a game reading input as Wine does (core and XInput2 raw events through Xlib, the pointer through XQueryPointer) and re-centring it with XWarpPointer, holding its own pointer grab and started with vkdaedalus-run$where, read nothing while the overlay was open, never moved the overlay's pointer, and read every kind again once it closed"
     fi
 }
 

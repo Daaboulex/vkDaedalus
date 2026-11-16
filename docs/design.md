@@ -120,8 +120,12 @@ check's message or a test already says is not repeated here.
 
 - The hook is a preloaded library: a game's listeners have to be wrapped from the start of the
   process.
-- It finds the real `wl_proxy_add_listener` in the libwayland-client the process already loaded:
-  Wine loads that library in a local scope.
+- Each function the hook takes over calls the next definition after the hook in the dynamic
+  loader's order, so another library that hooks the same function before it, as Steam's overlay
+  does with `XGrabPointer`, is passed on rather than called again. Only when no later definition
+  exists, as when Wine loads libwayland-client or libX11 in a local scope, does it call the one
+  inside that library's own file. A lookup through the library's handle found Steam's overlay in
+  its container, which called the hook back and locked it.
 - The layer finds the hook through one exported table. The hook never calls into the layer, which
   may unload.
 - Wine's `SetCursorPos` warps the pointer while Wine holds a pointer grab, which no event filter
@@ -132,7 +136,9 @@ check's message or a test already says is not repeated here.
   confined to that pixel, and the overlay reads that same pointer. So while the overlay is open the
   hook lets go of the game's pointer grab and keeps any grab the game asks for meanwhile, then gives
   it back before the game reads input again. It gives it back through XCB, so a grab the X server
-  refuses reaches the hook's log rather than the game's X error handler.
+  refuses reaches the hook's log rather than the game's X error handler. A grab is kept per X
+  connection and dropped when that connection closes. `XCloseDisplay` is not taken over: with it
+  taken over, Proton's start under NVIDIA's GLX library called it without end and never went on.
 - Pointer crossing events are held too: Wine turns an EnterNotify into a mouse move.
 - A game that asks the X server for detectable autorepeat gets a held key's repeats as presses with
   no release between. So a repeat dropped while the overlay is open never holds back the release of
