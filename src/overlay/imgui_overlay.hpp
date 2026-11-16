@@ -220,6 +220,7 @@ namespace vkBasalt
             bool                 notInstalled = false;
             bool                 on           = false;
             bool                 live         = false;
+            bool                 loadsNextLaunch = true;
             std::string          unavailable;
         };
         FrameGenerationState frameGenerationState();

@@ -203,6 +203,7 @@ namespace vkBasalt
     std::optional<bool> makoLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate);
     std::optional<bool> makoLayerVisible();
     bool                makoSettingsFromEnvironment();
+    bool                makoEnabledInEnvironment();
     bool                underGamescope();
     std::optional<std::string> makoFgMissing();
     std::string_view    loadedFrameGenerationLayerName();

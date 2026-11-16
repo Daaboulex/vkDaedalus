@@ -887,6 +887,11 @@ namespace vkBasalt
         return std::getenv("MAKO_ENV") != nullptr;
     }
 
+    bool makoEnabledInEnvironment()
+    {
+        return nonEmptyEnvironment("ENABLE_MAKO") == "1";
+    }
+
     bool underGamescope()
     {
         return nonEmptyEnvironment("GAMESCOPE_WAYLAND_DISPLAY").has_value();

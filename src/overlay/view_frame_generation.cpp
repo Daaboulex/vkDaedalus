@@ -197,6 +197,7 @@ namespace vkBasalt
     {
         FrameGenerationState fg;
         fg.layer   = profileFrameGenerationLayer();
+        fg.loadsNextLaunch = loadedAtNextLaunch(fg.layer, startedWithVkdaedalusRun(), makoEnabledInEnvironment());
         fg.blocker = frameGenerationBlocker(fg.layer, fg.notInstalled);
         if (fg.notInstalled && !frameGenerationLayerInstalled(FrameGenerationLayer::LsfgVk) && !frameGenerationLayerInstalled(FrameGenerationLayer::Mako))
             fg.blocker = "Neither lsfg-vk nor MAKO is installed where this game's Vulkan loader looks for layers.";
@@ -321,7 +322,7 @@ namespace vkBasalt
                 shortNoticeLine = "not changed: " + makoProblem;
             else if (after.on && set)
                 shortNoticeLine = "MAKO " + (set->adaptive ? std::string("adaptive") : std::to_string(set->multiplier) + "x") + ", on"
-                                  + (after.live ? "" : ", from the next launch");
+                                  + (after.live ? "" : after.loadsNextLaunch ? ", from the next launch" : ", needs vkdaedalus-run");
             else
                 shortNoticeLine = "off";
             Logger::info("frame generation key: " + shortNoticeLine);
@@ -483,6 +484,7 @@ namespace vkBasalt
                 waiting.push_back(global);
 
         const std::string readyFromFirstLaunch = startedWithVkdaedalusRun() ? "" : "\nA game started with vkdaedalus-run has " + name + " ready from its first launch.";
+        const std::string notLoaded            = fg.loadsNextLaunch ? name + " was not loaded when this game started" : std::string(makoNeedsVkdaedalusRun);
         ui::heading("Frame generation");
         if (inUse)
             ImGui::SetItemTooltip("Kept in lsfg-vk's profile '%s', used in: %s", inUse->name.c_str(), joined(inUse->activeIn).c_str());
@@ -495,7 +497,7 @@ namespace vkBasalt
         else if (!on && !loaded)
         {
             ImGui::TextColored(palette.muted, "Off, not loaded");
-            ImGui::SetItemTooltip("%s was not loaded when this game started, so On runs from the next launch.%s", name.c_str(), readyFromFirstLaunch.c_str());
+            ImGui::SetItemTooltip("%s", fg.loadsNextLaunch ? (notLoaded + ", so On runs from the next launch." + readyFromFirstLaunch).c_str() : notLoaded.c_str());
         }
         else if (!on)
             ImGui::TextColored(palette.muted, "Off");
@@ -508,8 +510,8 @@ namespace vkBasalt
             ImGui::TextColored(palette.ok, "%s, on", amount.c_str());
         else
         {
-            ImGui::TextColored(palette.warn, "%s, next launch", amount.c_str());
-            ImGui::SetItemTooltip("%s", !loaded ? (name + " was not loaded when this game started").c_str()
+            ImGui::TextColored(palette.warn, "%s, %s", amount.c_str(), fg.loadsNextLaunch ? "next launch" : "needs vkdaedalus-run");
+            ImGui::SetItemTooltip("%s", !loaded ? notLoaded.c_str()
                                         : mako  ? "MAKO set up no frame generation when this game started: Ready at start was off, or MAKO ran another profile"
                                                 : "lsfg-vk was not loaded when this game started");
         }

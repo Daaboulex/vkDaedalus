@@ -41,6 +41,11 @@ namespace vkBasalt
         return makoInstalled && !lsfgVkInstalled ? FrameGenerationLayer::Mako : FrameGenerationLayer::LsfgVk;
     }
 
+    inline bool loadedAtNextLaunch(FrameGenerationLayer layer, bool startedWithVkdaedalusRun, bool makoEnabled)
+    {
+        return layer == FrameGenerationLayer::LsfgVk || startedWithVkdaedalusRun || makoEnabled;
+    }
+
     inline constexpr std::string_view lsfgLayerLibrary = "liblsfg-vk-layer";
     inline constexpr std::string_view makoLayerLibrary = "libmako-render.so";
 

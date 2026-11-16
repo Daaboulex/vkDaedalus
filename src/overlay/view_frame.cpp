@@ -253,7 +253,7 @@ namespace vkBasalt
         }
         else if (fg.on)
         {
-            fgLine = layerName + ", next launch";
+            fgLine = layerName + (fg.loadsNextLaunch ? ", next launch" : ", needs vkdaedalus-run");
             fgInk  = palette.warn;
         }
         std::string  scalingLine = "Off";
@@ -267,7 +267,7 @@ namespace vkBasalt
         else if (makoSet && makoSet->scalingEnabled)
         {
             const bool started = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).scalingEnabled;
-            scalingLine        = started ? shownChoice(makoScalingMethods, makoSet->scalingMethod) + " " + factorText(makoSet->scalingFactor) : "Next launch";
+            scalingLine        = started ? shownChoice(makoScalingMethods, makoSet->scalingMethod) + " " + factorText(makoSet->scalingFactor) : fg.loadsNextLaunch ? "Next launch" : "Needs vkdaedalus-run";
             scalingInk         = started ? palette.accent : palette.warn;
         }
         const size_t gpusRunning = 1 + static_cast<size_t>(std::count_if(state.gpus.begin(), state.gpus.end(),

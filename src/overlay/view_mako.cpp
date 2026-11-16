@@ -321,7 +321,9 @@ namespace vkBasalt
     {
         const OverlayPalette& palette = activePalette();
         const MakoProfile*    inUse   = makoProfileInUse();
-        const bool            live    = frameGenerationState().live;
+        const FrameGenerationState fg = frameGenerationState();
+        const bool            live    = fg.live;
+        const char*           later   = fg.loadsNextLaunch ? "from the next launch" : "needs vkdaedalus-run";
         const std::string     shown   = inUse ? inUse->name : frameGenerationProfileNameOf(activeProfileName);
         if (makoLayerLoaded() && makoProfileHere && *makoProfileHere != shown)
             ui::noteBox(("Running " + *makoProfileHere + "; " + shown + " from the next launch").c_str(), palette.warn);
@@ -400,8 +402,8 @@ namespace vkBasalt
         {
             ImGui::TableNextColumn();
             const std::string liveTip = "Kept in MAKO's profile " + tuned.name + ", which every game running the vkDaedalus profile " + activeProfileName
-                                        + " shares. Applies at once" + (live ? "." : " once MAKO runs this profile, from the next launch.");
-            caption("Live", live ? "profile" : "profile, from the next launch", liveTip.c_str());
+                                        + " shares. Applies at once" + (live ? "." : std::string(" once MAKO runs this profile, ") + later + ".");
+            caption("Live", live ? "profile" : std::string("profile, ") + later, liveTip.c_str());
             ui::beginPanel();
             const float column = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
             ui::panelRow();
@@ -678,6 +680,7 @@ namespace vkBasalt
         const bool            startedOn = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).scalingEnabled;
         const bool            pending   = inUse && makoSettingsFor(*inUse, powerSupplies.source).scalingEnabled != makoSettingsAtStart().scalingEnabled;
         const std::string     amount    = shownChoice(makoScalingMethods, running.scalingMethod) + " " + factorText(running.scalingFactor);
+        const bool            loads     = loadedAtNextLaunch(FrameGenerationLayer::Mako, startedWithVkdaedalusRun(), makoEnabledInEnvironment());
 
         ui::heading("Scaling");
         if (inUse)
@@ -692,8 +695,8 @@ namespace vkBasalt
             ImGui::TextColored(palette.ok, "%s, on", amount.c_str());
         else
         {
-            ImGui::TextColored(palette.warn, "%s, next launch", amount.c_str());
-            ImGui::SetItemTooltip("MAKO starts scaling when the game starts");
+            ImGui::TextColored(palette.warn, "%s, %s", amount.c_str(), loads ? "next launch" : "needs vkdaedalus-run");
+            ImGui::SetItemTooltip("%s", loads ? "MAKO starts scaling when the game starts" : std::string(makoNeedsVkdaedalusRun).c_str());
         }
         ui::alignRight(ui::px(ui::Size::box) + ui::px(ui::Size::gap) + ImGui::CalcTextSize("On").x + ui::px(restartMarkGap + restartMarkSize));
         ImGui::BeginDisabled(!blocker.empty());
@@ -767,7 +770,7 @@ namespace vkBasalt
         {
             ImGui::TableNextColumn();
             const bool live = makoLiveHere() && startedOn;
-            caption("Live", live ? "profile" : "profile, from the next launch",
+            caption("Live", live ? "profile" : loads ? "profile, from the next launch" : "profile, needs vkdaedalus-run",
                     ("Kept in MAKO's profile " + tuned.name + ". Applies at once while MAKO scales the game.").c_str());
             ui::beginPanel();
             const float column = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);

@@ -42,6 +42,11 @@ int main()
                vkBasalt::frameGenerationLayerNamed(vkBasalt::frameGenerationLayerName(FrameGenerationLayer::LsfgVk)) == FrameGenerationLayer::LsfgVk &&
                !vkBasalt::frameGenerationLayerNamed("MAKO") && vkBasalt::frameGenerationLayerName(FrameGenerationLayer::Mako) == "mako",
            "each layer reads back by its name, and no other name is a layer");
+    expect(!vkBasalt::loadedAtNextLaunch(FrameGenerationLayer::Mako, false, false),
+           "MAKO loads only with ENABLE_MAKO=1, which vkdaedalus-run sets, so a game started without either never runs MAKO, at its next launch either");
+    expect(vkBasalt::loadedAtNextLaunch(FrameGenerationLayer::Mako, true, false) && vkBasalt::loadedAtNextLaunch(FrameGenerationLayer::Mako, false, true),
+           "a game vkdaedalus-run started, or one started with ENABLE_MAKO=1, runs MAKO from its next launch");
+    expect(vkBasalt::loadedAtNextLaunch(FrameGenerationLayer::LsfgVk, false, false), "lsfg-vk joins every game at its next launch unless a blocker keeps it out");
 
     expect(vkBasalt::frameGenerationPlace({loader, driver}, true, vkBasalt::lsfgLayerLibrary) == FrameGenerationPlace::AboveTheLayer,
            "lsfg-vk loaded but not below the layer is above it");

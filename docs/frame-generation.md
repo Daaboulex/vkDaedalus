@@ -46,8 +46,8 @@ when the game started, since MAKO sets up frame generation only then. The `Inser
 
 lsfg-vk joins a game, and MAKO sets up frame generation in it, only if the layer's file holds a profile for the game
 when the game starts. `vkdaedalus-run` lists the game in its profile's lsfg-vk profile at multiplier 1, or in its MAKO
-profile with frame generation off, before the start, so the first switch needs no relaunch. A game started without it gets frame generation from the launch after
-the one where it was first switched on.
+profile with frame generation off, before the start, so the first switch needs no relaunch. A game started without it gets lsfg-vk from the launch after the one where it was
+first switched on, and never MAKO: MAKO loads only with `ENABLE_MAKO=1`, which `vkdaedalus-run` sets, and the card says so.
 
 ## Per profile
 

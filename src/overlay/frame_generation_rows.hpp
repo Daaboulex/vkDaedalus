@@ -28,6 +28,9 @@ namespace vkBasalt
         return written;
     }
 
+    inline constexpr std::string_view makoNeedsVkdaedalusRun =
+        "MAKO loads only in a game started with vkdaedalus-run, which sets ENABLE_MAKO=1 for it. Launch option: vkdaedalus-run %command%";
+
     inline std::string joined(const std::vector<std::string>& names)
     {
         std::string out;

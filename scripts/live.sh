@@ -3350,14 +3350,14 @@ drive_mako() {
         ui_result "$ui_log" FAIL "MAKO: On" "switching it on never wrote MAKO's profile vkdaedalus default listing vkcube with frame generation on: $(tr '\n' ' ' <"$config")"
         return 0
     fi
-    if [ "$(uname -m)" = x86_64 ]; then want='^Frame generation tile: MAKO, next launch; Scaling tile: Off$'; else want='^Frame generation tile: MAKO, needs a model \(MAKO FG is published for x86-64 only\); Scaling tile: Off$'; fi
+    if [ "$(uname -m)" = x86_64 ]; then want='^Frame generation tile: MAKO, needs vkdaedalus-run; Scaling tile: Off$'; else want='^Frame generation tile: MAKO, needs a model \(MAKO FG is published for x86-64 only\); Scaling tile: Off$'; fi
     if tile_says "$log" "$want"; then
         ui_result "$ui_log" PASS "MAKO: On" "it wrote MAKO's profile vkdaedalus default listing vkcube, frame generation on, and the tiles say: $(tile_line "$log")"
     else
         ui_result "$ui_log" FAIL "MAKO: On" "the tiles say: $(tile_line "$log"), want $want"
     fi
     ui_hover "$map" "Lossless Scaling##Model" "$log" || true
-    ui_state "$map" mako-02-on "$ui_log" "MAKO switched on: its profile written; MAKO is not loaded in this game, so it runs from the next launch"
+    ui_state "$map" mako-02-on "$ui_log" "MAKO switched on: its profile written; MAKO is not loaded in this game, which vkdaedalus-run did not start, so the card says MAKO needs it"
 
     ui_pick "$map" Mode Adaptive "$log" || true
     mako_says "$config" '^adaptive = true$' "$ui_log" "MAKO: Mode" "Adaptive picked"
@@ -3557,10 +3557,10 @@ drive_mako() {
     mako_says "$config" '^scaling_factor = 2\.0$' "$ui_log" "Scaling: Factor" "2 typed into it"
     ui_click "$map" "Supersampling" 1 "$log" || true
     mako_says "$config" '^scaling_supersampling = true$' "$ui_log" "Scaling: Supersampling" "ticked"
-    if tile_says "$log" '; Scaling tile: Next launch$'; then
+    if tile_says "$log" '; Scaling tile: Needs vkdaedalus-run$'; then
         ui_result "$ui_log" PASS "Scaling: the tile" "the tiles say: $(tile_line "$log")"
     else
-        ui_result "$ui_log" FAIL "Scaling: the tile" "the tiles say: $(tile_line "$log"), want the Scaling tile at Next launch"
+        ui_result "$ui_log" FAIL "Scaling: the tile" "the tiles say: $(tile_line "$log"), want the Scaling tile at Needs vkdaedalus-run, as vkdaedalus-run did not start this game"
     fi
     ui_state "$map" mako-11-scaling "$ui_log" "the Scaling card: method, sharpness, factor and supersampling"
     grep -v '^allow_fp16 = ' "$config.seed" >"$config.kept"
