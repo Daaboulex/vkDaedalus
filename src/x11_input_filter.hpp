@@ -37,6 +37,15 @@ namespace vkBasalt
         }
     };
 
+    inline bool isX11RawInput(const uint8_t* event, int xinputOpcode)
+    {
+        if ((event[0] & static_cast<uint8_t>(~x11::sendEventBit)) != GenericEvent || xinputOpcode < 0 || event[1] != xinputOpcode)
+            return false;
+        uint16_t evtype = 0;
+        std::memcpy(&evtype, event + x11::genericEventTypeAt, sizeof(evtype));
+        return (evtype >= XI_RawKeyPress && evtype <= XI_RawMotion) || (evtype >= XI_RawTouchBegin && evtype <= XI_RawTouchEnd);
+    }
+
     inline bool dropX11Input(const uint8_t* event, int xinputOpcode, X11DroppedPresses& dropped)
     {
         const uint8_t type   = event[0] & static_cast<uint8_t>(~x11::sendEventBit);

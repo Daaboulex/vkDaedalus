@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "cachyos-pkgbuilds": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794706725,
+        "narHash": "sha256-m4e38hIpGdw/shSRIM9iar3Bz7wj/SjbbcSPoZ3/XGs=",
+        "owner": "CachyOS",
+        "repo": "CachyOS-PKGBUILDS",
+        "rev": "6c6dc367b7457e43b3b631315340d181e265d9e1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "CachyOS",
+        "repo": "CachyOS-PKGBUILDS",
+        "type": "github"
+      }
+    },
     "filedetectionrulesets": {
       "flake": false,
       "locked": {
@@ -232,7 +248,8 @@
         "stb": "stb",
         "stb_image_resize": "stb_image_resize",
         "std": "std",
-        "tomlplusplus": "tomlplusplus"
+        "tomlplusplus": "tomlplusplus",
+        "wine-cachyos": "wine-cachyos"
       }
     },
     "stb": {
@@ -305,6 +322,36 @@
       "original": {
         "owner": "marzer",
         "repo": "tomlplusplus",
+        "type": "github"
+      }
+    },
+    "wine-cachyos": {
+      "inputs": {
+        "cachyos-pkgbuilds": "cachyos-pkgbuilds",
+        "flake-parts": [
+          "flake-parts"
+        ],
+        "git-hooks": [
+          "git-hooks"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "std": [
+          "std"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794747329,
+        "narHash": "sha256-kXGwZ6rK6NZzDg5GAOggJmjaFc0hJD2q5h8oNjY/sEs=",
+        "owner": "Daaboulex",
+        "repo": "wine-cachyos-nix",
+        "rev": "9e4f3b28586c69397e0e5cb7740c5277c50b50f7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Daaboulex",
+        "repo": "wine-cachyos-nix",
         "type": "github"
       }
     }

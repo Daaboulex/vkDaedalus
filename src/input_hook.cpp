@@ -1,4 +1,5 @@
 #include "input_hook.hpp"
+#include "wine_process.hpp"
 #include "x11_input_filter.hpp"
 
 #include "pointer-gestures-unstable-v1-client-protocol.h"
@@ -11,13 +12,22 @@
 #include <xcb/xcb.h>
 
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cerrno>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <string_view>
 #include <mutex>
 #include <optional>
 #include <type_traits>
@@ -391,14 +401,105 @@ namespace
     std::atomic<int>                xinputOpcode{-1};
     vkBasalt::X11DroppedPresses     droppedPresses;
 
+    struct PrefixInput
+    {
+        int32_t  holder;
+        uint32_t holds;
+        int32_t  xinputOpcode;
+    };
+
+    PrefixInput* mapPrefixInput()
+    {
+        std::array<char, PATH_MAX> exe{};
+        const ssize_t              length = readlink("/proc/self/exe", exe.data(), exe.size() - 1);
+        if (length <= 0)
+            return nullptr;
+        const std::string_view path(exe.data(), static_cast<size_t>(length));
+        if (!vkBasalt::isWineLoader(path.substr(path.find_last_of('/') + 1)))
+            return nullptr;
+        const std::string prefix  = vkBasalt::winePrefixFrom(std::getenv("WINEPREFIX"), std::getenv("HOME"));
+        const char*       runtime = std::getenv("XDG_RUNTIME_DIR");
+        struct stat       folder  = {};
+        if (prefix.empty() || runtime == nullptr || *runtime == '\0' || stat(prefix.c_str(), &folder) != 0)
+        {
+            std::fprintf(stderr,
+                         "vkdaedalus input hook: no XDG_RUNTIME_DIR or no Wine prefix at '%s', so the raw input this Wine process reads for its prefix "
+                         "is never held for the game\n",
+                         prefix.c_str());
+            return nullptr;
+        }
+        const std::string name = std::string(runtime) + "/vkdaedalus-input-" + std::to_string(folder.st_dev) + "-" + std::to_string(folder.st_ino);
+        const int         fd   = open(name.c_str(), O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0600);
+        struct stat       file = {};
+        void*             mapped = MAP_FAILED;
+        if (fd >= 0 && fstat(fd, &file) == 0 && (file.st_size >= static_cast<off_t>(sizeof(PrefixInput)) || ftruncate(fd, sizeof(PrefixInput)) == 0))
+            mapped = mmap(nullptr, sizeof(PrefixInput), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        const int error = errno;
+        if (fd >= 0)
+            close(fd);
+        if (mapped == MAP_FAILED)
+        {
+            std::fprintf(stderr, "vkdaedalus input hook: %s could not be shared (%s), so the raw input this Wine process reads for its prefix is never held for the game\n",
+                         name.c_str(), std::strerror(error));
+            return nullptr;
+        }
+        return static_cast<PrefixInput*>(mapped);
+    }
+
+    PrefixInput* prefixInput()
+    {
+        static PrefixInput* const shared = mapPrefixInput();
+        return shared;
+    }
+
+    template<typename Field>
+    std::atomic_ref<Field> sharedField(Field& field)
+    {
+        static_assert(std::atomic_ref<Field>::is_always_lock_free, "a field other processes map is read and written without a lock");
+        return std::atomic_ref<Field>(field);
+    }
+
+    bool prefixHoldsInput()
+    {
+        PrefixInput* const prefix = prefixInput();
+        if (prefix == nullptr)
+            return false;
+        const int32_t holder = sharedField(prefix->holder).load(std::memory_order_acquire);
+        return holder != 0 && holder != getpid() && (kill(holder, 0) == 0 || errno == EPERM);
+    }
+
+    int knownXInputOpcode()
+    {
+        const int own = xinputOpcode.load(std::memory_order_acquire);
+        if (own >= 0)
+            return own;
+        PrefixInput* const prefix = prefixInput();
+        const int32_t      shared = prefix != nullptr ? sharedField(prefix->xinputOpcode).load(std::memory_order_acquire) : 0;
+        return shared > 0 ? shared : -1;
+    }
+
+    uint32_t holdSeen = 0;
+
     bool dropWhileBlocked(xcb_connection_t* connection, const xcb_generic_event_t* event)
     {
-        if (event == nullptr || !blocked.load(std::memory_order_acquire))
+        if (event == nullptr)
             return false;
+        const bool own = blocked.load(std::memory_order_acquire);
+        if (!own && !prefixHoldsInput())
+            return false;
+        const uint8_t* bytes  = reinterpret_cast<const uint8_t*>(event);
+        const int      opcode = knownXInputOpcode();
         std::lock_guard<std::mutex> lock(mutex);
         if (ownConnections.count(connection) > 0)
             return false;
-        return vkBasalt::dropX11Input(reinterpret_cast<const uint8_t*>(event), xinputOpcode.load(std::memory_order_acquire), droppedPresses);
+        if (own)
+            return vkBasalt::dropX11Input(bytes, opcode, droppedPresses);
+        if (const uint32_t hold = sharedField(prefixInput()->holds).load(std::memory_order_acquire); hold != holdSeen)
+        {
+            droppedPresses.clear();
+            holdSeen = hold;
+        }
+        return vkBasalt::isX11RawInput(bytes, opcode) && vkBasalt::dropX11Input(bytes, opcode, droppedPresses);
     }
 
     xcb_generic_event_t* readKept(XcbRead read, xcb_connection_t* connection)
@@ -428,13 +529,23 @@ namespace
     void setXInputOpcode(int opcode)
     {
         xinputOpcode.store(opcode, std::memory_order_release);
+        if (PrefixInput* const prefix = prefixInput())
+            sharedField(prefix->xinputOpcode).store(opcode, std::memory_order_release);
     }
 
     void setBlocked(bool block)
     {
         blocked.store(block, std::memory_order_release);
+        PrefixInput* const prefix = prefixInput();
+        if (block && prefix != nullptr)
+        {
+            sharedField(prefix->holds).fetch_add(1, std::memory_order_acq_rel);
+            sharedField(prefix->holder).store(getpid(), std::memory_order_release);
+        }
         if (!block)
         {
+            if (int32_t self = getpid(); prefix != nullptr)
+                sharedField(prefix->holder).compare_exchange_strong(self, 0, std::memory_order_acq_rel);
             std::lock_guard<std::mutex> lock(mutex);
             droppedPresses.clear();
             heldPointers.clear();

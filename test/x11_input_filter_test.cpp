@@ -83,6 +83,14 @@ int main()
            "an XI2 key is paired by its key, not by when it came: its own release is dropped and another key's passes");
     expect(!dropX11Input(generic(xi + 1, XI_RawMotion, 0).data(), xi, dropped), "a generic event of another extension, such as Present, reaches the game");
     expect(!dropX11Input(generic(xi, XI_RawMotion, 0).data(), -1, dropped), "with the XInput opcode unknown, no generic event is dropped");
+    expect(isX11RawInput(generic(xi, XI_RawMotion, 0).data(), xi) && isX11RawInput(generic(xi, XI_RawButtonPress, 1).data(), xi)
+               && isX11RawInput(generic(xi, XI_RawKeyRelease, 30).data(), xi) && isX11RawInput(generic(xi, XI_RawTouchEnd, 2).data(), xi),
+           "raw motion, buttons, keys and touches are the raw input a Wine process reads for its whole prefix");
+    expect(!isX11RawInput(device(xi, XI_Motion, 0, 4000).data(), xi) && !isX11RawInput(device(xi, XI_ButtonPress, 1, 4010).data(), xi)
+               && !isX11RawInput(core(MotionNotify, 0).data(), xi) && !isX11RawInput(core(KeyPress, 38).data(), xi),
+           "window events, core or XInput2, are not raw input: they go to the window's own process");
+    expect(!isX11RawInput(generic(xi + 1, XI_RawMotion, 0).data(), xi) && !isX11RawInput(generic(xi, XI_RawMotion, 0).data(), -1),
+           "another extension's event, or any generic event while the XInput opcode is unknown, is not raw input");
     dropX11Input(core(KeyPress, 9).data(), xi, dropped);
     dropped.clear();
     expect(!dropX11Input(core(KeyRelease, 9).data(), xi, dropped), "once blocking ends, a release reaches the game whatever was dropped before");

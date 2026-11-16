@@ -3717,27 +3717,44 @@ x11_hook_case() {
 wine_quiet=(WINEDEBUG=-all "WINEDLLOVERRIDES=mscoree,mshtml=")
 
 wine_server() {
-    local prefix="$1"
-    shift
-    env -i PATH="$PATH" HOME="$prefix-home" WINEPREFIX="$prefix" "${wine_quiet[@]}" "$VKB_WINE/bin/wineserver" "$@"
+    local wine="$1" prefix="$2"
+    shift 2
+    env -i PATH="$PATH" HOME="$prefix-home" WINEPREFIX="$prefix" "${wine_quiet[@]}" "$wine/bin/wineserver" "$@"
 }
 
+wine_starts_allowed=3
+
 wine_prefix() {
-    local prefix="$1" log="$2"
-    mkdir -p "$prefix-home"
-    if ! timeout -s KILL "$HANG_SECONDS" env -i PATH="$PATH" HOME="$prefix-home" DISPLAY="$PRIVATE_DISPLAY" XDG_RUNTIME_DIR="$PRIVATE_RUNTIME" \
-        WINEPREFIX="$prefix" "${wine_quiet[@]}" "$VKB_WINE/bin/wineboot" -i >"$log" 2>&1; then
-        return 1
-    fi
-    wine_server "$prefix" -w >>"$log" 2>&1
+    local wine="$1" prefix="$2" log="$3" attempt
+    for attempt in $(seq "$wine_starts_allowed"); do
+        mkdir -p "$prefix-home"
+        if timeout -s KILL "$HANG_SECONDS" env -i PATH="$PATH" HOME="$prefix-home" DISPLAY="$PRIVATE_DISPLAY" XDG_RUNTIME_DIR="$PRIVATE_RUNTIME" \
+            WINEPREFIX="$prefix" "${wine_quiet[@]}" "$wine/bin/wineboot" -i >"$log" 2>&1; then
+            wine_server "$wine" "$prefix" -w >>"$log" 2>&1
+            return 0
+        fi
+        echo "wineboot: $(tail -1 "$log")" >>"$log.failed-starts"
+        wine_stopped "$wine" "$prefix" || return 1
+        rm -rf "${prefix:?}" "${prefix:?}-home"
+    done
+    return 1
+}
+
+failed_starts() {
+    local file
+    for file in "$@"; do
+        if [ -s "$file" ]; then
+            printf '; it failed to start %s time(s) first, from a fault outside the layer: %s' "$(wc -l <"$file")" "$(paste -sd ',' "$file")"
+        fi
+    done
 }
 
 wine_stopped() {
-    local prefix="$1"
-    if ! wine_server "$prefix" -k >>"$prefix.stop.log" 2>&1; then
+    local wine="$1" prefix="$2"
+    if ! wine_server "$wine" "$prefix" -k >>"$prefix.stop.log" 2>&1; then
         echo "wineserver -k: no wineserver was left to stop" >>"$prefix.stop.log"
     fi
-    wine_server "$prefix" -w >>"$prefix.stop.log" 2>&1
+    wine_server "$wine" "$prefix" -w >>"$prefix.stop.log" 2>&1
 }
 
 wine_stop_failure() {
@@ -3758,9 +3775,9 @@ drive_wine_hook() {
 }
 
 wine_hook_case() {
-    local icd="$1" dir="$2" mode="$3" control="$2/wine-control.log" prefix="$2/wine-prefix"
-    local name="the input hook holds a Wine game's input, $mode" log="$2/wine-$mode.log" home="$2/wine-$mode-home" map="$2/wine-$mode.map"
-    local driver why ready own_warp="" held
+    local icd="$1" dir="$2" wine="$3" slug="$4" label="$5" reader="$6" mode="$7" control="$2/wine-$4-control.log" prefix="$2/wine-$4-prefix"
+    local name="the input hook holds a Wine game's input, $label, $mode" log="$2/wine-$4-$mode.log" home="$2/wine-$4-$mode-home" map="$2/wine-$4-$mode.map"
+    local driver why ready own_warp="" held attempt stopped
     local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved" "async key")
     if [ "$mode" = recenter ]; then
         ready='wine-input-probe: holds the pointer at its centre'
@@ -3770,14 +3787,20 @@ wine_hook_case() {
         ready='wine-input-probe: pointer still at [0-9-]+ [0-9-]+ after placing it'
         held="placing the cursor at its centre once, then polling GetCursorPos every frame and never warping, which Wine answers with XQueryPointer once the cursor is still for 100 ms"
     fi
-    fresh_home "$home" cas
-    printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
-    background drive_wine_hook "$log" "$map" "$ready"
-    driver=$!
-    run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" WINEPREFIX="$prefix" "${wine_quiet[@]}" \
-        "$VKB_LAYER/bin/vkdaedalus-run" "$VKB_WINE/bin/wine" "$VKB_WINE_PROBE" 900 "$mode"
-    driver_finished "drive_wine_hook"
-    if ! wine_stopped "$prefix"; then
+    for attempt in $(seq "$wine_starts_allowed"); do
+        fresh_home "$home" cas
+        printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+        background drive_wine_hook "$log" "$map" "$ready"
+        driver=$!
+        run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" WINEPREFIX="$prefix" "${wine_quiet[@]}" \
+            "$VKB_LAYER/bin/vkdaedalus-run" "$wine/bin/wine" "$VKB_WINE_PROBE" 900 "$mode"
+        driver_finished "drive_wine_hook"
+        stopped=0
+        wine_stopped "$wine" "$prefix" || stopped=1
+        if [ "$stopped" = 1 ] || [ "$attempt" = "$wine_starts_allowed" ] || [ "$(count '^wine-input-probe: window shown' "$log")" -gt 0 ]; then break; fi
+        echo "the probe: $(tail -1 "$log")" >>"$log.failed-starts"
+    done
+    if [ "$stopped" = 1 ]; then
         record FAIL "$name" "$(wine_stop_failure "$prefix")"
     elif ! why=$(plain_verdict "$log" "$control"); then
         record FAIL "$name" "$why"
@@ -3786,34 +3809,48 @@ wine_hook_case() {
     elif ! why=$(held_input_verdict "$log" wine-input-probe "$own_warp" "${kinds[@]}"); then
         record FAIL "$name" "$why"
     else
-        record PASS "$name" "a Windows program under Wine, $held, reading window messages, raw input and GetAsyncKeyState and started with vkdaedalus-run, read nothing while the overlay was open, never moved the overlay's pointer, and read every kind again once it closed"
+        record PASS "$name" "a Windows program under $label, where $reader, $held, reading window messages, raw input and GetAsyncKeyState and started with vkdaedalus-run, read nothing while the overlay was open, never moved the overlay's pointer, and read every kind again once it closed$(failed_starts "$prefix.log.failed-starts" "$control.failed-starts" "$log.failed-starts")"
     fi
 }
 
-wine_hook_cases() {
-    local icd="$1" dir="$2" control="$2/wine-control.log" prefix="$2/wine-prefix" name="the input hook holds a Wine game's input" why mode
-    if [ -z "${VKB_WINE:-}" ]; then
-        record SKIP "$name" "Wine is part of the x86-64 live command only"
+wine_hook_cases_of() {
+    local icd="$1" dir="$2" wine="$3" slug="$4" label="$5" reader="$6" control="$2/wine-$4-control.log" prefix="$2/wine-$4-prefix"
+    local name="the input hook holds a Wine game's input, $5" why mode attempt stopped
+    if [ ! -x "$wine/bin/wine" ] || [ ! -f "${VKB_WINE_PROBE:-}" ]; then
+        record FAIL "$name" "the live command names $label at $wine and the probe ${VKB_WINE_PROBE:-(unset)}, and one of them is missing"
         return 0
-    elif [ ! -x "$VKB_WINE/bin/wine" ] || [ ! -f "${VKB_WINE_PROBE:-}" ]; then
-        record FAIL "$name" "the live command names Wine $VKB_WINE and its probe ${VKB_WINE_PROBE:-(unset)}, and one of them is missing"
+    elif ! wine_prefix "$wine" "$prefix" "$prefix.log"; then
+        record FAIL "$name" "wineboot could not make a Wine prefix in $wine_starts_allowed starts: $(paste -sd ',' "$prefix.log.failed-starts")"
+        return 0
+    fi
+    for attempt in $(seq "$wine_starts_allowed"); do
+        run "$control" "$dir/wine-$slug-control-home" "$icd" "$VALIDATION" 0 1 -- env WINEPREFIX="$prefix" "${wine_quiet[@]}" "$wine/bin/wine" "$VKB_WINE_PROBE" 120 poll
+        stopped=0
+        wine_stopped "$wine" "$prefix" || stopped=1
+        if [ "$stopped" = 1 ] || [ "$attempt" = "$wine_starts_allowed" ] || [ "$(count '^wine-input-probe: window shown' "$control")" -gt 0 ]; then break; fi
+        echo "the control probe: $(tail -1 "$control")" >>"$control.failed-starts"
+    done
+    if [ "$stopped" = 1 ]; then
+        record FAIL "$name" "$(wine_stop_failure "$prefix")"
+        return 0
+    elif ! why=$(exited_cleanly "$control"); then
+        record FAIL "$name" "the probe did not run under $label without the layer: $why"
+        return 0
+    fi
+    for mode in poll recenter; do wine_hook_case "$icd" "$dir" "$wine" "$slug" "$label" "$reader" "$mode"; done
+}
+
+wine_hook_cases() {
+    local icd="$1" dir="$2" name="the input hook holds a Wine game's input"
+    if [ -z "${VKB_WINE:-}" ] || [ -z "${VKB_WINE_CACHYOS:-}" ]; then
+        record SKIP "$name" "Wine is part of the x86-64 live command only"
         return 0
     elif [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then
         record SKIP "$name" "this build has no vkdaedalus-run (a plain meson build installs none)"
         return 0
-    elif ! wine_prefix "$prefix" "$prefix.log"; then
-        record FAIL "$name" "wineboot could not make a Wine prefix: $(tail -1 "$prefix.log")"
-        return 0
     fi
-    run "$control" "$dir/wine-control-home" "$icd" "$VALIDATION" 0 1 -- env WINEPREFIX="$prefix" "${wine_quiet[@]}" "$VKB_WINE/bin/wine" "$VKB_WINE_PROBE" 120 poll
-    if ! wine_stopped "$prefix"; then
-        record FAIL "$name" "$(wine_stop_failure "$prefix")"
-        return 0
-    elif ! why=$(exited_cleanly "$control"); then
-        record FAIL "$name" "the probe did not run under Wine without the layer: $why"
-        return 0
-    fi
-    for mode in poll recenter; do wine_hook_case "$icd" "$dir" "$mode"; done
+    wine_hook_cases_of "$icd" "$dir" "$VKB_WINE" upstream "upstream Wine" "the game's own process reads raw input while it clips the cursor"
+    wine_hook_cases_of "$icd" "$dir" "$VKB_WINE_CACHYOS" cachyos "wine-cachyos" "explorer.exe reads the raw input of the whole prefix, as in Proton"
 }
 
 drive_controls() {

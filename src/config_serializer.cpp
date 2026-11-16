@@ -5,6 +5,7 @@
 #include "logger.hpp"
 #include "overlay/hud.hpp"
 #include "overlay/palette_names.hpp"
+#include "wine_process.hpp"
 
 #include <cctype>
 #include <fstream>
@@ -84,8 +85,6 @@ namespace vkBasalt
             Kept,
             Stripped,
         };
-
-        const std::array<const char*, 4> wineLoaderNames = {"wine64-preloader", "wine-preloader", "wine64", "wine"};
 
         bool endsWithExe(const std::string& name)
         {
@@ -470,7 +469,7 @@ namespace vkBasalt
     std::string ConfigSerializer::wineExecutableFrom(const std::string& exePath, const std::vector<std::string>& arguments)
     {
         const std::string exe = std::filesystem::path(exePath).filename().string();
-        if (std::find(wineLoaderNames.begin(), wineLoaderNames.end(), exe) == wineLoaderNames.end())
+        if (!isWineLoader(exe))
             return "";
         return firstWindowsExecutable(arguments);
     }
@@ -683,14 +682,14 @@ namespace vkBasalt
 
     bool ConfigSerializer::isWineLoaderName(const std::string& name)
     {
-        return std::find(wineLoaderNames.begin(), wineLoaderNames.end(), name) != wineLoaderNames.end();
+        return isWineLoader(name);
     }
 
     std::string ConfigSerializer::wineLoaderProfile()
     {
-        for (const char* loader : wineLoaderNames)
+        for (const std::string_view loader : wineLoaderNames)
         {
-            const ActiveProfile active = getActiveProfile(loader);
+            const ActiveProfile active = getActiveProfile(std::string(loader));
             if (active.kind == ProfileKind::Named)
                 return active.name;
         }
@@ -839,7 +838,7 @@ namespace vkBasalt
         forEachSetting(file, InlineComments::Kept, [&gameName, &name, &loaderBypassed](const std::string& key, const std::string& value) {
             if (key == gameName)
                 name = value;
-            if (std::find(wineLoaderNames.begin(), wineLoaderNames.end(), key) != wineLoaderNames.end())
+            if (isWineLoader(key))
                 loaderBypassed = loaderBypassed || value == BYPASS_PROFILE_NAME;
         });
 

@@ -14,6 +14,7 @@
 #include "background_work.hpp"
 #include "config_serializer.hpp"
 #include "logger.hpp"
+#include "wine_process.hpp"
 
 namespace vkBasalt
 {
@@ -164,9 +165,7 @@ namespace vkBasalt
 
     std::string winePrefixOfThisProcess()
     {
-        const char* prefix = std::getenv("WINEPREFIX");
-        const char* home   = std::getenv("HOME");
-        return prefix && *prefix ? prefix : (home && *home ? std::string(home) + "/.wine" : "");
+        return winePrefixFrom(std::getenv("WINEPREFIX"), std::getenv("HOME"));
     }
 
     std::string programExecutable(std::string& problem)

@@ -11,7 +11,7 @@
 | `VKDAEDALUS_LOG_FILE=<path>` | layer | Appends the log to this file instead of stderr; without it the log goes to stderr and to `$XDG_STATE_HOME/vkdaedalus/vkdaedalus.log`. |
 | `VKDAEDALUS_AFTER_LSFGVK=1` | Vulkan loader, through the order layers | Runs the layer's effects after lsfg-vk's frame generation for this run instead of before. `vkdaedalus-run` sets it when the game's profile asks for it. |
 | `VKDAEDALUS_RUN=1`, `VKDAEDALUS_RUN_PROGRAM=<name>`, `VKDAEDALUS_RUN_EXECUTABLE=<path>` | layer, overlay | Set by `vkdaedalus-run`: the layer keeps to that program and the other programs of its game folder, so the helpers a game starts (Wine's explorer.exe, Proton's scripts) load nothing; the Frame generation page uses them to say whether the next launch picks up a changed order. |
-| `LD_PRELOAD` | dynamic linker | `vkdaedalus-run` adds `libvkdaedalus-input-hook.so`, which wraps the game's Wayland pointer and keyboard listeners, libxcb's event reads and Xlib's XQueryPointer and XWarpPointer from the game's start, Wine's included, so the overlay can keep input from the game while it is open. |
+| `LD_PRELOAD` | dynamic linker | `vkdaedalus-run` adds `libvkdaedalus-input-hook.so`, which wraps the game's Wayland pointer and keyboard listeners, libxcb's event reads and Xlib's XQueryPointer and XWarpPointer from the game's start, Wine's included, so the overlay can keep input from the game while it is open. Under Wine it loads into every process of the prefix, explorer.exe included, which reads the prefix's raw input in Proton's Wine. |
 | `LSFGVK_CONFIG=<path>` | lsfg-vk, overlay, `vkdaedalus-run` | Names lsfg-vk's file instead of `~/.config/lsfg-vk/conf.toml` (or `$XDG_CONFIG_HOME/lsfg-vk/conf.toml`). The overlay and `vkdaedalus-run` find the file by lsfg-vk's own rules, this one first. |
 | `LSFGVK_FLATPAK` | lsfg-vk, overlay | Set inside a Flatpak: lsfg-vk then keeps its file at `~/.config/lsfg-vk/conf.toml` whatever `$XDG_CONFIG_HOME` says, and the overlay looks there too. |
 | `LSFGVK_PROFILE=<name>`, `SteamAppId` | lsfg-vk, overlay | lsfg-vk picks its profile by this name, else by the game's executable, its `.exe`, its process name and last its Steam app id; the overlay finds the profile in use the same way. |
@@ -21,5 +21,6 @@
 | `DISABLE_VKDAEDALUS_LSFGVK_ORDER=1` | Vulkan loader | Turns off the after-frame-generation order layer. |
 | `VKDAEDALUS_UI_MAP=<path>` | layer | For tests: writes the overlay's items and their places to this file after every frame. Unset, nothing runs. |
 | `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `HOME` | layer | Where the config (`~/.config/vkdaedalus`), the shader cache (`~/.cache/vkdaedalus`) and an older config location are. |
-| `WINEPREFIX` | layer | Finds a Wine game's folder for the shipped anti-cheat check. |
+| `WINEPREFIX` | layer, input hook | Finds a Wine game's folder for the shipped anti-cheat check, and names the prefix whose raw input the input hook holds. |
+| `XDG_RUNTIME_DIR` | input hook | Holds `vkdaedalus-input-<device>-<inode>`, one small file per Wine prefix, through which the hooks of a prefix share whether a game's overlay is open. Unset, the raw input Proton's Wine reads in explorer.exe reaches the game while the overlay is open. |
 | `DISPLAY`, `WAYLAND_DISPLAY` | layer | Chooses X11 or Wayland input. |

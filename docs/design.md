@@ -123,6 +123,14 @@ check's message or a test already says is not repeated here.
 - The pointer is held where it was when the overlay opened, read by the layer on its own display:
   Wine reads the pointer late.
 - Pointer crossing events are held too: Wine turns an EnterNotify into a mouse move.
+- Proton's Wine, and builds that carry its patches such as wine-cachyos, read raw input for the whole
+  prefix in explorer.exe's desktop thread and send it to the game through wineserver. Upstream Wine
+  reads it in the game's own thread while the cursor is clipped. So the hooks of one prefix share the
+  open overlay through a file named by the prefix's device and inode, as wineserver names its own
+  folder, and every other process of the prefix holds raw input while it is set. Window events still
+  go to the window's own process, so only raw input is held there.
+- A game that ends with its overlay open releases the prefix's raw input: the holder is a process id,
+  checked alive before every hold.
 
 ## Second GPU
 

@@ -45,6 +45,13 @@
       url = "git+https://git.lsfg-vk.dev/lsfg-vk.git?shallow=1";
       flake = false;
     };
+    wine-cachyos = {
+      url = "github:Daaboulex/wine-cachyos-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-parts.follows = "flake-parts";
+      inputs.git-hooks.follows = "git-hooks";
+      inputs.std.follows = "std";
+    };
     reshade-shaders = {
       url = "github:crosire/reshade-shaders/slim";
       flake = false;
@@ -1824,6 +1831,7 @@
                 }
                 // pkgs.lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
                   VKB_WINE = "${pkgs.wine64Packages.stable}";
+                  VKB_WINE_CACHYOS = "${inputs.wine-cachyos.packages.x86_64-linux.default}";
                   VKB_WINE_PROBE = "${wineInputProbe}/bin/wine-input-probe.exe";
                 };
                 text = builtins.readFile ./scripts/live.sh;
