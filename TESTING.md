@@ -86,7 +86,11 @@ and smaa on GPU 2 in both orders: every run must make lsfg-vk's device,
 swapchain and pipeline with no lsfg-vk warning, present once per game frame
 with the layer above and twice with it below, and add no validation report to
 a run of lsfg-vk alone; with lsfg-vk above the layer for a profile asking
-effects before, the layer must warn of the order, and below it must not. The frame generation lane then switches lsfg-vk while
+effects before, the layer must warn of the order, and below it must not. With
+`--mako` naming a MAKO build that has MAKO FG, the offload lane runs MAKO FG at
+2x the same way with cas on GPU 1 and smaa on GPU 2 in both orders: the layer
+must present once or twice per game frame, name MAKO's place, and add no
+validation report to a run of MAKO alone. The frame generation lane then switches lsfg-vk while
 vkcube runs cas, smaa and uniform_smoke, with one counting layer above lsfg-vk
 and one below it: the frame generation key off and on, then lsfg-vk's file at
 3x and at 1x. Each step must show 2, 1, 2, 3 and 1 frames for every frame the

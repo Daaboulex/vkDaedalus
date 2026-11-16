@@ -5943,6 +5943,71 @@ offload_cost_case() {
     record MEAS "$name" "$(printf '%s\n' "${onOne[@]}" | spread) ms/frame with solid_fill, invert_input and invert_input again on GPU 1, $(printf '%s\n' "${twoGpus[@]}" | spread) with the middle row on GPU 2 and the last back on GPU 1, $size, median of 5 at 1800 minus 600 frames (present mode $mode)"
 }
 
+mako_offload_case() {
+    local icd="$1" dir="$2" other="$3" name="MAKO frames with rows on GPU 2" control="$2/offload-mako-control.log" absent why order layers place want log home presents ratio
+    local -a wrong
+    if [ -z "$other" ]; then
+        record SKIP "$name" "this machine has no second GPU in the instance"
+        return 0
+    elif [ -z "$mako_manifest" ]; then
+        record SKIP "$name" "$(mako_skip)"
+        return 0
+    elif absent=$(mako_fg_absent); then
+        record SKIP "$name" "$absent"
+        return 0
+    fi
+    local MAKO_DIR="$dir/real-mako-offload"
+    rm -rf "${MAKO_DIR:?}"
+    mkdir -p "$MAKO_DIR"
+    cp "$mako_manifest" "$MAKO_DIR/"
+    mako_offload_home "$dir/offload-mako-control-home"
+    run "$control" "$dir/offload-mako-control-home" "$icd" "$MAKO:$VALIDATION" 0 1 -- gpu-choice-probe "$FRAMES" "$LANE_GPU_ID"
+    if ! why=$(mako_ran "$control"); then
+        record FAIL "$name" "MAKO alone: $why"
+        return 0
+    fi
+    for order in before after; do
+        if [ "$order" = before ]; then
+            layers="$BASALT:$MAKO:$VALIDATION" place="MAKO runs below the layer: effects before frame generation" want=1
+        else
+            layers="$MAKO:$BASALT:$VALIDATION" place="MAKO runs above the layer: effects after frame generation" want=2
+        fi
+        log="$dir/offload-mako-$order.log" home="$dir/offload-mako-$order-home"
+        mako_offload_home "$home"
+        printf 'gpus = %s\nsmaa.gpu = 2\n' "$other" >>"$home/.config/vkdaedalus/vkdaedalus.conf"
+        run "$log" "$home" "$icd" "$layers" 1 1 -- gpu-choice-probe "$FRAMES" "$LANE_GPU_ID"
+        wrong=()
+        if ! why=$(mako_ran "$log"); then
+            record FAIL "$name, effects $order" "$why"
+            continue
+        fi
+        if [ "$(count 'vkDaedalus info: +rows from smaa run on GPU 2 \(' "$log")" -lt 1 ]; then
+            wrong+=("smaa never ran on GPU 2: $(grep -m1 -E 'stay on the game|move to the game|made a device on' "$log" || echo nothing was said)")
+        fi
+        if [ "$(count 'rows from cas run on GPU' "$log")" -ne 0 ]; then wrong+=("cas left GPU 1: $(grep -m1 'rows from cas run on GPU' "$log")"); fi
+        if [ "$(count "frame rates over the swapchain's life: .*$place, 2x\$" "$log")" -lt 1 ]; then
+            wrong+=("the layer did not say $place at 2x: $(grep -m1 "frame rates over the swapchain's life" "$log" || echo no frame rates line)")
+        fi
+        presents=$(count 'present cycle' "$log")
+        ratio=$(awk -v p="$presents" -v f="$FRAMES" 'BEGIN { printf "%.0f", p / f }')
+        if [ "$ratio" != "$want" ]; then wrong+=("the layer presented $presents times for $FRAMES game frames, want $want each"); fi
+        if ! why=$(validation_verdict "$log" "$control"); then wrong+=("validation: $why"); fi
+        if [ "${#wrong[@]}" -gt 0 ]; then
+            record FAIL "$name, effects $order" "$(printf '%s; ' "${wrong[@]}")"
+        else
+            record PASS "$name, effects $order" "cas on GPU 1 and smaa on GPU $other while MAKO FG made 2x on the game's GPU $order the layer's effects: the layer presented $presents times for $FRAMES game frames and said $place, validation clean against MAKO alone"
+        fi
+    done
+}
+
+mako_offload_home() {
+    local home="$1"
+    fresh_home "$home" cas:smaa
+    mkdir -p "$home/.config/mako-render"
+    printf '%s\n' 'version = 2' '' '[global]' '' '[[profile]]' 'name = "live gpu-choice-probe"' 'active_in = "/gpu-choice-probe"' 'frame_generation_model = "mako-fg"' \
+        'frame_generation_enabled = true' 'multiplier = 2' >"$home/.config/mako-render/conf.toml"
+}
+
 lane_offload() {
     local icd="$1" dir="$2" every without="$2/offload-choice-without.log" with="$2/offload-choice-with.log"
     local assigned="$2/offload-choice-assigned.log" helper="$2/offload-choice-helper.log" why mode listed other made absent
@@ -6040,6 +6105,7 @@ lane_offload() {
             done
         fi
     fi
+    mako_offload_case "$every" "$dir" "$other"
     local crossing="the frame crosses to GPU 2 and comes back" mode chain=solid_fill:invert_input want="191 127 64" control="$2/offload-pixels-control.log"
     if [ -z "$other" ]; then
         record SKIP "$crossing" "this machine has no second GPU in the instance"
