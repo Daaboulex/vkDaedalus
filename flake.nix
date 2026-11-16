@@ -1367,12 +1367,14 @@
                 mkdir -p ours theirs work
                 $CXX -std=c++20 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=undefined \
                   -I${./src} -I${inputs.tomlplusplus}/include -I${pkgs.vulkan-headers}/include \
-                  ${./test/mako-config/probe_vkdaedalus.cpp} ${./src/mako_config.cpp} ${./src/frame_generation.cpp} ${./src/toml_edit.cpp} \
+                  ${./test/mako-config/probe_vkdaedalus.cpp} ${./src/mako_config.cpp} ${./src/mako_status.cpp} ${./src/frame_generation.cpp} ${./src/toml_edit.cpp} \
                   -ldl -o ours/mako-config-probe
                 common=${inputs.mako}/engine/mako-common
-                $CXX -std=c++20 -O1 -pthread -I$common/include -isystem $common/thirdparty/include -I${pkgs.vulkan-headers}/include \
+                render=${inputs.mako}/engine/mako-render/src
+                $CXX -std=c++20 -O1 -pthread -I$common/include -isystem $common/thirdparty/include -I$render -I${pkgs.vulkan-headers}/include \
                   ${./test/mako-config/probe_mako.cpp} $common/src/configuration/config.cpp $common/src/configuration/power_source.cpp \
-                  $common/src/configuration/detection.cpp $common/src/helpers/errors.cpp $common/src/helpers/paths.cpp -o theirs/mako-config-probe
+                  $common/src/configuration/detection.cpp $common/src/helpers/errors.cpp $common/src/helpers/paths.cpp $render/runtime_status.cpp \
+                  -o theirs/mako-config-probe
                 bash ${./test/mako-config/compare.sh} "$PWD/ours/mako-config-probe" "$PWD/theirs/mako-config-probe" \
                   ${./test/mako-config} "$PWD/work"
                 touch $out

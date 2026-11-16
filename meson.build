@@ -102,6 +102,12 @@ if get_option('with_so')
     test('mako-config', mako_config_test,
         args : [meson.current_build_dir() / 'test-mako-config'])
 
+    mako_status_test = executable('mako-status-test',
+        'test/mako_status_test.cpp', 'src/mako_status.cpp',
+        include_directories : include_directories('src'))
+    test('mako-status', mako_status_test,
+        args : [meson.current_build_dir() / 'test-mako-status'])
+
     reshade_uniform_write_test = executable('reshade-uniform-write-test',
         'test/reshade_uniform_write_test.cpp', 'src/logger.cpp',
         include_directories : include_directories('src'),

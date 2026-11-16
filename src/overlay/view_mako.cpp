@@ -9,6 +9,8 @@
 #include <type_traits>
 #include <vector>
 
+#include <unistd.h>
+
 #include "config_serializer.hpp"
 #include "frame_generation_place.hpp"
 #include "logger.hpp"
@@ -580,6 +582,21 @@ namespace vkBasalt
         ui::notef("MAKO profile %s, %zu %s%s", tuned.name.c_str(), tuned.activeIn.size(), tuned.activeIn.size() == 1 ? "game" : "games", setName(edited));
     }
 
+    void ImGuiOverlay::refreshMakoStatus()
+    {
+        if (!makoStatusPoll.due(std::chrono::steady_clock::now()) || !makoLayerLoaded())
+            return;
+        if (!startTicks)
+            startTicks = thisProcessStartTicks();
+        makoStatus = readMakoStatus(makoStatusFolder(makoConfigPath()), static_cast<uint64_t>(getpid()), *startTicks, currentWidth, currentHeight);
+    }
+
+    MakoScalingShown ImGuiOverlay::makoScaling()
+    {
+        const MakoProfile* inUse = readMakoOnce() ? makoProfileInUse() : nullptr;
+        return makoScalingShown(inUse && makoSettingsFor(*inUse, powerSupplies.source).scalingEnabled, makoLiveHere(), makoStatus);
+    }
+
     void ImGuiOverlay::renderMakoGlobals()
     {
         const OverlayPalette& palette = activePalette();
@@ -665,7 +682,9 @@ namespace vkBasalt
         MakoSettings&         set       = settingsOf(tuned, edited);
         const MakoSettings&   running   = makoSettingsFor(tuned, powerSupplies.source);
         bool                  on        = inUse && running.scalingEnabled;
-        const bool            startedOn = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).scalingEnabled;
+        const MakoScalingShown scaling  = blocker.empty() ? makoScaling() : MakoScalingShown{};
+        const bool            scales    = scaling.run == MakoScalingRun::Scaling;
+        const bool            unsure    = scaling.run == MakoScalingRun::NotScaling || scaling.run == MakoScalingRun::NoStatus;
         const bool            pending   = inUse && makoSettingsFor(*inUse, powerSupplies.source).scalingEnabled != makoSettingsAtStart().scalingEnabled;
         const std::string     amount    = shownChoice(makoScalingMethods, running.scalingMethod) + " " + factorText(running.scalingFactor);
         const bool            loads     = loadedAtNextLaunch(FrameGenerationLayer::Mako, startedWithVkdaedalusRun(), makoEnabledInEnvironment());
@@ -677,10 +696,18 @@ namespace vkBasalt
         ImGui::AlignTextToFramePadding();
         if (!blocker.empty())
             ImGui::TextColored(palette.faint, "Unavailable");
-        else if (!on)
+        else if (scales)
+        {
+            ImGui::TextColored(palette.ok, "%s %s, on", shownChoice(makoScalingMethods, scaling.method).c_str(), scaling.detail.c_str());
+            ImGui::SetItemTooltip("From MAKO's status file for this swapchain: the size the game draws at and the size MAKO presents");
+        }
+        else if (unsure)
+        {
+            ImGui::TextColored(palette.warn, "%s", scaling.run == MakoScalingRun::NotScaling ? "Not scaling" : "No status file");
+            ImGui::SetItemTooltip("%s", scaling.detail.c_str());
+        }
+        else if (scaling.run == MakoScalingRun::Off)
             ImGui::TextColored(palette.muted, "Off");
-        else if (startedOn)
-            ImGui::TextColored(palette.ok, "%s, on", amount.c_str());
         else
         {
             ImGui::TextColored(palette.warn, "%s, %s", amount.c_str(), loads ? "next launch" : "needs vkdaedalus-run");
@@ -690,8 +717,13 @@ namespace vkBasalt
         ImGui::BeginDisabled(!blocker.empty());
         const bool flipped = ui::checkbox("On###scaling", &on);
         ImGui::EndDisabled();
-        ImGui::SetItemTooltip("Read when the game starts: MAKO scales the game's frames up to the display. Saved in MAKO's profile.");
+        if (unsure)
+            ImGui::SetItemTooltip("%s", scaling.detail.c_str());
+        else
+            ImGui::SetItemTooltip("Read when the game starts: MAKO scales the game's frames up to the display. Saved in MAKO's profile.");
         restartMark("Scaling", pending, palette);
+        if (unsure)
+            whyGreyed(scaling.detail);
 
         if (!blocker.empty())
         {
@@ -737,8 +769,8 @@ namespace vkBasalt
         if (table)
         {
             ImGui::TableNextColumn();
-            const bool live = makoLiveHere() && startedOn;
-            caption("Live", live ? "profile" : loads ? "profile, from the next launch" : "profile, needs vkdaedalus-run",
+            const bool live = scales;
+            caption("Live", live ? "profile" : unsure ? "profile, once MAKO scales" : loads ? "profile, from the next launch" : "profile, needs vkdaedalus-run",
                     ("Kept in MAKO's profile " + tuned.name + ". Applies at once while MAKO scales the game.").c_str());
             ui::beginPanel();
             const float column = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);

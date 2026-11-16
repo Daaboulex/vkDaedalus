@@ -863,7 +863,9 @@ seconds_since() {
 drive_mako_live() {
     local log="$1" map="$2" reloads window start
     : >"$log.steps"
+    : >"$log.tile"
     : >"$log.gpu"
+    : >"$log.scaler"
     if ! wait_for_line '^MAKO Renderer: spatial scaling active: ' 1 "$log"; then return 0; fi
     start=$EPOCHREALTIME
     if ! wait_for_line 'present cycle' 60 "$log"; then return 0; fi
@@ -872,9 +874,10 @@ drive_mako_live() {
     ui_take_window "$window"
     hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || return 0
     ui_click "$map" "Frame generation" 1 "$log" || true
-    tile_says "$log" '^Frame generation tile: ' || true
+    tile_says "$log" '^Frame generation tile: .*; Scaling tile: [0-9]+x[0-9]+ to [0-9]+x[0-9]+$' || true
     tile_line "$log" >"$log.tile"
     ui_label_starting "$map" "GPU 1, " "$log" >"$log.gpu" || true
+    ui_wait "$map" "MAKO Scaler step" "" "" "$log" && echo shown >"$log.scaler"
     ui_click "$map" "Scaling" 1 "$log" || true
     reloads=$(count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$log")
     ui_set_value "$map" "##Sharpness" 0.5 "$log" || true
@@ -957,6 +960,10 @@ mako_live_case() {
     elif [ "$(count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$log")" -lt 1 ] || [ -z "$live" ]; then
         wrong+=("after the overlay wrote Sharpness 0.5 MAKO said: $(awk '/^MAKO Renderer: (updated configuration|spatial scaling model changed)/' "$log" | tr '\n' ' ')")
     fi
+    if [[ "$(cat "$log.tile")" != *"; Scaling tile: $source to $presented" ]]; then
+        wrong+=("the Scaling tile said: $(cat "$log.tile"), want the sizes MAKO said it scales, $source to $presented, read from MAKO's status file")
+    fi
+    if [ ! -s "$log.scaler" ]; then wrong+=("the strip of this run drew no MAKO Scaler step while MAKO scaled"); fi
     if [ "$(wc -c <"$log.gpu")" -le 8 ]; then wrong+=("MAKO's body drew no GPU row naming GPU 1 and the game's GPU"); fi
     if absent=$(mako_fg_absent); then
         if [[ "$(cat "$log.tile")" != 'Frame generation tile: MAKO, needs a model ('* ]]; then wrong+=("without MAKO FG the tiles say: $(cat "$log.tile"), want MAKO, needs a model"); fi
@@ -969,7 +976,7 @@ mako_live_case() {
     if [ "${#wrong[@]}" -gt 0 ]; then
         record FAIL "$name" "$(printf '%s; ' "${wrong[@]}")"
     else
-        record PASS "$name" "the game drew at $game and MAKO Scaler presented it at $presented under the GPU row $(cat "$log.gpu"); the Sharpness the overlay set while it ran was read in place and MAKO said: ${live#MAKO Renderer: }${absent:+; $absent, so the tiles say $(cat "$log.tile") and MAKO said: $(grep -m1 -A1 '^MAKO Renderer: frame-generation backend initialization failed' "$log" | tr '\n' ' ' | sed 's/MAKO Renderer: //')}; validation clean against MAKO alone taking the same steps"
+        record PASS "$name" "the game drew at $game and MAKO Scaler presented it at $presented, which the Scaling tile read from MAKO's status file ($(sed 's/.*; Scaling tile: //' "$log.tile")) under the GPU row $(cat "$log.gpu"); the Sharpness the overlay set while it ran was read in place and MAKO said: ${live#MAKO Renderer: }${absent:+; $absent, so the tiles say $(cat "$log.tile") and MAKO said: $(grep -m1 -A1 '^MAKO Renderer: frame-generation backend initialization failed' "$log" | tr '\n' ' ' | sed 's/MAKO Renderer: //')}; validation clean against MAKO alone taking the same steps"
     fi
 }
 
@@ -995,11 +1002,81 @@ mako_kept_case() {
     fi
 }
 
+drive_mako_tile() {
+    local log="$1" map="$2" want="$3" window
+    : >"$log.tile"
+    : >"$log.switch"
+    if ! wait_for_line 'present cycle' 60 "$log"; then return 0; fi
+    window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '' | tail -1) || true
+    ui_take_window "$window"
+    hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || return 0
+    tile_says "$log" "$want" || true
+    tile_line "$log" >"$log.tile"
+    ui_click "$map" "Scaling" 1 "$log" || true
+    ui_wait "$map" "On###scaling" 8 1 "$log" && echo ticked >"$log.switch"
+    hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || true
+}
+
+mako_unscaled_case() {
+    local icd="$1" dir="$2" kind="$3" log home map config name want why absent="" wrong=()
+    local unknown='; Scaling tile: No status file \(MAKO has written no status file for this swapchain, so what it scales is not known\)$'
+    local native='^MAKO Renderer: frame-generation context initialization failed; native presentation retained:'
+    name="MAKO with no status file is not called scaling"
+    want=$unknown
+    if [ "$kind" = factor-one ]; then
+        name="MAKO at factor 1 is not called scaling"
+        if ! absent=$(mako_fg_absent); then want='; Scaling tile: Not scaling \(MAKO does not scale: the factor is 1x, which scales nothing\)$'; fi
+    fi
+    log="$dir/mako-$kind.log" home="$dir/mako-$kind-home" map="$dir/mako-$kind.map" config="$dir/mako-$kind-home/.config/mako-render/conf.toml"
+    fresh_home "$home" cas
+    mkdir -p "$home/.config/vkdaedalus/profiles" "$home/.config/mako-render"
+    printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
+    printf 'frameGenerationLayer = mako\n' >"$home/.config/vkdaedalus/profiles/default.conf"
+    cp "$dir/mako-scaling.toml" "$config"
+    if [ "$kind" = factor-one ]; then
+        sed -i 's/^scaling_factor = .*/scaling_factor = 1.0/' "$config"
+    else
+        mkdir "$home/.config/mako-render/runtime-state"
+        chmod a-w "$home/.config/mako-render/runtime-state"
+    fi
+    background drive_mako_tile "$log" "$map" "$want"
+    driver=$!
+    run "$log" "$home" "$icd" "$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" VK_ADD_IMPLICIT_LAYER_PATH="$MAKO_DIR" "$VKB_LAYER/bin/vkdaedalus-run" vkcube --c 900 --wsi xcb --width 1280 --height 720
+    driver_finished "drive_mako_tile"
+    if ! why=$(mako_ran "$log"); then
+        record FAIL "$name" "$why"
+        return
+    fi
+    if ! [[ "$(cat "$log.tile")" =~ $want ]]; then wrong+=("the tiles said: $(cat "$log.tile")"); fi
+    if [ ! -s "$log.switch" ]; then wrong+=("the Scaling card's On switch was not ticked, though scaling_enabled = true is in MAKO's file"); fi
+    if [ "$kind" = factor-one ] && [ "$(count '^MAKO Renderer: spatial scaling active: ' "$log")" -ne 0 ]; then
+        wrong+=("MAKO said it scales at factor 1, so this run proves nothing: $(grep -m1 '^MAKO Renderer: spatial scaling active: ' "$log")")
+    fi
+    if [ "$kind" = no-status ] && [ "$(count '^MAKO Renderer: spatial scaling active: ' "$log")" -lt 1 ]; then wrong+=("MAKO never said it scales, so this run proves nothing"); fi
+    if [ "$kind" = no-status ] && [ -n "$(find "$home/.config/mako-render/runtime-state" -mindepth 1 -print -quit)" ]; then
+        wrong+=("MAKO wrote into its status folder though it cannot be written, so this run proves nothing: $(find "$home/.config/mako-render/runtime-state" -mindepth 1 -printf "%f ")")
+    fi
+    if [ "$kind" = factor-one ] && [ -n "$absent" ] && [ "$(count "$native" "$log")" -lt 1 ]; then
+        wrong+=("without MAKO FG, MAKO at factor 1 never said it keeps the game's own presentation, so why it wrote no status file is not known")
+    fi
+    if [ "${#wrong[@]}" -gt 0 ]; then
+        record FAIL "$name" "$(printf '%s; ' "${wrong[@]}")"
+    elif [ "$kind" = factor-one ] && [ -n "$absent" ]; then
+        record PASS "$name" "$absent, so with Scaling on at factor 1 MAKO kept the game's own presentation and wrote no status file; the card claimed nothing and the tiles said: $(cat "$log.tile"), with the switch still on"
+    elif [ "$kind" = factor-one ]; then
+        record PASS "$name" "with Scaling on at factor 1 MAKO scaled nothing, its status file gave the reason and the tiles said: $(cat "$log.tile"), with the switch still on"
+    else
+        record PASS "$name" "with MAKO scaling and its status folder closed to it, the card claimed nothing and the tiles said: $(cat "$log.tile"), with the switch still on"
+    fi
+}
+
 mako_cases() {
-    local icd="$1" dir="$2" why order absent
+    local icd="$1" dir="$2" why order absent kind
     local control="$dir/mako-control.log" chome="$dir/mako-control-home" MAKO_DIR="$dir/real-mako"
     if [ -z "$mako_manifest" ]; then
         for order in before after; do record SKIP "vkdaedalus-run loads MAKO alone, effects $order" "$(mako_skip)"; done
+        record SKIP "MAKO at factor 1 is not called scaling" "$(mako_skip)"
+        record SKIP "MAKO with no status file is not called scaling" "$(mako_skip)"
         record SKIP "MAKO scales and takes a live change, effects before" "$(mako_skip)"
         record SKIP "DISABLE_MAKO in the launch options keeps MAKO out" "$(mako_skip)"
         for order in before after; do record SKIP "MAKO frame generation, effects $order" "$(mako_skip)"; done
@@ -1023,10 +1100,13 @@ mako_cases() {
         for order in before after; do record SKIP "vkdaedalus-run loads MAKO alone, effects $order" "this build has no vkdaedalus-run (a plain meson build installs none)"; done
         record SKIP "MAKO scales and takes a live change, effects before" "this build has no vkdaedalus-run (a plain meson build installs none)"
         record SKIP "DISABLE_MAKO in the launch options keeps MAKO out" "this build has no vkdaedalus-run (a plain meson build installs none)"
+        record SKIP "MAKO at factor 1 is not called scaling" "this build has no vkdaedalus-run (a plain meson build installs none)"
+        record SKIP "MAKO with no status file is not called scaling" "this build has no vkdaedalus-run (a plain meson build installs none)"
     else
         for order in before after; do mako_loads_case "$icd" "$dir" "$order" "$control"; done
         mako_loads_case "$icd" "$dir" before "$control" override
         mako_live_case "$icd" "$dir"
+        for kind in factor-one no-status; do mako_unscaled_case "$icd" "$dir" "$kind"; done
         mako_kept_case "$icd" "$dir" "$control"
     fi
     if absent=$(mako_fg_absent); then

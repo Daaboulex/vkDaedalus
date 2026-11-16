@@ -78,6 +78,7 @@ namespace vkBasalt
             pEffectRegistry->clearEditedParameters();
         refreshFrameGenerationFile(false);
         refreshMakoFile(false);
+        refreshMakoStatus();
         const FrameGenerationState fg      = frameGenerationState();
         const bool                 scaling = fg.layer == FrameGenerationLayer::Mako && !fg.notInstalled
                              && (makoLayerLoaded() || !frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako));
@@ -264,11 +265,16 @@ namespace vkBasalt
             scalingLine = "Unavailable";
             scalingInk  = palette.disabled;
         }
-        else if (makoSet && makoSet->scalingEnabled)
+        else if (const MakoScalingShown scaling = mako ? makoScaling() : MakoScalingShown{}; scaling.run != MakoScalingRun::Off)
         {
-            const bool started = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).scalingEnabled;
-            scalingLine        = started ? shownChoice(makoScalingMethods, makoSet->scalingMethod) + " " + factorText(makoSet->scalingFactor) : fg.loadsNextLaunch ? "Next launch" : "Needs vkdaedalus-run";
-            scalingInk         = started ? palette.accent : palette.warn;
+            const bool scales = scaling.run == MakoScalingRun::Scaling;
+            scalingLine       = scales                                       ? scaling.detail
+                                : scaling.run == MakoScalingRun::NotScaling ? "Not scaling"
+                                : scaling.run == MakoScalingRun::NoStatus   ? "No status file"
+                                : fg.loadsNextLaunch                        ? "Next launch"
+                                                                            : "Needs vkdaedalus-run";
+            scalingTip        = scales || scaling.run == MakoScalingRun::NotStarted ? "" : scaling.detail;
+            scalingInk        = scales ? palette.accent : palette.warn;
         }
         const size_t gpusRunning = 1 + static_cast<size_t>(std::count_if(state.gpus.begin(), state.gpus.end(),
                                                                        [](const OverlayGpu& gpu) { return gpu.number != gameGpu && gpu.runsChain; }));
@@ -287,7 +293,7 @@ namespace vkBasalt
             std::string    tip;
         };
         const size_t      count = layout.sectionCount;
-        const std::string tiles = "Frame generation tile: " + fgLine + (fgTip.empty() ? "" : " (" + fgTip + ")") + (count == 4 ? "; Scaling tile: " + scalingLine : "; no Scaling tile");
+        const std::string tiles = "Frame generation tile: " + fgLine + (fgTip.empty() ? "" : " (" + fgTip + ")") + (count == 4 ? "; Scaling tile: " + scalingLine + (scalingTip.empty() || scalingTip == fgTip ? "" : " (" + scalingTip + ")") : "; no Scaling tile");
         if (tiles != tilesLogged)
         {
             tilesLogged = tiles;

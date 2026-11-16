@@ -359,12 +359,12 @@ namespace vkBasalt
         const std::optional<uint32_t> multiplier = frameGenerationMultiplierHere();
         const std::string             running(loadedFrameGenerationLayerName());
         const bool                    makoRuns   = loadedFrameGenerationLayer() == FrameGenerationLayer::Mako;
-        const bool                    makoHere   = makoRuns && readMakoOnce() && makoLiveHere() && makoAtStart;
-        const MakoSettings*           makoNow    = makoHere ? &makoSettingsFor(*makoProfileInUse(), powerSupplies.source) : nullptr;
+        const MakoScalingShown        scaling    = makoRuns ? makoScaling() : MakoScalingShown{};
+        const bool                    scales     = scaling.run == MakoScalingRun::Scaling;
         const bool                    adaptive   = frameGenerationAdaptiveHere().has_value();
         std::vector<PipelineStep>     steps      = pipelineSteps(pLogicalDevice->frameGenerationPlace, multiplier.has_value() || adaptive,
                                                                  state.effectsEnabled ? effectGpus : std::vector<uint32_t>{});
-        if (makoNow && makoSettingsFor(*makoAtStart, powerSupplies.source).scalingEnabled)
+        if (scales || scaling.run == MakoScalingRun::NoStatus)
             steps.insert(steps.end() - 1, PipelineStep{"Scaling", {gameGpu}});
         const std::optional<std::string> elsewhere = layer == FrameGenerationLayer::Mako ? makoGpuElsewhere() : std::nullopt;
         ScaleInputs outputs;
@@ -388,12 +388,15 @@ namespace vkBasalt
         {
             const PipelineStep& step       = steps[i];
             const bool          generation = step.what == "Frame generation";
-            const std::string   name       = generation               ? running + (multiplier ? " " + std::to_string(*multiplier) + "x" : " adaptive")
-                                             : step.what == "Scaling" ? shownChoice(makoScalingMethods, makoNow->scalingMethod)
-                                                                      : step.what;
+            const bool          scaler     = step.what == "Scaling";
+            const std::string   name       = generation       ? running + (multiplier ? " " + std::to_string(*multiplier) + "x" : " adaptive")
+                                             : scaler && scales ? shownChoice(makoScalingMethods, scaling.method)
+                                                                : step.what;
             std::string         where      = "GPU ";
             for (size_t g = 0; g < step.gpus.size(); g++)
                 where += (g ? " and " : "") + std::to_string(step.gpus[g]);
+            if (scaler)
+                where = scales ? scaling.detail : "no status file";
             if (step.what == "Display" && refresh)
             {
                 char hz[32];
@@ -414,7 +417,7 @@ namespace vkBasalt
             const float  w     = std::max(ui::px(96.0f), std::max(named.x, sub.x) + 2.0f * padX);
             const float  textY = at.y + (h - named.y - sub.y) * 0.5f;
             draw->AddRectFilled(at, ImVec2(at.x + w, at.y + h), ImGui::GetColorU32(generation ? ui::mix(palette.row, palette.accent, 0.16f) : palette.row), ui::px(ui::Size::surface));
-            if (generation && elsewhere && makoRuns)
+            if ((generation && elsewhere && makoRuns) || (scaler && !scales))
                 draw->AddRect(at, ImVec2(at.x + w, at.y + h), ImGui::GetColorU32(palette.warn), ui::px(ui::Size::surface), ui::px(1.5f));
             draw->AddText(fonts.bold, title, ImVec2(at.x + padX, textY), ImGui::GetColorU32(generation ? palette.accent : palette.text), name.c_str());
             draw->AddText(fonts.body, under, ImVec2(at.x + padX, textY + named.y), ImGui::GetColorU32(palette.faint), where.c_str());
@@ -426,8 +429,10 @@ namespace vkBasalt
                 ImGui::SetItemTooltip("%s", ("MAKO generates frames on " + frameGenerationGpuName + ", the GPU the game renders on: MAKO does not support\n"
                                              "frame generation on another GPU than the game's.")
                                                 .c_str());
-            else if (step.what == "Scaling")
-                ImGui::SetItemTooltip("MAKO scales each frame on the game's GPU");
+            else if (scaler && scales)
+                ImGui::SetItemTooltip("MAKO scales each frame on the game's GPU, from the size the game draws at to the size it presents");
+            else if (scaler)
+                ImGui::SetItemTooltip("%s", scaling.detail.c_str());
             else if (generation)
                 ImGui::SetItemTooltip("%s", ("lsfg-vk 2 generates frames on " + frameGenerationGpuName + ", the GPU the game renders on: it hands each frame to its pipeline as memory\n"
                                              "only that GPU and its driver can open, and it has no setting for another GPU.")
@@ -679,6 +684,7 @@ namespace vkBasalt
         const OverlayPalette& palette = activePalette();
         const std::string     kept    = "Read when a game starts: vkdaedalus-run loads this layer alone and keeps the other out.\nThe layer is kept in the vkDaedalus profile "
                                         + activeProfileName;
+        const bool fellBack = makoLiveHere() && makoAtStart && makoFellBackToMakoFg(makoSettingsAtStart().frameGenerationModel, makoStatus.ofSwapchain);
         ui::label("Layer");
         ImGui::SetItemTooltip("%s.", kept.c_str());
         for (const FrameGenerationTab& tab : frameGenerationTabs)
@@ -696,7 +702,15 @@ namespace vkBasalt
             if (ui::tab(item.c_str(), chosen == &tab) && chosen != &tab)
                 chooseFrameGenerationTab(tab);
             ImGui::EndDisabled();
-            ImGui::SetItemTooltip("%s", why.empty() ? what.c_str() : why.c_str());
+            if (lossless && fellBack)
+            {
+                ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(ImGui::GetItemRectMax().x - ui::px(6.0f), ImGui::GetItemRectMin().y + ui::px(6.0f)), ui::px(3.0f),
+                                                            ImGui::GetColorU32(palette.warn));
+                ImGui::SetItemTooltip("MAKO could not start Lossless Scaling's model when this game started: this run has MAKO FG in its place.%s%s", why.empty() ? "" : "\n",
+                                      why.c_str());
+            }
+            else
+                ImGui::SetItemTooltip("%s", why.empty() ? what.c_str() : why.c_str());
         }
         restartMark("Layer", waits, palette);
     }

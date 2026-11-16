@@ -1,4 +1,6 @@
 #include "mako_config.hpp"
+#include "mako_status.hpp"
+#include "prefix_holder.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -296,6 +298,29 @@ int main(int argc, char** argv)
         std::printf("%s\n", makoDllPath(read.file->global).value_or("none").c_str());
         return 0;
     }
+    if (args.size() == 4 && args[0] == "status")
+    {
+        std::ifstream                 stat("/proc/" + args[1] + "/stat", std::ios::binary);
+        const std::string             line((std::istreambuf_iterator<char>(stat)), {});
+        const std::optional<uint64_t> started = processStartTicks(line);
+        if (!started)
+        {
+            std::fprintf(stderr, "cannot read the start time of process %s\n", args[1].c_str());
+            return 1;
+        }
+        const MakoStatusRead read = readMakoStatus(makoStatusFolder(makoConfigPath()), std::stoull(args[1]), *started, static_cast<uint32_t>(std::stoul(args[2])),
+                                                   static_cast<uint32_t>(std::stoul(args[3])));
+        if (!read.problem.empty())
+            std::printf("problem %s\n", read.problem.c_str());
+        if (read.ofSwapchain.size() != 1)
+            std::printf("%zu status files of this swapchain\n", read.ofSwapchain.size());
+        for (const MakoStatus& status : read.ofSwapchain)
+            std::printf("role %s\ncontext %llu\napplied_model %s\napplied_scaling %s\nactive %s\ninactive_reason %s\nsource %ux%u\npresentation %ux%u\nmethod %s\n",
+                        status.role.c_str(), static_cast<unsigned long long>(status.context), status.appliedModel.c_str(), yesNo(status.appliedScalingEnabled),
+                        yesNo(status.scalingActive), status.scalingInactiveReason ? status.scalingInactiveReason->c_str() : "-", status.sourceWidth,
+                        status.sourceHeight, status.presentationWidth, status.presentationHeight, status.scalingMethod.c_str());
+        return 0;
+    }
     if (args.size() == 2 && args[0] == "power")
     {
         std::printf("%s\n", sourceName(readPowerSupplies(args[1]).source));
@@ -335,6 +360,6 @@ int main(int argc, char** argv)
     }
     std::fprintf(stderr,
                  "usage: write <seed> <folder> | read <file> | read-as <file> <handheld|docked|unknown> | path | identify <file> [exe] | dll | "
-                 "power <folder> | names | limits\n");
+                 "power <folder> | status <process id> <width> <height> | names | limits\n");
     return 2;
 }

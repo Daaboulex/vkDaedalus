@@ -33,7 +33,8 @@ check's message or a test already says is not repeated here.
   use. One check compiles it unmodified into a test probe. It is never linked into the layer and
   never shipped.
 - MAKO's source, under the GPL, is pinned at a release only so that one check compiles MAKO's own
-  file reader unmodified into a test probe. It is never linked into the layer and never shipped.
+  file reader and status writer unmodified into a test probe. It is never linked into the layer and
+  never shipped.
 - The ReShade compiler carries the patches in `subprojects/packagefiles/reshade/`, applied by the Nix
   build and the meson build alike. The file list is the record.
 - A ReShade patch that upstream absorbs stops applying and names itself.
@@ -202,6 +203,14 @@ check's message or a test already says is not repeated here.
 - MAKO generates frames only on the game's GPU, so the card offers no GPU and never writes MAKO's
   `gpu` key; it offers to clear one that names another GPU. The card names the GPU in a row of its
   own: read from a tooltip alone, the card looked as if it lacked a GPU choice.
+- What MAKO scales is read from the status file MAKO writes per swapchain, never from its settings:
+  with Scaling on MAKO still scales nothing at factor 1 or for a game that asks for the window's full
+  size. The file is named by the process and holds no swapchain handle, so the game's own is the one
+  whose source or presentation size the swapchain has. MAKO writes no file for a swapchain it does
+  nothing on, so no file is a state the card names and never reads as off.
+- MAKO's status file has no field for its fall back from Lossless Scaling's model to MAKO FG. MAKO
+  changes its model only at the start, so the card reads the fall back from the model the status
+  file says is applied against the one MAKO's file named at the start.
 - MAKO's power sets are read by MAKO's own rule from `/sys/class/power_supply`, the same check
   comparing it with MAKO's code, and the card names them by what MAKO switches on, plugged in or on
   battery, not docked or handheld.

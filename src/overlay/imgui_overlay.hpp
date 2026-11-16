@@ -26,6 +26,7 @@
 #include "frame_generation.hpp"
 #include "latency_stats.hpp"
 #include "mako_config.hpp"
+#include "mako_status.hpp"
 #include "settings_manager.hpp"
 #include "reshade_parser.hpp"
 #include "overlay/overlay_renderer.hpp"
@@ -232,6 +233,8 @@ namespace vkBasalt
         std::string          frameGenerationTabGreyed(const FrameGenerationTab& tab);
         void                 chooseFrameGenerationTab(const FrameGenerationTab& tab);
         void                 renderFrameGenerationGpuRow(FrameGenerationLayer layer);
+        void                 refreshMakoStatus();
+        MakoScalingShown     makoScaling();
         void                 renderLsfgBody(bool flipped, bool on, bool live, const std::vector<std::string>& waiting);
         void                 renderFrameOrderNote();
         void renderFrameGenerationGlobals();
@@ -479,6 +482,9 @@ namespace vkBasalt
         bool                                               makoFgChecked = false;
         std::string                                        tilesLogged;
         std::optional<std::string>                         makoFgGone;
+        MakoStatusRead                                     makoStatus;
+        Poll                                               makoStatusPoll{makoFilePollInterval};
+        std::optional<uint64_t>                            startTicks;
         std::string activeProfileName;
         std::string activeProfilePath;
         bool profileDirty = false;

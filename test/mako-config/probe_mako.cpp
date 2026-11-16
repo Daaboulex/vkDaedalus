@@ -1,6 +1,7 @@
 #include "mako-common/configuration/config.hpp"
 #include "mako-common/configuration/detection.hpp"
 #include "mako-common/helpers/paths.hpp"
+#include "runtime_status.hpp"
 
 #include <cstdio>
 #include <exception>
@@ -10,6 +11,7 @@
 
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 using namespace ls;
@@ -102,6 +104,68 @@ namespace
         return at != MAP_FAILED;
     }
 
+    int status(const std::string& which, const std::string& reader, const std::string& readerOut)
+    {
+        mako::layer::RuntimeStatusRecord record;
+        record.requestedProfile.name                   = "vkdaedalus \"default\"\t\\";
+        record.requestedProfile.frame_generation_model = FrameGenerationModel::LosslessScaling;
+        record.requestedProfile.scaling_enabled        = true;
+        record.appliedProfile                          = record.requestedProfile;
+        record.spatialSourceWidth                      = 1280;
+        record.spatialSourceHeight                     = 720;
+        record.spatialPresentationWidth                = 1280;
+        record.spatialPresentationHeight               = 720;
+        uint64_t context                               = 1;
+        if (which == "scaling")
+        {
+            context                     = 3;
+            record.spatialScalingActive = true;
+            record.spatialSourceWidth   = 853;
+            record.spatialSourceHeight  = 480;
+            record.spatialActiveMethod  = ScalingMethod::Mako;
+        }
+        else if (which == "native")
+        {
+            context                             = 18446744073709551615ull;
+            record.spatialScalingInactiveReason = "application-extent-mismatch";
+        }
+        else if (which == "fallback")
+        {
+            record.appliedProfile.frame_generation_model = FrameGenerationModel::MakoFg;
+            record.appliedProfile.scaling_enabled        = false;
+        }
+        else
+            return 2;
+        mako::layer::RuntimeStatusPublisher publisher(context, "frame-generation");
+        publisher.publish(record);
+        if (publisher.path().empty() || !std::filesystem::exists(publisher.path()))
+        {
+            std::fprintf(stderr, "MAKO published no status file\n");
+            return 1;
+        }
+        std::printf("role frame-generation\ncontext %llu\napplied_model %s\napplied_scaling %s\nactive %s\ninactive_reason %s\nsource %ux%u\npresentation %ux%u\nmethod %s\n",
+                    static_cast<unsigned long long>(context), frameGenerationModelName(record.appliedProfile.frame_generation_model),
+                    yesNo(record.appliedProfile.scaling_enabled), yesNo(record.spatialScalingActive && record.appliedProfile.scaling_enabled),
+                    record.spatialScalingInactiveReason ? record.spatialScalingInactiveReason->c_str() : "-", record.spatialSourceWidth, record.spatialSourceHeight,
+                    record.spatialPresentationWidth, record.spatialPresentationHeight, std::string(scalingMethodName(record.spatialActiveMethod)).c_str());
+        std::fflush(stdout);
+        const pid_t child = fork();
+        if (child < 0)
+            return 1;
+        if (child == 0)
+        {
+            if (std::freopen(readerOut.c_str(), "w", stdout) == nullptr)
+                _exit(126);
+            execl(reader.c_str(), reader.c_str(), "status", std::to_string(getppid()).c_str(), std::to_string(record.spatialPresentationWidth).c_str(),
+                  std::to_string(record.spatialPresentationHeight).c_str(), static_cast<char*>(nullptr));
+            _exit(127);
+        }
+        int ended = 0;
+        if (waitpid(child, &ended, 0) != child || !WIFEXITED(ended))
+            return 1;
+        return WEXITSTATUS(ended);
+    }
+
     const char* sourceName(PowerSource source)
     {
         switch (source)
@@ -188,6 +252,8 @@ int main(int argc, char** argv)
                 }
             return 0;
         }
+        if (args.size() == 4 && args[0] == "status")
+            return status(args[1], args[2], args[3]);
         if (args.size() == 2 && args[0] == "power")
         {
             std::printf("%s\n", sourceName(detectPowerSource(args[1])));
@@ -233,6 +299,6 @@ int main(int argc, char** argv)
     }
     std::fprintf(stderr,
                  "usage: read <file> | read-as <file> <handheld|docked|unknown> | rewrite <in> <out> | path | identify <file> [exe] | dll | "
-                 "power <folder> | names | limits\n");
+                 "power <folder> | status <scaling|native|fallback> <vkDaedalus probe> <its output> | names | limits\n");
     return 2;
 }

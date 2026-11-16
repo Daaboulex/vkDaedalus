@@ -210,6 +210,16 @@ for tree in plugged battery desktop missing incomplete device untyped plugged-in
   agree "power source of $tree" -- power "$power/$tree"
 done
 
+for status in scaling native fallback; do
+  compared=$((compared + 1))
+  mkdir -p "$work/status-$status"
+  rm -f "$work/ours.out"
+  if ! { probe "$theirs" "$work/theirs.out" MAKO_CONFIG="$work/status-$status/conf.toml" -- status "$status" "$ours" "$work/ours.out" &&
+    diff -u --label "vkDaedalus: status file $status" --label "MAKO: status file $status" "$work/ours.out" "$work/theirs.out"; }; then
+    fail "vkDaedalus does not read the status file MAKO publishes: $status"
+  fi
+done
+
 if [ "$failures" -gt 0 ]; then
   echo "$failures comparisons between vkDaedalus' MAKO file handling and MAKO's own failed"
   exit 1

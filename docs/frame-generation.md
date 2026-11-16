@@ -15,7 +15,8 @@ The card's Layer choice has three entries, and each vkDaedalus profile runs one 
 
 An entry whose layer, DLL or model is missing is greyed with that reason. The layer is kept in the vkDaedalus profile
 and MAKO's model in MAKO's profile. `vkdaedalus-run` loads the profile's layer alone and keeps the other out of the
-game, and MAKO picks its model when the game starts, so every change of the choice applies from the next launch.
+game, and MAKO picks its model when the game starts, so every change of the choice applies from the next launch. When
+MAKO cannot start Lossless Scaling's model it runs MAKO FG in its place for that run, which the card marks on MAKO LSFG.
 
 A profile that names no layer runs lsfg-vk when both are installed and the one installed when only one is, so nothing
 changes for anyone until they pick MAKO: launch options that set `ENABLE_MAKO=1` without `DISABLE_MAKO` keep getting
@@ -85,6 +86,14 @@ and the notices always act on and show the set MAKO uses now; a tab picks only w
 
 MAKO also scales: the game draws at its window's size divided by up to the factor, and MAKO scales each frame up to the
 window. The Scaling card appears for a profile that runs MAKO, since scaling runs inside MAKO's own layer.
+
+Scaling switched on is not always scaling: MAKO scales nothing at factor 1, or when the game asks for the window's full
+size. MAKO writes what it does for each swapchain into a status file in `runtime-state` beside its own file, and the
+card, its tile and the run's order read the game's own one. They call scaling on only when MAKO reports it active, with
+the size the game draws at and the size MAKO presents. When MAKO reports it inactive they give MAKO's reason on the On
+switch, and while MAKO has written no such file they say that there is no status file. MAKO writes one only for a
+swapchain it works on: where it neither scales nor can generate frames it shows the game's own frames and writes
+none.
 
 ## Effects before or after frame generation
 

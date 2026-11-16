@@ -75,6 +75,7 @@ vkBasalt_src = [
     'logical_swapchain.cpp',
     'lut_cube.cpp',
     'mako_config.cpp',
+    'mako_status.cpp',
     'memory.cpp',
     'renderpass.cpp',
     'reshade_uniforms.cpp',
