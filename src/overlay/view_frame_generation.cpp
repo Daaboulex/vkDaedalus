@@ -314,7 +314,7 @@ namespace vkBasalt
         if (layer == FrameGenerationLayer::Mako)
         {
             const FrameGenerationState before = frameGenerationState();
-            switchMako(!before.on);
+            switchMako(&MakoSettings::frameGenerationEnabled, !before.on);
             const FrameGenerationState after = frameGenerationState();
             shortNoticeProblem               = !makoProblem.empty();
             const MakoProfile* inUse         = makoProfileInUse();

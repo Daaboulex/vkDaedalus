@@ -246,7 +246,8 @@ namespace vkBasalt
         std::optional<AdaptiveTarget> makoAdaptiveHere();
         std::vector<std::string> makoWaiting(const MakoProfile* inUse);
         MakoSettings             makoSettingsAtStart() const;
-        void                 switchMako(bool on);
+        void                 switchMako(bool MakoSettings::*setting, bool on);
+        std::optional<MakoGlobal> makoGlobalWithDll(const MakoSettings& written);
         void                 useGamesGpuInMako();
         std::optional<std::string> makoGpuElsewhere();
         void                 renderMakoBody(bool flipped, bool on, const std::vector<std::string>& waiting);

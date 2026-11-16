@@ -254,32 +254,39 @@ namespace vkBasalt
         return waiting;
     }
 
-    void ImGuiOverlay::switchMako(bool on)
+    std::optional<MakoGlobal> ImGuiOverlay::makoGlobalWithDll(const MakoSettings& written)
+    {
+        if (!needsLosslessDll(written))
+            return std::nullopt;
+        if (!makoDll)
+            makoDll = makoDllStatus(makoFile->global);
+        if (makoDll->found || !makoDll->inSteamLibrary)
+            return std::nullopt;
+        MakoGlobal global = makoFile->global;
+        global.dll        = *makoDll->inSteamLibrary;
+        return global;
+    }
+
+    void ImGuiOverlay::switchMako(bool MakoSettings::*setting, bool on)
     {
         if (!readMakoOnce())
             return;
-        if (!makoDll)
-            makoDll = makoDllStatus(makoFile->global);
-        const MakoProfile*        inUse = makoProfileInUse();
-        std::optional<MakoGlobal> global;
-        if (on && inUse && needsLosslessDll(makoSettingsFor(*inUse, powerSupplies.source)) && !makoDll->found && makoDll->inSteamLibrary)
+        if (const MakoProfile* inUse = makoProfileInUse())
         {
-            global      = makoFile->global;
-            global->dll = *makoDll->inSteamLibrary;
+            const MakoProfile changed = makoProfileSwitched(*inUse, powerSupplies.source, setting, on);
+            saveMako(on ? makoGlobalWithDll(makoSettingsFor(changed, powerSupplies.source)) : std::nullopt, changed);
+            return;
         }
-        if (inUse)
-            saveMako(global, makoProfileSwitched(*inUse, powerSupplies.source, &MakoSettings::frameGenerationEnabled, on));
-        else if (on)
-        {
-            std::vector<std::string> games = ConfigSerializer::profileUsers()[activeProfileName];
-            if (std::find(games.begin(), games.end(), activeGameName) == games.end())
-                games.push_back(activeGameName);
-            MakoProfile made                     = newMakoProfileFor(activeProfileName, games);
-            made.settings.frameGenerationEnabled = true;
-            saveMako(global, made);
-            if (makoProblem.empty())
-                frameGenerationAssignmentsChanged("");
-        }
+        if (!on)
+            return;
+        std::vector<std::string> games = ConfigSerializer::profileUsers()[activeProfileName];
+        if (std::find(games.begin(), games.end(), activeGameName) == games.end())
+            games.push_back(activeGameName);
+        MakoProfile made       = newMakoProfileFor(activeProfileName, games);
+        made.settings.*setting = true;
+        saveMako(makoGlobalWithDll(made.settings), made);
+        if (makoProblem.empty())
+            frameGenerationAssignmentsChanged("");
     }
 
     std::optional<std::string> ImGuiOverlay::makoGpuElsewhere()
@@ -331,7 +338,7 @@ namespace vkBasalt
         if (flipped)
         {
             ui::endScrollArea();
-            switchMako(on);
+            switchMako(&MakoSettings::frameGenerationEnabled, on);
             return;
         }
         if (!inUse)
@@ -508,13 +515,7 @@ namespace vkBasalt
             if (pickFrom("Model", makoFrameGenerationModels, set.frameGenerationModel, nextColumn, [&](std::string_view model) { return makoModelMissing(std::string(model)); }))
             {
                 changed = true;
-                if (!makoDll)
-                    makoDll = makoDllStatus(makoFile->global);
-                if (needsLosslessDll(set) && !makoDll->found && makoDll->inSteamLibrary)
-                {
-                    global      = makoFile->global;
-                    global->dll = *makoDll->inSteamLibrary;
-                }
+                global  = makoGlobalWithDll(set);
             }
             restartMarkAtRight("Model", pending("Model"));
             for (const FrameGenerationChoice& model : makoFrameGenerationModels)
@@ -717,27 +718,7 @@ namespace vkBasalt
         if (flipped)
         {
             ui::endScrollArea();
-            if (!makoDll)
-                makoDll = makoDllStatus(makoFile->global);
-            std::optional<MakoGlobal> global;
-            if (on && needsLosslessDll(running) && !makoDll->found && makoDll->inSteamLibrary)
-            {
-                global      = makoFile->global;
-                global->dll = *makoDll->inSteamLibrary;
-            }
-            if (inUse)
-                saveMako(global, makoProfileSwitched(tuned, powerSupplies.source, &MakoSettings::scalingEnabled, on));
-            else if (on)
-            {
-                std::vector<std::string> games = ConfigSerializer::profileUsers()[activeProfileName];
-                if (std::find(games.begin(), games.end(), activeGameName) == games.end())
-                    games.push_back(activeGameName);
-                MakoProfile made             = newMakoProfileFor(activeProfileName, games);
-                made.settings.scalingEnabled = true;
-                saveMako(global, made);
-                if (makoProblem.empty())
-                    frameGenerationAssignmentsChanged("");
-            }
+            switchMako(&MakoSettings::scalingEnabled, on);
             return;
         }
         if (!inUse)
@@ -779,13 +760,7 @@ namespace vkBasalt
             if (pickFrom("Method", makoScalingMethods, set.scalingMethod, column, lossless))
             {
                 changed = true;
-                if (!makoDll)
-                    makoDll = makoDllStatus(makoFile->global);
-                if (needsLosslessDll(set) && !makoDll->found && makoDll->inSteamLibrary)
-                {
-                    global      = makoFile->global;
-                    global->dll = *makoDll->inSteamLibrary;
-                }
+                global  = makoGlobalWithDll(set);
             }
             if (const std::string why = lossless("ls1"); !why.empty())
                 whyGreyed("LS1: " + why);
