@@ -1,0 +1,8 @@
+version = 2
+
+[[profile]]
+name = "other"
+active_in = "nothing-matches"
+
+[[profile]]
+name = "fallback"

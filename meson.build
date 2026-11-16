@@ -95,6 +95,13 @@ if get_option('with_so')
     test('frame-generation', frame_generation_test,
         args : [meson.current_build_dir() / 'test-frame-generation'])
 
+    mako_config_test = executable('mako-config-test',
+        'test/mako_config_test.cpp', 'src/mako_config.cpp', 'src/frame_generation.cpp', 'src/toml_edit.cpp',
+        include_directories : include_directories('src'),
+        dependencies : [tomlplusplus_dep, dl_dep])
+    test('mako-config', mako_config_test,
+        args : [meson.current_build_dir() / 'test-mako-config'])
+
     reshade_uniform_write_test = executable('reshade-uniform-write-test',
         'test/reshade_uniform_write_test.cpp', 'src/logger.cpp',
         include_directories : include_directories('src'),

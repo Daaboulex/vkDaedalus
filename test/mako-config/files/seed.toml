@@ -1,0 +1,34 @@
+# MAKO settings, edited by hand
+version   =   2
+current_profile = 'mine'
+
+[ global ]
+allow_fp16 = true   # keep half precision
+dll = '/media/games/Lossless Scaling/Lossless.dll'
+
+# the owner's own profile
+[[ profile ]]
+name = 'mine'
+active_in = [
+    "Owned.exe", # the game
+    'vkcube',
+]
+multiplier = 3 # three times
+unknown_key = "kept"
+
+[[profile]]
+name = "vkdaedalus Default"
+active_in = "/a.exe"
+flow_scale = 0.6
+adaptive = true
+
+[profile.handheld]
+target_fps = 60 # on battery
+flow_scale = 0.5
+
+[profile.docked]
+target_fps = 144
+
+[[profile]]
+name = "plain"
+active_in = []

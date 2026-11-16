@@ -1,0 +1,4 @@
+version = 2
+[[profile]]
+name = "p"
+dynamic_cadence_probe_interval_seconds = 0.05

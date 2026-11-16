@@ -1,0 +1,4 @@
+version = 2
+[[profile]]
+name = "p"
+base_fps_cap = 1001

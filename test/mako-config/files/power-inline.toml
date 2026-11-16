@@ -1,0 +1,5 @@
+version = 2
+[[profile]]
+name = "p"
+handheld = { target_fps = 60 }
+docked.target_fps = 120

@@ -155,6 +155,23 @@
         "url": "https://git.lsfg-vk.dev/lsfg-vk.git"
       }
     },
+    "mako": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794503850,
+        "narHash": "sha256-4VBLzrsRZ/h1rsBW1xDL7bxBDC9BJSi0W57c+hWTHIw=",
+        "owner": "eugeniosegala",
+        "repo": "MAKO",
+        "rev": "61f9dc4dca37bdd46bf3c7d0c833ee5301bc8e9b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "eugeniosegala",
+        "ref": "render-v5.0.0",
+        "repo": "MAKO",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1794537146,
@@ -242,6 +259,7 @@
         "imgui": "imgui",
         "imgui-filebrowser": "imgui-filebrowser",
         "lsfg-vk": "lsfg-vk",
+        "mako": "mako",
         "nixpkgs": "nixpkgs",
         "reshade": "reshade",
         "reshade-shaders": "reshade-shaders",

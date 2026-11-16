@@ -1,0 +1,9 @@
+version = 2
+other = 1
+[global]
+log_level = 'info'
+[[profile]]
+name = 'p'
+something = true
+[other]
+x = 1

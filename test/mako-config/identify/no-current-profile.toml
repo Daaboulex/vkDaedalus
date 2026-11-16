@@ -1,0 +1,6 @@
+version = 2
+current_profile = "gone"
+
+[[profile]]
+name = "executable"
+active_in = "/mako-config-probe"

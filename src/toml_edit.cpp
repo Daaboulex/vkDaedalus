@@ -6,11 +6,33 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <system_error>
 
 namespace vkBasalt
 {
     namespace fs = std::filesystem;
+
+    namespace
+    {
+        bool underItsOwnHeader(const Positions& positions, const toml::node& node)
+        {
+            if (const toml::table* table = node.as_table())
+                return opensWith(positions, *table, "[");
+            const toml::array* entries = node.as_array();
+            return entries != nullptr && !entries->empty() && entries->front().is_table() && opensWith(positions, *entries->front().as_table(), "[");
+        }
+
+        toml::source_position endOfSection(const Positions& positions, const toml::table& table)
+        {
+            toml::source_position last = table.source().end;
+            for (const auto& [_, value] : table)
+                if (!underItsOwnHeader(positions, value)
+                    && (value.source().end.line > last.line || (value.source().end.line == last.line && value.source().end.column > last.column)))
+                    last = value.source().end;
+            return last;
+        }
+    }
 
     Positions::Positions(const std::string& text) : text(text), lineStarts{0}
     {
@@ -66,11 +88,7 @@ namespace vkBasalt
     {
         if (appended.empty())
             return;
-        toml::source_position last = table.source().end;
-        for (const auto& [_, value] : table)
-            if (value.source().end.line > last.line || (value.source().end.line == last.line && value.source().end.column > last.column))
-                last = value.source().end;
-        const size_t at           = positions.afterLine(positions.at(last));
+        const size_t at           = positions.afterLine(positions.at(endOfSection(positions, table)));
         const bool   needsNewline = at == positions.text.size() && !positions.text.empty() && positions.text.back() != '\n';
         edits.push_back({at, at, (needsNewline ? "\n" : "") + appended});
     }
@@ -78,6 +96,44 @@ namespace vkBasalt
     bool opensWith(const Positions& positions, const toml::table& table, std::string_view header)
     {
         return positions.text.compare(positions.at(table.source().begin), header.size(), header) == 0;
+    }
+
+    void removeSection(const Positions& positions, const toml::table& table, std::vector<TextEdit>& edits)
+    {
+        edits.push_back(
+            {positions.lineStart(positions.at(table.source().begin)), positions.afterLine(positions.at(endOfSection(positions, table))), ""});
+    }
+
+    bool renameProfileIn(std::string& text, const std::string& from, const std::string& to, std::string_view layer, std::string& problem)
+    {
+        const std::optional<toml::table> table = tomlOf(text, problem);
+        if (!table)
+            return false;
+        const Positions    positions(text);
+        const toml::table* found = nullptr;
+        if (const toml::array* profiles = (*table)["profile"].as_array())
+            for (const toml::node& entry : *profiles)
+                if (const toml::table* candidate = entry.as_table(); candidate && candidate->get("name"))
+                {
+                    const std::optional<std::string> name = candidate->get("name")->value<std::string>();
+                    if (name == to)
+                        return refused(problem, std::string(layer) + " already has a profile named '" + to + "'");
+                    if (name == from)
+                        found = candidate;
+                }
+        if (found == nullptr)
+            return true;
+        if (!opensWith(positions, *found, "[["))
+            return refused(problem, std::string(layer) + "'s profile '" + from + "' is not a [[profile]] section the overlay can change");
+        bool                  clean = true;
+        std::vector<TextEdit> edits;
+        TableEditor           editor{positions, *found, edits, ""};
+        editor.set("name", optionalString(to, clean), false);
+        editor.finish();
+        if (!clean)
+            return refused(problem, "the name \"" + to + "\" cannot be written into " + std::string(layer) + "'s file");
+        text = applied(text, edits);
+        return true;
     }
 
     std::string applied(std::string text, std::vector<TextEdit> edits)
@@ -138,6 +194,16 @@ namespace vkBasalt
         return text;
     }
 
+    std::optional<std::string> activeInText(const std::vector<std::string>& games, bool& clean)
+    {
+        if (games.size() == 1)
+            return optionalString(games.front(), clean);
+        std::string out = "[";
+        for (size_t i = 0; i < games.size(); i++)
+            out += (i ? ", " : "") + optionalString(games[i], clean).value_or("");
+        return out + "]";
+    }
+
     std::string floatText(float value)
     {
         char        text[32];
@@ -168,14 +234,53 @@ namespace vkBasalt
         return false;
     }
 
-    bool replaceFileAtomically(const std::string& path, const std::string& text, std::string_view whoseFile, std::string& problem)
+    FileText readFileText(const std::string& path)
     {
-        std::error_code       error;
+        FileText        read;
+        std::error_code unreadable;
+        read.exists = fs::exists(path, unreadable);
+        if (unreadable)
+        {
+            read.problem = "cannot check " + path + ": " + unreadable.message();
+            return read;
+        }
+        if (!read.exists)
+            return read;
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+        {
+            read.problem = "cannot read " + path;
+            return read;
+        }
+        std::stringstream text;
+        text << file.rdbuf();
+        read.text = text.str();
+        return read;
+    }
+
+    bool replaceFileAtomically(
+        const std::string& requested, const std::string& text, std::string_view whoseFile, const WriteRules& rules, std::string& problem)
+    {
+        std::error_code error;
+        std::string     path = requested;
+        for (size_t links = 0; rules.followLinks && fs::is_symlink(path, error); links++)
+        {
+            if (links == 40)
+                return refused(problem,
+                               requested + " goes through more than 40 links, so the overlay leaves " + std::string(whoseFile) + " as it is");
+            const fs::path target = fs::read_symlink(path, error);
+            if (error)
+                return refused(problem, "cannot follow the link " + path + ": " + error.message());
+            path = (target.is_absolute() ? target : fs::path(path).parent_path() / target).string();
+        }
         const fs::file_status status = fs::symlink_status(path, error);
         if (status.type() == fs::file_type::symlink)
             return refused(problem, path + " is a link, and the overlay writes " + std::string(whoseFile) + " only where it is a plain file");
         if (status.type() != fs::file_type::not_found && status.type() != fs::file_type::regular)
             return refused(problem, "cannot check " + path + (error ? ": " + error.message() : ": it is not a plain file"));
+        if (status.type() == fs::file_type::regular && rules.refuseReadOnly
+            && (status.permissions() & (fs::perms::owner_write | fs::perms::group_write | fs::perms::others_write)) == fs::perms::none)
+            return refused(problem, path + " is read-only, so the overlay leaves " + std::string(whoseFile) + " as it is");
         if (const fs::path parent = fs::path(path).parent_path(); !parent.empty())
         {
             fs::create_directories(parent, error);
@@ -202,6 +307,15 @@ namespace vkBasalt
             {
                 std::remove(temporary.c_str());
                 return refused(problem, "cannot keep the permissions of " + path + ": " + error.message());
+            }
+        }
+        else if (rules.newFilePermissions)
+        {
+            fs::permissions(temporary, *rules.newFilePermissions, error);
+            if (error)
+            {
+                std::remove(temporary.c_str());
+                return refused(problem, "cannot set the permissions of " + temporary + ": " + error.message());
             }
         }
         if (std::rename(temporary.c_str(), path.c_str()) != 0)

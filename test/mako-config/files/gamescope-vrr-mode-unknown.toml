@@ -1,0 +1,4 @@
+version = 2
+[[profile]]
+name = "p"
+gamescope_vrr_mode = 'auto'

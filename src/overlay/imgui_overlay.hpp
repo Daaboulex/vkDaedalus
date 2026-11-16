@@ -404,7 +404,7 @@ namespace vkBasalt
         std::optional<FrameGenerationProfile> frameGenerationDraft;
         std::optional<FrameGenerationProfile> frameGenerationAtStart;
         std::optional<FrameGenerationGlobal>  frameGenerationGlobalAtStart;
-        std::optional<LsfgDllStatus>          frameGenerationDll;
+        std::optional<DllStatus>          frameGenerationDll;
         VkColorSpaceKHR                       swapchainColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
         VkPresentModeKHR                      swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
         VkImageUsageFlags                     swapchainAppUsage    = 0;

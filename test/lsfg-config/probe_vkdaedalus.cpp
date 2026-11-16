@@ -42,10 +42,10 @@ namespace
     }
 
     template<size_t N>
-    void printNames(const char* kind, const std::array<LsfgChoice, N>& choices)
+    void printNames(const char* kind, const std::array<FrameGenerationChoice, N>& choices)
     {
         std::printf("%s", kind);
-        for (const LsfgChoice& choice : choices)
+        for (const FrameGenerationChoice& choice : choices)
             std::printf(" %.*s", static_cast<int>(choice.name.size()), choice.name.data());
         std::printf("\n");
     }

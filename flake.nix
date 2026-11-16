@@ -45,6 +45,10 @@
       url = "git+https://git.lsfg-vk.dev/lsfg-vk.git?shallow=1";
       flake = false;
     };
+    mako = {
+      url = "github:eugeniosegala/MAKO/render-v5.0.0";
+      flake = false;
+    };
     wine-cachyos = {
       url = "github:Daaboulex/wine-cachyos-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -230,7 +234,10 @@
             "^format\\.sh$"
             "^vkdaedalus-run\\.sh$"
           ];
-          pre-commit.settings.hooks.taplo.excludes = [ "^test/lsfg-config/" ];
+          pre-commit.settings.hooks.taplo.excludes = [
+            "^test/lsfg-config/"
+            "^test/mako-config/"
+          ];
           pre-commit.settings.hooks.trim-trailing-whitespace.excludes = [
             "^src/"
             "^subprojects/packagefiles/.*\\.patch$"
@@ -1345,6 +1352,29 @@
                   ${./test/lsfg-config/probe_lsfg_vk.cpp} ${inputs.lsfg-vk}/lsfg-vk-config/src/config.cpp -o theirs/lsfg-config-probe
                 bash ${./test/lsfg-config/compare.sh} "$PWD/ours/lsfg-config-probe" "$PWD/theirs/lsfg-config-probe" \
                   ${./test/lsfg-config} "$PWD/work"
+                touch $out
+              '';
+
+          checks.frame-generation-file-matches-mako =
+            pkgs.runCommand "frame-generation-file-matches-mako"
+              {
+                nativeBuildInputs = [
+                  pkgs.stdenv.cc
+                  pkgs.diffutils
+                ];
+              }
+              ''
+                mkdir -p ours theirs work
+                $CXX -std=c++20 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=undefined \
+                  -I${./src} -I${inputs.tomlplusplus}/include -I${pkgs.vulkan-headers}/include \
+                  ${./test/mako-config/probe_vkdaedalus.cpp} ${./src/mako_config.cpp} ${./src/frame_generation.cpp} ${./src/toml_edit.cpp} \
+                  -ldl -o ours/mako-config-probe
+                common=${inputs.mako}/engine/mako-common
+                $CXX -std=c++20 -O1 -pthread -I$common/include -isystem $common/thirdparty/include -I${pkgs.vulkan-headers}/include \
+                  ${./test/mako-config/probe_mako.cpp} $common/src/configuration/config.cpp $common/src/configuration/power_source.cpp \
+                  $common/src/configuration/detection.cpp $common/src/helpers/errors.cpp $common/src/helpers/paths.cpp -o theirs/mako-config-probe
+                bash ${./test/mako-config/compare.sh} "$PWD/ours/mako-config-probe" "$PWD/theirs/mako-config-probe" \
+                  ${./test/mako-config} "$PWD/work"
                 touch $out
               '';
 

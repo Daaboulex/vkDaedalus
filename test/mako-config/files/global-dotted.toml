@@ -1,0 +1,3 @@
+version = 2
+global.dll = '/x/Lossless.dll'
+global.allow_fp16 = false

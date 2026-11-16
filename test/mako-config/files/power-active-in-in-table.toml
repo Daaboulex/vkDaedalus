@@ -1,0 +1,6 @@
+version = 2
+[[profile]]
+name = "p"
+[profile.handheld]
+[profile.docked]
+active_in = 'x'

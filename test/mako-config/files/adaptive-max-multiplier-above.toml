@@ -1,0 +1,4 @@
+version = 2
+[[profile]]
+name = "p"
+adaptive_max_multiplier = 6

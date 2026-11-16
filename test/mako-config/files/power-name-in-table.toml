@@ -1,0 +1,6 @@
+version = 2
+[[profile]]
+name = "p"
+[profile.handheld]
+name = 'x'
+[profile.docked]

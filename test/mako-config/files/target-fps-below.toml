@@ -1,0 +1,4 @@
+version = 2
+[[profile]]
+name = "p"
+target_fps = 9

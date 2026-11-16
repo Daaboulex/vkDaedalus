@@ -211,6 +211,13 @@ int main(int argc, char** argv)
                "a file that is a link is not replaced by a plain file, and the file it links to is left alone");
         fs::remove(file);
         std::ofstream(file) << handWritten;
+        fs::permissions(file, fs::perms::owner_read | fs::perms::group_read);
+        expect(saveLsfgFile(file.string(), std::nullopt, peak, written, problem) &&
+                   contents(file) == replacedOnce(handWritten, "multiplier = 2 # two times", "multiplier = 4 # two times") &&
+                   (fs::status(file).permissions() & fs::perms::all) == (fs::perms::owner_read | fs::perms::group_read),
+               "lsfg-vk's file keeps the rules it had: a read-only one is replaced and stays read-only");
+        fs::permissions(file, fs::perms::owner_read | fs::perms::owner_write);
+        std::ofstream(file, std::ios::trunc) << handWritten;
         fs::permissions(file, fs::perms::none);
         problem.clear();
         const bool overUnreadable = saveLsfgFile(file.string(), std::nullopt, peak, written, problem);
@@ -271,8 +278,8 @@ int main(int argc, char** argv)
                "a game is written as /name, since lsfg-vk matches the end of a path and Launcher.exe would also catch GameLauncher.exe");
         expect(newLsfgProfileFor("default", {"GAME.EXE"}, 2, {}).activeIn == std::vector<std::string>{"GAME.EXE"},
                "an .exe in another case stays bare, since lsfg-vk finds it only by its process name");
-        expect(newLsfgProfileFor("night", {"a.exe", "b"}, 2, {}).name == lsfgProfileNameOf("night") && lsfgProfileNameOf("night") != lsfgProfileNameOf("day") &&
-                   madeByVkDaedalus(lsfgProfileNameOf("night")) && !madeByVkDaedalus("night"),
+        expect(newLsfgProfileFor("night", {"a.exe", "b"}, 2, {}).name == frameGenerationProfileNameOf("night") && frameGenerationProfileNameOf("night") != frameGenerationProfileNameOf("day") &&
+                   madeByVkDaedalus(frameGenerationProfileNameOf("night")) && !madeByVkDaedalus("night"),
                "the overlay's lsfg-vk profile is named for the vkDaedalus profile, which tells it from the owner's own");
         expect(lsfgActiveIn({"a.exe", "b", "a.exe"}) == std::vector<std::string>{"/a.exe", "/b"}, "every game of a profile is listed once, in order");
         const std::string listed = *lsfgTextWith("", std::nullopt, newLsfgProfileFor("night", {"a.exe", "b"}, 2, {}), problem);

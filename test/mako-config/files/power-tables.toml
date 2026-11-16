@@ -1,0 +1,14 @@
+version = 2
+[[profile]]
+name = "p"
+multiplier = 3
+gpu = 'Card'
+
+[profile.handheld]
+target_fps = 60
+gpu = ''
+mako_fg_mode = 'performance'
+
+[profile.docked]
+multiplier = 4
+flow_scale = 1.0

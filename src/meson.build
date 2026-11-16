@@ -73,6 +73,7 @@ vkBasalt_src = [
     'logger.cpp',
     'logical_swapchain.cpp',
     'lut_cube.cpp',
+    'mako_config.cpp',
     'memory.cpp',
     'renderpass.cpp',
     'reshade_uniforms.cpp',

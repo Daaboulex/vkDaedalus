@@ -41,7 +41,7 @@ namespace
         }
         if (lsfgProfileFor(*read.file, lsfgProcessOf(command, program)))
             return;
-        const LsfgDllStatus dll = lsfgDllStatus(read.file->global);
+        const DllStatus dll = lsfgDllStatus(read.file->global);
         if (!dll.found && !dll.inSteamLibrary)
             return;
         std::optional<FrameGenerationGlobal> global;

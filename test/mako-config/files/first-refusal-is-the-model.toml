@@ -1,0 +1,5 @@
+version = 2
+[[profile]]
+name = "p"
+pacing = 'x'
+frame_generation_model = 'y'

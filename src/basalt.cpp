@@ -37,6 +37,7 @@
 #include "helper_device.hpp"
 #include "frame_generation.hpp"
 #include "frame_generation_place.hpp"
+#include "mako_config.hpp"
 #include "latency_stats.hpp"
 
 #include "image_view.hpp"
@@ -304,9 +305,12 @@ namespace vkBasalt
                 pGameConfig = std::make_shared<Config>(gamePath);
             if (firstLaunchOfTheGame && !gamePath.empty())
             {
-                std::string problem;
-                if (!syncLsfgActiveIn(lsfgConfigPath(), ConfigSerializer::profileUsers(), problem))
+                const std::map<std::string, std::vector<std::string>> users = ConfigSerializer::profileUsers();
+                std::string                                     problem;
+                if (!syncLsfgActiveIn(lsfgConfigPath(), users, problem))
                     Logger::warn("lsfg-vk's file keeps its game lists, so frame generation in " + detectedGameName + " may follow another profile: " + problem);
+                if (!syncMakoActiveIn(makoConfigPath(), users, problem))
+                    Logger::warn("MAKO's file keeps its game lists, so frame generation in " + detectedGameName + " may follow another profile: " + problem);
             }
 
             const ActiveProfile profile = ConfigSerializer::getActiveProfile(detectedGameName);

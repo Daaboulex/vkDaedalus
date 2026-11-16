@@ -1,0 +1,13 @@
+version = 2
+[[profile]]
+name = "p"
+multiplier = 5
+scaling_factor = 2.0
+scaling_sharpness = 1.0
+frame_generation_refresh_threshold = 1000
+base_fps_cap = 1000
+gpu_headroom_percent = 20
+target_fps = 1000
+adaptive_max_multiplier = 5
+dynamic_cadence_probe_interval_seconds = 3.0
+flow_scale = 1.0

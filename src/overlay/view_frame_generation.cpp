@@ -30,17 +30,17 @@ namespace vkBasalt
     namespace
     {
         template<size_t N>
-        bool chooseFrom(const char* label, const std::array<LsfgChoice, N>& choices, std::optional<std::string>& value, const char* unset)
+        bool chooseFrom(const char* label, const std::array<FrameGenerationChoice, N>& choices, std::optional<std::string>& value, const char* unset)
         {
             const auto shown = [&](const std::string& name) {
-                const auto at = std::find_if(choices.begin(), choices.end(), [&](const LsfgChoice& choice) { return choice.name == name; });
+                const auto at = std::find_if(choices.begin(), choices.end(), [&](const FrameGenerationChoice& choice) { return choice.name == name; });
                 return at == choices.end() ? name : std::string(at->shown);
             };
             const std::string preview = value ? shown(*value) : unset;
             bool              chosen  = false;
             if (ui::beginCombo(label, preview.c_str()))
             {
-                for (const LsfgChoice& choice : choices)
+                for (const FrameGenerationChoice& choice : choices)
                 {
                     const bool selected = value && *value == choice.name;
                     if (ui::option(std::string(choice.shown).c_str(), selected) && !selected)
@@ -118,8 +118,8 @@ namespace vkBasalt
     {
         const std::string path = lsfgConfigPath();
         std::string       problem;
-        if (!renamedFrom.empty() && !renameLsfgProfile(path, lsfgProfileNameOf(renamedFrom), lsfgProfileNameOf(activeProfileName), problem))
-            Logger::warn("lsfg-vk's profile " + lsfgProfileNameOf(renamedFrom) + " keeps its name, so frame generation stays with the old name: " + problem);
+        if (!renamedFrom.empty() && !renameLsfgProfile(path, frameGenerationProfileNameOf(renamedFrom), frameGenerationProfileNameOf(activeProfileName), problem))
+            Logger::warn("lsfg-vk's profile " + frameGenerationProfileNameOf(renamedFrom) + " keeps its name, so frame generation stays with the old name: " + problem);
         if (!syncLsfgActiveIn(path, ConfigSerializer::profileUsers(), problem))
             Logger::warn("lsfg-vk's file " + path + " keeps its game lists, so frame generation may follow another profile: " + problem);
         refreshFrameGenerationFile(true);
@@ -144,7 +144,7 @@ namespace vkBasalt
         if (frameGenerationProfileHere && !madeByVkDaedalus(*frameGenerationProfileHere))
             if (const FrameGenerationProfile* here = profileNamed(*frameGenerationFile, *frameGenerationProfileHere))
                 return here;
-        return profileNamed(*frameGenerationFile, lsfgProfileNameOf(activeProfileName));
+        return profileNamed(*frameGenerationFile, frameGenerationProfileNameOf(activeProfileName));
     }
 
     bool ImGuiOverlay::frameGenerationLiveHere() const
@@ -483,7 +483,7 @@ namespace vkBasalt
             }
         }
 
-        const std::string shownProfile = inUse ? inUse->name : lsfgProfileNameOf(activeProfileName);
+        const std::string shownProfile = inUse ? inUse->name : frameGenerationProfileNameOf(activeProfileName);
         if (frameGenerationLayerLoaded() && frameGenerationProfileHere && *frameGenerationProfileHere != shownProfile)
             ui::noteBox(("Running " + *frameGenerationProfileHere + "; " + shownProfile + " from the next launch").c_str(), palette.warn);
         if (!frameGenerationDll)

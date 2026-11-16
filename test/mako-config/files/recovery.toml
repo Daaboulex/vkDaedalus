@@ -1,0 +1,8 @@
+version = 2
+[[profile]]
+name = "p"
+dynamic_cadence_recovery = true
+base_fps_cap = 60
+gpu_headroom_percent = 10
+adaptive_auto_base_fps_cap = true
+adaptive_fractional_real_frame_priority = 'high'

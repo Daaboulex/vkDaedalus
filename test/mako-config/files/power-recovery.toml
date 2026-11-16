@@ -1,0 +1,9 @@
+version = 2
+[[profile]]
+name = "p"
+base_fps_cap = 60
+gpu_headroom_percent = 10
+[profile.handheld]
+dynamic_cadence_recovery = true
+[profile.docked]
+adaptive_fractional_real_frame_priority = 'high'

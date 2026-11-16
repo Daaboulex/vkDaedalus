@@ -1,0 +1,23 @@
+version = 2
+current_profile = "current"
+
+[[profile]]
+name = "process"
+active_in = "mako-config-pro"
+
+[[profile]]
+name = "wine"
+active_in = ["Game.exe", "Other.EXE", "UPC.EXE"]
+
+[[profile]]
+name = "executable"
+active_in = "/mako-config-probe"
+
+[[profile]]
+name = "named"
+
+[[profile]]
+name = "current"
+
+[[profile]]
+name = "fallback"

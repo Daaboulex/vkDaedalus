@@ -1,0 +1,9 @@
+version = 2
+
+[[profile]]
+name = "anything"
+active_in = [""]
+
+[[profile]]
+name = "executable"
+active_in = "/mako-config-probe"

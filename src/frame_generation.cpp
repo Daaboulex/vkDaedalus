@@ -23,6 +23,8 @@ namespace vkBasalt
         const std::string ownProfilePrefix = "vkdaedalus ";
         const std::string emptyLsfgText    = "version = 2\n\n[global]\n";
         const std::string lsfgFile         = "lsfg-vk's file";
+        const std::string lsfgDllUnderCommon = "Lossless Scaling/lsfg-vk.dll";
+        const WriteRules  lsfgWriteRules;
 
         std::string lowered(std::string text)
         {
@@ -32,12 +34,12 @@ namespace vkBasalt
         }
 
         template<size_t N>
-        bool isChoice(const std::array<LsfgChoice, N>& choices, const std::string& name)
+        bool isChoice(const std::array<FrameGenerationChoice, N>& choices, const std::string& name)
         {
-            return std::any_of(choices.begin(), choices.end(), [&](const LsfgChoice& choice) { return choice.name == name; });
+            return std::any_of(choices.begin(), choices.end(), [&](const FrameGenerationChoice& choice) { return choice.name == name; });
         }
 
-        std::string activeIn(const std::string& game)
+        std::string lsfgEntryFor(const std::string& game)
         {
             const std::string tail             = game.size() >= 4 ? lowered(game.substr(game.size() - 4)) : "";
             const bool        exeInAnotherCase = tail == ".exe" && game.compare(game.size() - 4, 4, ".exe") != 0;
@@ -235,16 +237,6 @@ namespace vkBasalt
             return true;
         }
 
-        std::optional<std::string> activeInText(const std::vector<std::string>& games, bool& clean)
-        {
-            if (games.size() == 1)
-                return optionalString(games.front(), clean);
-            std::string out = "[";
-            for (size_t i = 0; i < games.size(); i++)
-                out += (i ? ", " : "") + optionalString(games[i], clean).value_or("");
-            return out + "]";
-        }
-
         std::string newProfileText(const FrameGenerationProfile& profile, bool& clean)
         {
             std::string out = "\n[[profile]]\nname = " + optionalString(profile.name, clean).value_or("") + "\n";
@@ -309,54 +301,14 @@ namespace vkBasalt
             return true;
         }
 
-        bool renameProfile(std::string& text, const std::string& from, const std::string& to, std::string& problem)
-        {
-            const std::optional<toml::table> table = tomlOf(text, problem);
-            if (!table)
-                return false;
-            const Positions    positions(text);
-            const toml::table* found = nullptr;
-            if (const toml::array* profiles = (*table)["profile"].as_array())
-                for (const toml::node& entry : *profiles)
-                    if (const toml::table* candidate = entry.as_table(); candidate && candidate->get("name"))
-                    {
-                        const std::optional<std::string> name = candidate->get("name")->value<std::string>();
-                        if (name == to)
-                            return refused(problem, "lsfg-vk already has a profile named '" + to + "'");
-                        if (name == from)
-                            found = candidate;
-                    }
-            if (found == nullptr)
-                return true;
-            if (!opensWith(positions, *found, "[["))
-                return refused(problem, "lsfg-vk's profile '" + from + "' is not a [[profile]] section the overlay can change");
-            bool                  clean = true;
-            std::vector<TextEdit> edits;
-            TableEditor           editor{positions, *found, edits, ""};
-            editor.set("name", optionalString(to, clean), false);
-            editor.finish();
-            if (!clean)
-                return refused(problem, "the name \"" + to + "\" cannot be written into lsfg-vk's file");
-            text = applied(text, edits);
-            return true;
-        }
-
         bool endsWith(const std::string& text, const std::string& tail)
         {
             return text.size() >= tail.size() && text.compare(text.size() - tail.size(), tail.size(), tail) == 0;
         }
 
-        std::optional<std::string> environment(const char* name)
-        {
-            const char* value = std::getenv(name);
-            if (value == nullptr || *value == '\0')
-                return std::nullopt;
-            return std::string(value);
-        }
-
         fs::path expandHome(const std::string& path)
         {
-            const std::optional<std::string> home = environment("HOME");
+            const std::optional<std::string> home = nonEmptyEnvironment("HOME");
             if (!path.starts_with('~') || !home)
                 return path;
             return *home + path.substr(1);
@@ -373,12 +325,6 @@ namespace vkBasalt
             return path;
         }
 
-        bool isFile(const fs::path& path)
-        {
-            std::error_code unreadable;
-            return fs::is_regular_file(path, unreadable);
-        }
-
         bool takenByLsfg(const fs::path& path)
         {
             std::error_code unreadable;
@@ -392,6 +338,20 @@ namespace vkBasalt
             text << file.rdbuf();
             return text.str();
         }
+    }
+
+    std::optional<std::string> nonEmptyEnvironment(const char* name)
+    {
+        const char* value = std::getenv(name);
+        if (value == nullptr || *value == '\0')
+            return std::nullopt;
+        return std::string(value);
+    }
+
+    bool isRegularFile(const std::filesystem::path& path)
+    {
+        std::error_code unreadable;
+        return fs::is_regular_file(path, unreadable);
     }
 
     std::optional<LsfgFile> parseLsfgFile(const std::string& text, std::string& problem)
@@ -435,41 +395,21 @@ namespace vkBasalt
     std::string lsfgConfigPath()
     {
         std::string path = "/etc/lsfg-vk/conf.toml";
-        if (const std::optional<std::string> home = environment("HOME"))
+        if (const std::optional<std::string> home = nonEmptyEnvironment("HOME"))
             path = (fs::path(*home) / ".config" / "lsfg-vk" / "conf.toml").string();
-        if (const std::optional<std::string> configHome = environment("XDG_CONFIG_HOME"); configHome && std::getenv("LSFGVK_FLATPAK") == nullptr)
+        if (const std::optional<std::string> configHome = nonEmptyEnvironment("XDG_CONFIG_HOME"); configHome && std::getenv("LSFGVK_FLATPAK") == nullptr)
             path = (fs::path(*configHome) / "lsfg-vk" / "conf.toml").string();
-        if (const std::optional<std::string> named = environment("LSFGVK_CONFIG"))
+        if (const std::optional<std::string> named = nonEmptyEnvironment("LSFGVK_CONFIG"))
             path = *named;
         return path;
     }
 
     LsfgRead readLsfgFile(const std::string& path)
     {
-        LsfgRead        read;
-        std::error_code unreadable;
-        const bool      exists = fs::exists(path, unreadable);
-        if (unreadable)
-        {
-            read.problem = "cannot check " + path + ": " + unreadable.message();
-            return read;
-        }
-        if (!exists)
-        {
-            read.file = LsfgFile{};
-            return read;
-        }
-        read.exists = true;
-        std::ifstream file(path, std::ios::binary);
-        if (!file.is_open())
-        {
-            read.problem = "cannot read " + path;
-            return read;
-        }
-        std::stringstream text;
-        text << file.rdbuf();
-        read.text = text.str();
-        read.file = parseLsfgFile(read.text, read.problem);
+        const FileText found = readFileText(path);
+        LsfgRead       read{found.exists, found.text, std::nullopt, found.problem};
+        if (found.problem.empty())
+            read.file = found.exists ? parseLsfgFile(read.text, read.problem) : LsfgFile{};
         return read;
     }
 
@@ -487,7 +427,7 @@ namespace vkBasalt
             written = *read.file;
             return true;
         }
-        if (!replaceFileAtomically(path, *text, lsfgFile, problem))
+        if (!replaceFileAtomically(path, *text, lsfgFile, lsfgWriteRules, problem))
             return false;
         std::string unused;
         written = *parseLsfgFile(*text, unused);
@@ -538,8 +478,8 @@ namespace vkBasalt
         }
         std::ifstream comm("/proc/self/comm");
         std::getline(comm, process.processName);
-        process.profileNamed = environment("LSFGVK_PROFILE");
-        process.steamAppId   = environment("SteamAppId");
+        process.profileNamed = nonEmptyEnvironment("LSFGVK_PROFILE");
+        process.steamAppId   = nonEmptyEnvironment("SteamAppId");
         return process;
     }
 
@@ -557,8 +497,8 @@ namespace vkBasalt
                 process.executable = word;
         }
         process.processName  = program.substr(0, 15);
-        process.profileNamed = environment("LSFGVK_PROFILE");
-        process.steamAppId   = environment("SteamAppId");
+        process.profileNamed = nonEmptyEnvironment("LSFGVK_PROFILE");
+        process.steamAppId   = nonEmptyEnvironment("SteamAppId");
         return process;
     }
 
@@ -567,29 +507,57 @@ namespace vkBasalt
         return std::getenv("LSFGVK_ENV") != nullptr;
     }
 
-    std::string lsfgProfileNameOf(const std::string& profile)
+    std::string frameGenerationProfileNameOf(const std::string& profile)
     {
         return ownProfilePrefix + profile;
     }
 
-    bool madeByVkDaedalus(const std::string& lsfgProfileName)
+    bool madeByVkDaedalus(const std::string& layerProfileName)
     {
-        return lsfgProfileName.size() > ownProfilePrefix.size() && lsfgProfileName.compare(0, ownProfilePrefix.size(), ownProfilePrefix) == 0;
+        return layerProfileName.size() > ownProfilePrefix.size() && layerProfileName.compare(0, ownProfilePrefix.size(), ownProfilePrefix) == 0;
+    }
+
+    std::vector<std::string> activeInEntries(const std::vector<std::string>& games, std::string (*entryOf)(const std::string&))
+    {
+        std::vector<std::string> entries;
+        for (const std::string& game : games)
+            if (const std::string entry = entryOf(game); std::find(entries.begin(), entries.end(), entry) == entries.end())
+                entries.push_back(entry);
+        return entries;
+    }
+
+    std::vector<std::string> syncedActiveIn(const std::string& layerProfile, const std::vector<std::string>& activeIn,
+                                            const std::map<std::string, std::vector<std::string>>& gamesByProfile, std::string (*entryOf)(const std::string&),
+                                            const std::function<bool(const std::string&)>& ownedElsewhere)
+    {
+        std::set<std::string> known;
+        for (const auto& [_, games] : gamesByProfile)
+            for (const std::string& entry : activeInEntries(games, entryOf))
+                known.insert(entry);
+        const auto               users = gamesByProfile.find(layerProfile.substr(ownProfilePrefix.size()));
+        std::vector<std::string> games;
+        if (users != gamesByProfile.end())
+            std::copy_if(users->second.begin(), users->second.end(), std::back_inserter(games), [&](const std::string& game) { return !ownedElsewhere(game); });
+        const std::vector<std::string> assigned = activeInEntries(games, entryOf);
+        std::vector<std::string>       wanted;
+        for (const std::string& entry : activeIn)
+            if (!known.count(entry) || std::find(assigned.begin(), assigned.end(), entry) != assigned.end())
+                wanted.push_back(entry);
+        for (const std::string& entry : assigned)
+            if (std::find(wanted.begin(), wanted.end(), entry) == wanted.end())
+                wanted.push_back(entry);
+        return wanted;
     }
 
     std::vector<std::string> lsfgActiveIn(const std::vector<std::string>& games)
     {
-        std::vector<std::string> entries;
-        for (const std::string& game : games)
-            if (const std::string entry = activeIn(game); std::find(entries.begin(), entries.end(), entry) == entries.end())
-                entries.push_back(entry);
-        return entries;
+        return activeInEntries(games, lsfgEntryFor);
     }
 
     FrameGenerationProfile newLsfgProfileFor(const std::string& profileName, const std::vector<std::string>& games, uint32_t multiplier, const LsfgColour& colour)
     {
         FrameGenerationProfile profile;
-        profile.name             = lsfgProfileNameOf(profileName);
+        profile.name             = frameGenerationProfileNameOf(profileName);
         profile.activeIn         = lsfgActiveIn(games);
         profile.multiplier       = multiplier;
         profile.colorSpace       = colour.colorSpace;
@@ -612,27 +580,12 @@ namespace vkBasalt
             process.processName = game.substr(0, 15);
             return lsfgProfileFor(ownersOwn, process).has_value();
         };
-        std::set<std::string> known;
-        for (const auto& [_, games] : gamesByProfile)
-            for (const std::string& entry : lsfgActiveIn(games))
-                known.insert(entry);
         std::vector<FrameGenerationProfile> changed;
         for (const FrameGenerationProfile& profile : file.profiles)
         {
             if (!madeByVkDaedalus(profile.name))
                 continue;
-            const auto               users = gamesByProfile.find(profile.name.substr(ownProfilePrefix.size()));
-            std::vector<std::string> games;
-            if (users != gamesByProfile.end())
-                std::copy_if(users->second.begin(), users->second.end(), std::back_inserter(games), [&](const std::string& game) { return !ownedElsewhere(game); });
-            const std::vector<std::string> assigned = lsfgActiveIn(games);
-            std::vector<std::string> wanted;
-            for (const std::string& entry : profile.activeIn)
-                if (!known.count(entry) || std::find(assigned.begin(), assigned.end(), entry) != assigned.end())
-                    wanted.push_back(entry);
-            for (const std::string& entry : assigned)
-                if (std::find(wanted.begin(), wanted.end(), entry) == wanted.end())
-                    wanted.push_back(entry);
+            const std::vector<std::string> wanted = syncedActiveIn(profile.name, profile.activeIn, gamesByProfile, lsfgEntryFor, ownedElsewhere);
             if (wanted != profile.activeIn)
             {
                 FrameGenerationProfile next = profile;
@@ -646,7 +599,7 @@ namespace vkBasalt
     std::optional<std::string> lsfgTextRenamed(const std::string& text, const std::string& from, const std::string& to, std::string& problem)
     {
         std::string out = text;
-        if (!renameProfile(out, from, to, problem))
+        if (!renameProfileIn(out, from, to, "lsfg-vk", problem))
             return std::nullopt;
         std::string                   refusal;
         const std::optional<LsfgFile> back = parseLsfgFile(out, refusal);
@@ -678,7 +631,7 @@ namespace vkBasalt
                 return false;
             text = *next;
         }
-        return text == read.text || replaceFileAtomically(path, text, lsfgFile, problem);
+        return text == read.text || replaceFileAtomically(path, text, lsfgFile, lsfgWriteRules, problem);
     }
 
     bool renameLsfgProfile(const std::string& path, const std::string& from, const std::string& to, std::string& problem)
@@ -691,7 +644,7 @@ namespace vkBasalt
         const std::optional<std::string> text = lsfgTextRenamed(read.text, from, to, problem);
         if (!text)
             return false;
-        return *text == read.text || replaceFileAtomically(path, *text, lsfgFile, problem);
+        return *text == read.text || replaceFileAtomically(path, *text, lsfgFile, lsfgWriteRules, problem);
     }
 
     LsfgColour lsfgColourOf(VkColorSpaceKHR colorSpace)
@@ -716,17 +669,13 @@ namespace vkBasalt
 
     std::optional<std::string> lsfgDllPath(const FrameGenerationGlobal& global)
     {
-        if (const std::optional<std::string> named = environment("LSFGVK_DLL_PATH"))
+        if (const std::optional<std::string> named = nonEmptyEnvironment("LSFGVK_DLL_PATH"))
             return fixDllPath(*named).string();
         if (global.dll)
             return fixDllPath(expandHome(*global.dll)).string();
-        const std::array<const char*, 5> steamFolders = {".local/share/Steam/steamapps/common", ".steam/steam/steamapps/common",
-                                                         ".steam/debian-installation/steamapps/common",
-                                                         ".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common",
-                                                         "snap/steam/common/.local/share/Steam/steamapps/common"};
         for (const char* base : {"XDG_DATA_HOME", "HOME"})
-            if (const std::optional<std::string> prefix = environment(base))
-                for (const char* folder : steamFolders)
+            if (const std::optional<std::string> prefix = nonEmptyEnvironment(base))
+                for (const std::string_view folder : steamCommonFolders)
                     if (const fs::path path = fs::path(*prefix) / folder / "Lossless Scaling" / "lsfg-vk.dll"; takenByLsfg(path))
                         return path.string();
         std::error_code noDirectory;
@@ -736,14 +685,19 @@ namespace vkBasalt
         return std::nullopt;
     }
 
-    LsfgDllStatus lsfgDllStatus(const FrameGenerationGlobal& global)
+    DllStatus dllStatusAt(std::optional<std::string> path, const std::string& underCommon)
     {
-        LsfgDllStatus status;
-        status.path  = lsfgDllPath(global);
-        status.found = status.path && isFile(*status.path);
+        DllStatus status;
+        status.path  = std::move(path);
+        status.found = status.path && isRegularFile(*status.path);
         if (!status.found)
-            status.inSteamLibrary = lsfgDllInSteamLibraries();
+            status.inSteamLibrary = fileInSteamLibraries(underCommon);
         return status;
+    }
+
+    DllStatus lsfgDllStatus(const FrameGenerationGlobal& global)
+    {
+        return dllStatusAt(lsfgDllPath(global), lsfgDllUnderCommon);
     }
 
     std::vector<std::string> steamLibraryFolders(const std::string& vdf)
@@ -794,12 +748,12 @@ namespace vkBasalt
         return folders;
     }
 
-    std::optional<std::string> lsfgDllInSteamLibraries()
+    std::optional<std::string> fileInSteamLibraries(const std::string& underCommon)
     {
-        const std::optional<std::string> home = environment("HOME");
+        const std::optional<std::string> home = nonEmptyEnvironment("HOME");
         if (!home)
             return std::nullopt;
-        const fs::path        dataHome = environment("XDG_DATA_HOME").value_or(*home + "/.local/share");
+        const fs::path        dataHome = nonEmptyEnvironment("XDG_DATA_HOME").value_or(*home + "/.local/share");
         const std::vector<fs::path> roots = {dataHome / "Steam",
                                              fs::path(*home) / ".local/share/Steam",
                                              fs::path(*home) / ".steam/steam",
@@ -810,11 +764,16 @@ namespace vkBasalt
                                              fs::path(*home) / "snap/steam/common/.local/share/Steam"};
         for (const fs::path& root : roots)
             for (const char* list : {"steamapps/libraryfolders.vdf", "config/libraryfolders.vdf"})
-                if (isFile(root / list))
+                if (isRegularFile(root / list))
                     for (const std::string& library : steamLibraryFolders(readWhole(root / list)))
-                        if (const fs::path dll = fs::path(library) / "steamapps/common/Lossless Scaling/lsfg-vk.dll"; isFile(dll))
-                            return dll.string();
+                        if (const fs::path found = fs::path(library) / "steamapps/common" / underCommon; isRegularFile(found))
+                            return found.string();
         return std::nullopt;
+    }
+
+    std::optional<std::string> lsfgDllInSteamLibraries()
+    {
+        return fileInSteamLibraries(lsfgDllUnderCommon);
     }
 
     bool frameGenerationLayerLoaded()

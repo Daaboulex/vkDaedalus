@@ -1,0 +1,2 @@
+version = 2
+profile = [{ name = 'a', multiplier = 3 }, { name = 'b', active_in = 'x' }]

@@ -1,0 +1,5 @@
+version = 2
+[[profile]]
+name = "p"
+scaling_method = 'x'
+mako_fg_mode = 1

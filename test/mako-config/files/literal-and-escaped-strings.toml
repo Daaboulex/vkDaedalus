@@ -1,0 +1,6 @@
+version = 2
+[[profile]]
+name = 'C:\Games\Odd'
+active_in = ["quote \" and \u00e9", '''multi
+line''']
+gpu = "tab\tname"

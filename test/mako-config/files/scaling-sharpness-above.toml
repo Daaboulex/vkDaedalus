@@ -1,0 +1,4 @@
+version = 2
+[[profile]]
+name = "p"
+scaling_sharpness = 1.5

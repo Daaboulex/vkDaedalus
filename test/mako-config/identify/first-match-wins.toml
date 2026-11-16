@@ -1,0 +1,9 @@
+version = 2
+
+[[profile]]
+name = "first"
+active_in = "probe"
+
+[[profile]]
+name = "second"
+active_in = "/mako-config-probe"
