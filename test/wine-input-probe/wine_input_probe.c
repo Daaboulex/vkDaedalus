@@ -181,14 +181,14 @@ static BOOL cursorInClient(HWND window, POINT* at)
     return GetCursorPos(at) && ScreenToClient(window, at);
 }
 
-static int clipToClient(HWND window)
+static int clipCursor(HWND window, int toCentre)
 {
     RECT  client = {0, 0, 0, 0};
     POINT corners[2];
     if (!GetClientRect(window, &client))
         return 0;
-    corners[0] = (POINT){client.left, client.top};
-    corners[1] = (POINT){client.right, client.bottom};
+    corners[0] = toCentre ? (POINT){WIDTH / 2, HEIGHT / 2} : (POINT){client.left, client.top};
+    corners[1] = toCentre ? (POINT){WIDTH / 2 + 1, HEIGHT / 2 + 1} : (POINT){client.right, client.bottom};
     ClientToScreen(window, &corners[0]);
     ClientToScreen(window, &corners[1]);
     const RECT clip = {corners[0].x, corners[0].y, corners[1].x, corners[1].y};
@@ -201,9 +201,10 @@ int main(int argc, char** argv)
     _setmode(_fileno(stderr), _O_BINARY);
     char*               end      = NULL;
     const unsigned long frames   = argc == 3 ? strtoul(argv[1], &end, 10) : 0;
-    const int           recenter = argc == 3 && strcmp(argv[2], "recenter") == 0;
+    const int           lock     = argc == 3 && strcmp(argv[2], "lock") == 0;
+    const int           recenter = lock || (argc == 3 && strcmp(argv[2], "recenter") == 0);
     if (argc != 3 || (!recenter && strcmp(argv[2], "poll") != 0) || !end || *end != '\0' || frames < 8 || frames > 100000)
-        return fail("usage: wine-input-probe <presents, 8 to 100000> poll|recenter");
+        return fail("usage: wine-input-probe <presents, 8 to 100000> poll|recenter|lock");
 
     HINSTANCE        module  = GetModuleHandleA(NULL);
     const WNDCLASSA  kind    = {.lpfnWndProc = windowProcedure, .hInstance = module, .hCursor = LoadCursor(NULL, IDC_ARROW), .lpszClassName = "wine-input-probe"};
@@ -365,7 +366,7 @@ int main(int argc, char** argv)
             seenY      = at.y;
             stillSince = GetTickCount64();
         }
-        if (foreground && !clipped && !released && clipToClient(window))
+        if (foreground && !clipped && !released && clipCursor(window, lock))
             clipped = 1;
         if (clipped)
         {

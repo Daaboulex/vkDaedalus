@@ -124,6 +124,11 @@ check's message or a test already says is not repeated here.
   sees. So the hook answers the pointer query and takes the warp itself.
 - The pointer is held where it was when the overlay opened, read by the layer on its own display:
   Wine reads the pointer late.
+- A game with a locked camera clips the cursor to one pixel, which Wine holds as a pointer grab
+  confined to that pixel, and the overlay reads that same pointer. So while the overlay is open the
+  hook lets go of the game's pointer grab and keeps any grab the game asks for meanwhile, then gives
+  it back before the game reads input again. It gives it back through XCB, so a grab the X server
+  refuses reaches the hook's log rather than the game's X error handler.
 - Pointer crossing events are held too: Wine turns an EnterNotify into a mouse move.
 - A game that asks the X server for detectable autorepeat gets a held key's repeats as presses with
   no release between. So a repeat dropped while the overlay is open never holds back the release of

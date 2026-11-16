@@ -4657,8 +4657,21 @@ held_input_verdict() {
     elif [ -n "$silent" ]; then
         echo "after the overlay closed the probe saw no $silent, so the case cannot show those are held while it is open"
         return 1
+    elif [ "$moved" = "0 0" ]; then
+        echo "the overlay's pointer stayed where it was for a move of 30 30, so the game's pointer grab still confined it"
+        return 1
     elif ! awk -v m="$moved" 'BEGIN { split(m, d, " "); exit (m != "" && d[1] >= 29 && d[1] <= 31 && d[2] >= 29 && d[2] <= 31) ? 0 : 1 }'; then
         echo "the overlay's pointer moved ${moved:-by an unreadable amount} for a move of 30 30 while the game re-centred its own, so the game's warp moved the overlay's pointer"
+        return 1
+    fi
+}
+
+clip_held_again() {
+    local log="$1" closed moved
+    closed=$(grep -n -m1 'overlay closed' "$log" | cut -d: -f1)
+    moved=$(awk -v b="$closed" 'NR > b && index($0, "wine-input-probe: pointer moved ") == 1 { print; exit }' "$log")
+    if [ -n "$moved" ]; then
+        echo "after the overlay closed the game's one-pixel clip no longer held the pointer: $moved"
         return 1
     fi
 }
@@ -4761,14 +4774,23 @@ wine_hook_case() {
     local name="the input hook holds a Wine game's input, $label, $mode" log="$2/wine-$4-$mode.log" home="$2/wine-$4-$mode-home" map="$2/wine-$4-$mode.map"
     local driver why ready own_warp="" held attempt stopped
     local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved" "async key")
-    if [ "$mode" = recenter ]; then
-        ready='wine-input-probe: holds the pointer at its centre'
-        own_warp='wine-input-probe: motion 320 240'
-        held="clipping the cursor to its window and re-centring it with SetCursorPos every frame, which Wine sends as XWarpPointer under its clip grab"
-    else
-        ready='wine-input-probe: pointer still at [0-9-]+ [0-9-]+ after placing it'
-        held="placing the cursor at its centre once, then polling GetCursorPos every frame and never warping, which Wine answers with XQueryPointer once the cursor is still for 100 ms"
-    fi
+    case "$mode" in
+        recenter)
+            ready='wine-input-probe: holds the pointer at its centre'
+            own_warp='wine-input-probe: motion 320 240'
+            held="clipping the cursor to its window and re-centring it with SetCursorPos every frame, which Wine sends as XWarpPointer under its clip grab"
+            ;;
+        lock)
+            ready='wine-input-probe: holds the pointer at its centre'
+            own_warp='wine-input-probe: motion 320 240'
+            held="clipping the cursor to the one pixel at its centre as a game with a locked camera does, which Wine holds as a pointer grab confined to that pixel, and re-centring it every frame"
+            kinds=("key press" "button press" "raw motion" "raw button press" "raw key press" "async key")
+            ;;
+        *)
+            ready='wine-input-probe: pointer still at [0-9-]+ [0-9-]+ after placing it'
+            held="placing the cursor at its centre once, then polling GetCursorPos every frame and never warping, which Wine answers with XQueryPointer once the cursor is still for 100 ms"
+            ;;
+    esac
     for attempt in $(seq "$wine_starts_allowed"); do
         fresh_home "$home" cas
         printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
@@ -4789,6 +4811,8 @@ wine_hook_case() {
     elif ! file_says "$log" "$ready"; then
         record FAIL "$name" "the probe never logged '${ready#wine-input-probe: }', so the case proves nothing"
     elif ! why=$(held_input_verdict "$log" wine-input-probe "$own_warp" "${kinds[@]}"); then
+        record FAIL "$name" "$why"
+    elif [ "$mode" = lock ] && ! why=$(clip_held_again "$log"); then
         record FAIL "$name" "$why"
     else
         record PASS "$name" "a Windows program under $label, where $reader, $held, reading window messages, raw input and GetAsyncKeyState and started with vkdaedalus-run, read nothing while the overlay was open, never moved the overlay's pointer, and read every kind again once it closed$(failed_starts "$prefix.log.failed-starts" "$control.failed-starts" "$log.failed-starts")"
@@ -4819,7 +4843,7 @@ wine_hook_cases_of() {
         record FAIL "$name" "the probe did not run under $label without the layer: $why"
         return 0
     fi
-    for mode in poll recenter; do wine_hook_case "$icd" "$dir" "$wine" "$slug" "$label" "$reader" "$mode"; done
+    for mode in poll recenter lock; do wine_hook_case "$icd" "$dir" "$wine" "$slug" "$label" "$reader" "$mode"; done
 }
 
 wine_hook_cases() {

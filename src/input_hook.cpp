@@ -330,13 +330,22 @@ namespace
         {"zwp_text_input_v3", wrapListener<textInputs, textInputWrapper>},
     };
 
-    using XcbRead = xcb_generic_event_t* (*)(xcb_connection_t*);
+    using XcbRead             = xcb_generic_event_t* (*)(xcb_connection_t*);
+    using XcbGrabPointer      = xcb_grab_pointer_cookie_t (*)(xcb_connection_t*, uint8_t, xcb_window_t, uint16_t, uint8_t, uint8_t, xcb_window_t, xcb_cursor_t,
+                                                         xcb_timestamp_t);
+    using XcbGrabPointerReply = xcb_grab_pointer_reply_t* (*)(xcb_connection_t*, xcb_grab_pointer_cookie_t, xcb_generic_error_t**);
+    using XcbUngrabPointer    = xcb_void_cookie_t (*)(xcb_connection_t*, xcb_timestamp_t);
+    using XcbFlush            = int (*)(xcb_connection_t*);
 
     struct Xcb
     {
-        XcbRead poll       = nullptr;
-        XcbRead pollQueued = nullptr;
-        XcbRead wait       = nullptr;
+        XcbRead             poll             = nullptr;
+        XcbRead             pollQueued       = nullptr;
+        XcbRead             wait             = nullptr;
+        XcbGrabPointer      grabPointer      = nullptr;
+        XcbGrabPointerReply grabPointerReply = nullptr;
+        XcbUngrabPointer    ungrabPointer    = nullptr;
+        XcbFlush            flush            = nullptr;
     };
 
     const Xcb& xcb()
@@ -348,6 +357,10 @@ namespace
             functions.poll       = reinterpret_cast<XcbRead>(dlsym(from, "xcb_poll_for_event"));
             functions.pollQueued = reinterpret_cast<XcbRead>(dlsym(from, "xcb_poll_for_queued_event"));
             functions.wait       = reinterpret_cast<XcbRead>(dlsym(from, "xcb_wait_for_event"));
+            functions.grabPointer      = reinterpret_cast<XcbGrabPointer>(dlsym(from, "xcb_grab_pointer"));
+            functions.grabPointerReply = reinterpret_cast<XcbGrabPointerReply>(dlsym(from, "xcb_grab_pointer_reply"));
+            functions.ungrabPointer    = reinterpret_cast<XcbUngrabPointer>(dlsym(from, "xcb_ungrab_pointer"));
+            functions.flush            = reinterpret_cast<XcbFlush>(dlsym(from, "xcb_flush"));
             return functions;
         }();
         return found;
@@ -365,17 +378,36 @@ namespace
     std::unordered_map<const Display*, HeldPointer> heldPointers;
     std::optional<HeldPointer>                      pointerAtBlock;
 
+    struct GamePointerGrab
+    {
+        Window       window       = None;
+        bool         ownerEvents  = false;
+        unsigned int eventMask    = 0;
+        int          pointerMode  = GrabModeAsync;
+        int          keyboardMode = GrabModeAsync;
+        Window       confineTo    = None;
+        Cursor       cursor       = None;
+    };
+    std::mutex                                    grabMutex;
+    std::unordered_map<Display*, GamePointerGrab> gamePointerGrabs;
+
     using QueryPointer         = Bool (*)(Display*, Window, Window*, Window*, int*, int*, int*, int*, unsigned int*);
     using WarpPointer          = int (*)(Display*, Window, Window, int, int, unsigned int, unsigned int, int, int);
     using TranslateCoordinates = Bool (*)(Display*, Window, Window, int, int, int*, int*, Window*);
     using ConnectionOf         = xcb_connection_t* (*)(Display*);
+    using GrabPointer          = int (*)(Display*, Window, Bool, unsigned int, int, int, Window, Cursor, Time);
+    using UngrabPointer        = int (*)(Display*, Time);
+    using CloseDisplay         = int (*)(Display*);
 
     struct Xlib
     {
-        QueryPointer         query     = nullptr;
-        WarpPointer          warp      = nullptr;
-        TranslateCoordinates translate = nullptr;
+        QueryPointer         query        = nullptr;
+        WarpPointer          warp         = nullptr;
+        TranslateCoordinates translate    = nullptr;
         ConnectionOf         connectionOf = nullptr;
+        GrabPointer          grab         = nullptr;
+        UngrabPointer        ungrab       = nullptr;
+        CloseDisplay         close        = nullptr;
     };
 
     const Xlib& xlib()
@@ -388,6 +420,9 @@ namespace
             functions.query        = reinterpret_cast<QueryPointer>(dlsym(from, "XQueryPointer"));
             functions.warp         = reinterpret_cast<WarpPointer>(dlsym(from, "XWarpPointer"));
             functions.translate    = reinterpret_cast<TranslateCoordinates>(dlsym(from, "XTranslateCoordinates"));
+            functions.grab         = reinterpret_cast<GrabPointer>(dlsym(from, "XGrabPointer"));
+            functions.ungrab       = reinterpret_cast<UngrabPointer>(dlsym(from, "XUngrabPointer"));
+            functions.close        = reinterpret_cast<CloseDisplay>(dlsym(from, "XCloseDisplay"));
             functions.connectionOf = reinterpret_cast<ConnectionOf>(dlsym(xcb != nullptr ? xcb : RTLD_DEFAULT, "XGetXCBConnection"));
             return functions;
         }();
@@ -570,9 +605,59 @@ namespace
             sharedField(prefix->xinputOpcode).store(opcode, std::memory_order_release);
     }
 
+    void releaseGamePointerGrabs()
+    {
+        const Xcb&         calls        = xcb();
+        const ConnectionOf connectionOf = xlib().connectionOf;
+        if (calls.ungrabPointer == nullptr || calls.flush == nullptr || connectionOf == nullptr)
+            return;
+        for (const auto& [display, grab] : gamePointerGrabs)
+        {
+            xcb_connection_t* const connection = connectionOf(display);
+            calls.ungrabPointer(connection, XCB_CURRENT_TIME);
+            calls.flush(connection);
+        }
+    }
+
+    void restoreGamePointerGrabs()
+    {
+        const Xcb&         calls        = xcb();
+        const ConnectionOf connectionOf = xlib().connectionOf;
+        if (calls.grabPointer == nullptr || calls.grabPointerReply == nullptr || connectionOf == nullptr)
+            return;
+        for (const auto& [display, grab] : gamePointerGrabs)
+        {
+            xcb_connection_t* const         connection = connectionOf(display);
+            xcb_generic_error_t*            error      = nullptr;
+            const xcb_grab_pointer_cookie_t asked      = calls.grabPointer(
+                connection, grab.ownerEvents, static_cast<xcb_window_t>(grab.window), static_cast<uint16_t>(grab.eventMask), static_cast<uint8_t>(grab.pointerMode),
+                static_cast<uint8_t>(grab.keyboardMode), static_cast<xcb_window_t>(grab.confineTo), static_cast<xcb_cursor_t>(grab.cursor), XCB_CURRENT_TIME);
+            xcb_grab_pointer_reply_t* const reply = calls.grabPointerReply(connection, asked, &error);
+            if (error != nullptr)
+                std::fprintf(stderr, "vkdaedalus input hook: the game's pointer grab of window 0x%lx was not given back when the overlay closed: X error %u\n", grab.window,
+                             static_cast<unsigned>(error->error_code));
+            else if (reply == nullptr || reply->status != XCB_GRAB_STATUS_SUCCESS)
+                std::fprintf(stderr, "vkdaedalus input hook: the game's pointer grab of window 0x%lx was not given back when the overlay closed: grab status %d\n", grab.window,
+                             reply != nullptr ? static_cast<int>(reply->status) : -1);
+            std::free(reply);
+            std::free(error);
+        }
+    }
+
     void setBlocked(bool block)
     {
-        blocked.store(block, std::memory_order_release);
+        if (block)
+        {
+            blocked.store(true, std::memory_order_release);
+            std::lock_guard<std::mutex> grabLock(grabMutex);
+            releaseGamePointerGrabs();
+        }
+        else
+        {
+            std::lock_guard<std::mutex> grabLock(grabMutex);
+            restoreGamePointerGrabs();
+            blocked.store(false, std::memory_order_release);
+        }
         PrefixInput* const prefix = prefixInput();
         if (block && prefix != nullptr)
         {
@@ -694,6 +779,52 @@ extern "C" __attribute__((visibility("default"))) int XWarpPointer(Display* disp
         held->second.rootY += toY;
     }
     return 1;
+}
+
+extern "C" __attribute__((visibility("default"))) int XGrabPointer(Display* display, Window window, Bool ownerEvents, unsigned int eventMask, int pointerMode,
+                                                                   int keyboardMode, Window confineTo, Cursor cursor, Time time)
+{
+    const Xlib& functions = xlib();
+    if (functions.grab == nullptr)
+        return GrabNotViewable;
+    if (ownDisplay(display))
+        return functions.grab(display, window, ownerEvents, eventMask, pointerMode, keyboardMode, confineTo, cursor, time);
+    const GamePointerGrab       asked{window, ownerEvents != False, eventMask, pointerMode, keyboardMode, confineTo, cursor};
+    std::lock_guard<std::mutex> grabLock(grabMutex);
+    if (blocked.load(std::memory_order_acquire))
+    {
+        gamePointerGrabs.insert_or_assign(display, asked);
+        return GrabSuccess;
+    }
+    const int status = functions.grab(display, window, ownerEvents, eventMask, pointerMode, keyboardMode, confineTo, cursor, time);
+    if (status == GrabSuccess)
+        gamePointerGrabs.insert_or_assign(display, asked);
+    return status;
+}
+
+extern "C" __attribute__((visibility("default"))) int XUngrabPointer(Display* display, Time time)
+{
+    const Xlib& functions = xlib();
+    if (functions.ungrab == nullptr)
+        return 0;
+    if (!ownDisplay(display))
+    {
+        std::lock_guard<std::mutex> grabLock(grabMutex);
+        gamePointerGrabs.erase(display);
+    }
+    return functions.ungrab(display, time);
+}
+
+extern "C" __attribute__((visibility("default"))) int XCloseDisplay(Display* display)
+{
+    const Xlib& functions = xlib();
+    if (functions.close == nullptr)
+        return 0;
+    {
+        std::lock_guard<std::mutex> grabLock(grabMutex);
+        gamePointerGrabs.erase(display);
+    }
+    return functions.close(display);
 }
 
 extern "C" __attribute__((visibility("default"))) xcb_generic_event_t* xcb_poll_for_event(xcb_connection_t* connection)
