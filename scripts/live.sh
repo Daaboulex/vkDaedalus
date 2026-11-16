@@ -3652,7 +3652,7 @@ click_briefly() {
 }
 
 held_input_verdict() {
-    local log="$1" probe="$2" own_warp="$3" kind seen during="" silent="" moved opened closed
+    local log="$1" probe="$2" own_warp="$3" kind seen during="" silent="" moved opened drained closed
     shift 3
     opened=$(grep -n -m1 'overlay opened' "$log" | cut -d: -f1)
     closed=$(grep -n -m1 'overlay closed' "$log" | cut -d: -f1)
@@ -3660,8 +3660,13 @@ held_input_verdict() {
         echo "the overlay key never opened and closed the overlay over the probe"
         return 1
     fi
+    drained=$(awk -v a="$opened" 'NR > a && /present cycle/ && ++n == 2 { print NR; exit }' "$log")
+    if [ -z "$drained" ] || [ "$drained" -ge "$closed" ]; then
+        echo "the overlay closed before the game presented twice with it open, so the case cannot tell input read before it opened from input read while it was open"
+        return 1
+    fi
     for kind in "$@"; do
-        seen=$(awk -v a="$opened" -v b="$closed" -v k="$probe: $kind" -v w="$own_warp" \
+        seen=$(awk -v a="$drained" -v b="$closed" -v k="$probe: $kind" -v w="$own_warp" \
             'NR > a && NR < b && $0 != w && (index($0, k " ") == 1 || $0 == k) { print; exit }' "$log")
         [ -z "$seen" ] || during+="${during:+; }$seen"
         awk -v b="$closed" -v k="$probe: $kind" -v w="$own_warp" 'NR > b && $0 != w && (index($0, k " ") == 1 || $0 == k) { found = 1 } END { exit found ? 0 : 1 }' "$log" \
