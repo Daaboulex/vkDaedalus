@@ -107,11 +107,19 @@ on. Where MAKO has no MAKO FG, the tiles must say MAKO needs a model while
 MAKO says it keeps scaling with frame generation off. Where it has MAKO FG,
 the lane switches MAKO while vkcube runs cas, smaa and uniform_smoke, with one
 counting layer above MAKO and one below it: its file at 2x, 3x, 4x and 5x, the
-frame generation key off and on, then Adaptive aimed at 90 FPS. Each fixed
-step must show its multiplier for every frame the game draws, within 15%,
-Adaptive more than one and at most its 3x, and the layer's frame rates must
-name Adaptive and its target, in both orders. Every run is validation clean
-against one of MAKO alone. Without `--mako` these cases are skipped.
+frame generation key off and on, then Adaptive aimed at 90 FPS. MAKO must
+reload its file at every step, and a step MAKO says waits for the game to
+rebuild its swapchain must get MAKO's request for that rebuild before it is
+counted. Each fixed step must show its multiplier for every frame the game
+draws, within 15%, Adaptive at least 1.05 and at most 3.45, and the layer's
+frame rates must name Adaptive and its target, in both orders. Every run is
+validation clean against one of MAKO alone. For the Sharpness run and the
+frame generation runs, that run of MAKO alone has the other layers, the file
+and the frame count of the run it is compared with and takes the same steps,
+its file edited where the overlay writes it or the key is pressed. The
+Sharpness run has no counting layer, so nothing counts its frames: there each
+step comes at the same time after MAKO first says it scales. Without `--mako`
+these cases are skipped.
 
 The UI lane also lists a MAKO and an lsfg-vk the loader lists and never loads,
 so the overlay draws every state of the two layers with neither of them

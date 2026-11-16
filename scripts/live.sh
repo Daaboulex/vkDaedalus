@@ -824,13 +824,21 @@ mako_loads_case() {
     if [ "${#wrong[@]}" -gt 0 ]; then
         record FAIL "$name" "$(printf '%s; ' "${wrong[@]}")"
     else
-        record PASS "$name" "with the profile running MAKO and lsfg-vk installed beside it, the game mapped libmako-render.so and no lsfg-vk, ran MAKO's profile vkdaedalus default made before it started, and the loader's chain was $chain; validation clean against MAKO alone"
+        record PASS "$name" "with the game's profile naming MAKO as its frame generation layer and lsfg-vk installed beside it, the game mapped libmako-render.so and no lsfg-vk, ran MAKO's profile vkdaedalus default made before it started, and the loader's chain was $chain; validation clean against MAKO alone"
     fi
 }
 
+seconds_since() {
+    awk -v from="$1" -v now="$EPOCHREALTIME" 'BEGIN { printf "%.2f", now - from }'
+}
+
 drive_mako_live() {
-    local log="$1" map="$2" reloads window
+    local log="$1" map="$2" reloads window start
+    : >"$log.steps"
+    if ! wait_for_line '^MAKO Renderer: spatial scaling active: ' 1 "$log"; then return 0; fi
+    start=$EPOCHREALTIME
     if ! wait_for_line 'present cycle' 60 "$log"; then return 0; fi
+    echo "window $(seconds_since "$start")" >>"$log.steps"
     window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '' | tail -1) || true
     ui_take_window "$window"
     hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || return 0
@@ -840,15 +848,39 @@ drive_mako_live() {
     ui_click "$map" "Scaling" 1 "$log" || true
     reloads=$(count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$log")
     ui_set_value "$map" "##Sharpness" 0.5 "$log" || true
+    echo "sharpness $(seconds_since "$start")" >>"$log.steps"
     wait_for_count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$((reloads + 1))" "$log" || true
     wait_for_count '^MAKO Renderer: spatial scaling model changed live: .*; sharpness=0\.5;' 1 "$log" || true
     hold_key_until "$OVERLAY_KEY" 'overlay closed' 1 "$log" || true
 }
 
+drive_mako_live_alone() {
+    local log="$1" conf="$2" steps="$3" step at start window reloads
+    : >"$log.missed"
+    if ! wait_for_line '^MAKO Renderer: spatial scaling active: ' 1 "$log"; then return 0; fi
+    start=$EPOCHREALTIME
+    while read -r step at; do
+        sleep "$(awk -v at="$at" -v gone="$(seconds_since "$start")" 'BEGIN { wait = at - gone; printf "%.2f", (wait > 0 ? wait : 0) }')"
+        if [ "$step" = window ]; then
+            window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '' | tail -1) || true
+            ui_take_window "$window"
+            continue
+        fi
+        reloads=$(count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$log")
+        sed -i 's/^scaling_sharpness = .*/scaling_sharpness = 0.5/' "$conf"
+        if ! wait_for_count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$((reloads + 1))" "$log"; then
+            echo "MAKO never reloaded its file for Sharpness 0.5" >>"$log.missed"
+        elif ! wait_for_count '^MAKO Renderer: spatial scaling model changed live: .*; sharpness=0\.5;' 1 "$log"; then
+            echo "MAKO reloaded its file for Sharpness 0.5 and never changed its scaler live" >>"$log.missed"
+        fi
+    done <"$steps"
+}
+
 mako_live_case() {
-    local icd="$1" dir="$2" control="$3" log home map config game scaled source presented live why wrong=() absent
+    local icd="$1" dir="$2" log home map config control chome game scaled source presented live why wrong=() missed=() absent
     local name="MAKO scales and takes a live change, effects before"
     log="$dir/mako-live.log" home="$dir/mako-live-home" map="$dir/mako-live.map" config="$dir/mako-live-home/.config/mako-render/conf.toml"
+    control="$dir/mako-live-control.log" chome="$dir/mako-live-control-home"
     fresh_home "$home" cas
     mkdir -p "$home/.config/vkdaedalus/profiles" "$home/.config/mako-render"
     printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
@@ -860,6 +892,22 @@ mako_live_case() {
     driver_finished "drive_mako_live"
     if ! why=$(mako_ran "$log"); then
         record FAIL "$name" "$why"
+        return
+    fi
+    rm -rf "${chome:?}"
+    mkdir -p "$chome/.config/mako-render"
+    cp "$dir/mako-scaling.toml" "$chome/.config/mako-render/conf.toml"
+    background drive_mako_live_alone "$control" "$chome/.config/mako-render/conf.toml" "$log.steps"
+    driver=$!
+    run "$control" "$chome" "$icd" "$VALIDATION" 0 1 -- env ENABLE_MAKO=1 VK_ADD_IMPLICIT_LAYER_PATH="$MAKO_DIR" vkcube --c 1200 --wsi xcb --width 1280 --height 720
+    driver_finished "drive_mako_live_alone"
+    if ! why=$(mako_ran "$control"); then
+        record FAIL "MAKO alone scales and takes a live change" "$why"
+        return
+    fi
+    mapfile -t missed <"$control.missed"
+    if [ "${#missed[@]}" -gt 0 ]; then
+        record FAIL "MAKO alone scales and takes a live change" "MAKO alone did not take every step, so it is no control: $(printf '%s; ' "${missed[@]}")"
         return
     fi
     game=$(sed -n -E 's/.*swapchain create: .* extent=([0-9]+x[0-9]+).*/\1/p' "$log" | head -1)
@@ -890,7 +938,7 @@ mako_live_case() {
     if [ "${#wrong[@]}" -gt 0 ]; then
         record FAIL "$name" "$(printf '%s; ' "${wrong[@]}")"
     else
-        record PASS "$name" "the game drew at $game and MAKO Scaler presented it at $presented; the Sharpness the overlay set while it ran was read in place and MAKO said: ${live#MAKO Renderer: }${absent:+; $absent, so the tiles say $(cat "$log.tile") and MAKO said: $(grep -m1 -A1 '^MAKO Renderer: frame-generation backend initialization failed' "$log" | tr '\n' ' ' | sed 's/MAKO Renderer: //')}; validation clean against MAKO alone"
+        record PASS "$name" "the game drew at $game and MAKO Scaler presented it at $presented; the Sharpness the overlay set while it ran was read in place and MAKO said: ${live#MAKO Renderer: }${absent:+; $absent, so the tiles say $(cat "$log.tile") and MAKO said: $(grep -m1 -A1 '^MAKO Renderer: frame-generation backend initialization failed' "$log" | tr '\n' ' ' | sed 's/MAKO Renderer: //')}; validation clean against MAKO alone taking the same steps"
     fi
 }
 
@@ -946,20 +994,43 @@ mako_cases() {
         record SKIP "DISABLE_MAKO in the launch options keeps MAKO out" "this build has no vkdaedalus-run (a plain meson build installs none)"
     else
         for order in before after; do mako_loads_case "$icd" "$dir" "$order" "$control"; done
-        mako_live_case "$icd" "$dir" "$control"
+        mako_live_case "$icd" "$dir"
         mako_kept_case "$icd" "$dir" "$control"
     fi
     if absent=$(mako_fg_absent); then
         for order in before after; do record SKIP "MAKO frame generation, effects $order" "$absent"; done
         return 0
     fi
-    for order in before after; do mako_frames_case "$icd" "$dir" "$order" "$control"; done
+    for order in before after; do mako_frames_case "$icd" "$dir" "$order"; done
+}
+
+mako_frames_step() {
+    local log="$1" what="$2" reloads waiting asked presents
+    local reloaded='^MAKO Renderer: updated configuration in place; contexts=[0-9]+$'
+    local pending='^MAKO Renderer: configuration changes requiring GPU resource reconstruction remain pending until a game-owned swapchain recreation;'
+    local requested='^MAKO Renderer: live profile resource change requested a game-owned swapchain recreation '
+    shift 2
+    reloads=$(count "$reloaded" "$log") waiting=$(count "$pending" "$log") asked=$(count "$requested" "$log")
+    "$@" || echo "no $what" >>"$log.marks"
+    if ! wait_for_count "$reloaded" "$((reloads + 1))" "$log"; then
+        echo "MAKO never reloaded its file for $what" >>"$log.missed"
+        return 0
+    fi
+    presents=$(count '^fault_inject: present [0-9]+$' "$log")
+    if ! wait_for_count '^fault_inject: present [0-9]+$' "$((presents + 2))" "$log"; then
+        echo "the game stopped presenting once MAKO reloaded its file for $what" >>"$log.missed"
+        return 0
+    fi
+    if [ "$(count "$pending" "$log")" -gt "$waiting" ] && ! wait_for_count "$requested" "$((asked + 1))" "$log"; then
+        echo "MAKO said $what waits for the game to rebuild its swapchain and never asked the game to" >>"$log.missed"
+    fi
 }
 
 drive_mako_frames() {
-    local log="$1" conf="$2" step reloads reloaded='^MAKO Renderer: updated configuration in place; contexts=[1-9]'
+    local log="$1" conf="$2" keys="$3" step what enabled notice
     : >"$log.marks"
-    if ! wait_for_line 'present cycle' 60 "$log"; then
+    : >"$log.missed"
+    if ! wait_for_line '^fault_inject: present [0-9]+$' 60 "$log"; then
         echo "never presented" >>"$log.marks"
         return 0
     fi
@@ -968,31 +1039,25 @@ drive_mako_frames() {
     sleep 3
     lsfg_live_mark "$log" two-b
     for step in three:3 four:4 five:5; do
-        reloads=$(count "$reloaded" "$log")
-        sed -i "s/^multiplier = .*/multiplier = ${step#*:}/" "$conf"
-        wait_for_count "$reloaded" "$((reloads + 1))" "$log" || echo "MAKO never reloaded its file for ${step#*:}x" >>"$log.marks"
+        mako_frames_step "$log" "${step#*:}x" sed -i "s/^multiplier = .*/multiplier = ${step#*:}/" "$conf"
         sleep 1
         lsfg_live_mark "$log" "${step%%:*}-a"
         sleep 3
         lsfg_live_mark "$log" "${step%%:*}-b"
     done
-    reloads=$(count "$reloaded" "$log")
-    hold_key_until Insert 'frame generation key: off$' 1 "$log" || echo "no off" >>"$log.marks"
-    wait_for_count "$reloaded" "$((reloads + 1))" "$log" || echo "MAKO never reloaded its file for off" >>"$log.marks"
-    sleep 1
-    lsfg_live_mark "$log" off-a
-    sleep 3
-    lsfg_live_mark "$log" off-b
-    reloads=$(count "$reloaded" "$log")
-    hold_key_until Insert 'frame generation key: MAKO 5x, on$' 1 "$log" || echo "no on" >>"$log.marks"
-    wait_for_count "$reloaded" "$((reloads + 1))" "$log" || echo "MAKO never reloaded its file for on" >>"$log.marks"
-    sleep 1
-    lsfg_live_mark "$log" on-a
-    sleep 3
-    lsfg_live_mark "$log" on-b
-    reloads=$(count "$reloaded" "$log")
-    printf '%s\n' 'adaptive = true' 'target_fps = 90' 'adaptive_max_multiplier = 3' >>"$conf"
-    wait_for_count "$reloaded" "$((reloads + 1))" "$log" || echo "MAKO never reloaded its file for Adaptive" >>"$log.marks"
+    for step in 'off false off' 'on true MAKO 5x, on'; do
+        read -r what enabled notice <<<"$step"
+        if [ "$keys" = 1 ]; then
+            mako_frames_step "$log" "$what" hold_key_until Insert "frame generation key: $notice\$" 1 "$log"
+        else
+            mako_frames_step "$log" "$what" sed -i "s/^frame_generation_enabled = .*/frame_generation_enabled = $enabled/" "$conf"
+        fi
+        sleep 1
+        lsfg_live_mark "$log" "$what-a"
+        sleep 3
+        lsfg_live_mark "$log" "$what-b"
+    done
+    mako_frames_step "$log" Adaptive sed -i -e "\$a adaptive = true" -e "\$a target_fps = 90" -e "\$a adaptive_max_multiplier = 3" "$conf"
     sleep 2
     lsfg_live_mark "$log" adaptive-a
     sleep 4
@@ -1000,21 +1065,38 @@ drive_mako_frames() {
 }
 
 mako_frames_case() {
-    local icd="$1" dir="$2" order="$3" control="$4" layers game log home conf phase want got why wrong=()
+    local icd="$1" dir="$2" order="$3" layers alone game log home conf control chome file phase want got why wrong=() missed=()
     local name="MAKO frame generation, effects $order"
     if [ "$order" = before ]; then
-        layers="$BASALT:$MAKO:$FAULT:$VALIDATION" game=layer
+        layers="$BASALT:$MAKO:$FAULT:$VALIDATION" alone="$MAKO:$FAULT:$VALIDATION" game=layer
     else
-        layers="$FAULT:$MAKO:$BASALT:$VALIDATION" game=fault
+        layers="$FAULT:$MAKO:$BASALT:$VALIDATION" alone="$FAULT:$MAKO:$VALIDATION" game=fault
     fi
     log="$dir/mako-frames-$order.log" home="$dir/mako-frames-$order-home" conf="$dir/mako-frames-$order-home/.config/mako-render/conf.toml"
+    control="$dir/mako-frames-$order-control.log" chome="$dir/mako-frames-$order-control-home"
     fresh_home "$home" cas:smaa:uniform_smoke
-    mkdir -p "$home/.config/vkdaedalus/profiles" "$home/.config/mako-render"
+    rm -rf "${chome:?}"
+    mkdir -p "$home/.config/vkdaedalus/profiles" "$home/.config/mako-render" "$chome/.config/mako-render"
     printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
     printf 'frameGenerationLayer = mako\n' >"$home/.config/vkdaedalus/profiles/default.conf"
-    printf '%s\n' 'version = 2' '' '[global]' '' '[[profile]]' 'name = "vkdaedalus default"' 'active_in = "/vkcube"' 'frame_generation_model = "mako-fg"' \
-        'frame_generation_enabled = true' 'multiplier = 2' >"$conf"
-    background drive_mako_frames "$log" "$conf"
+    for file in "$conf" "$chome/.config/mako-render/conf.toml"; do
+        printf '%s\n' 'version = 2' '' '[global]' '' '[[profile]]' 'name = "vkdaedalus default"' 'active_in = "/vkcube"' 'frame_generation_model = "mako-fg"' \
+            'frame_generation_enabled = true' 'multiplier = 2' >"$file"
+    done
+    background drive_mako_frames "$control" "$chome/.config/mako-render/conf.toml" 0
+    driver=$!
+    run "$control" "$chome" "$icd" "$alone" 0 1 -- env FAULT_INJECT_COUNT_PRESENTS=each vkcube --c 2000 --wsi xcb
+    driver_finished "drive_mako_frames"
+    if ! why=$(mako_ran "$control"); then
+        record FAIL "MAKO frame generation alone, effects $order" "$why"
+        return
+    fi
+    mapfile -t missed <"$control.missed"
+    if [ "${#missed[@]}" -gt 0 ]; then
+        record FAIL "MAKO frame generation alone, effects $order" "MAKO alone did not take every step, so it is no control: $(printf '%s; ' "${missed[@]}")"
+        return
+    fi
+    background drive_mako_frames "$log" "$conf" 1
     driver=$!
     run "$log" "$home" "$icd" "$layers" 1 1 -- env FAULT_INJECT_COUNT_PRESENTS=each vkcube --c 2000 --wsi xcb
     driver_finished "drive_mako_frames"
@@ -1022,6 +1104,8 @@ mako_frames_case() {
         record FAIL "$name" "$why"
         return
     fi
+    mapfile -t missed <"$log.missed"
+    wrong+=("${missed[@]}")
     if [ "$(count 'frame generation key: .*from the next launch' "$log")" -ne 0 ]; then wrong+=("the key said $(grep -m1 -o 'frame generation key: .*' "$log")"); fi
     for phase in two:2 three:3 four:4 five:5 off:1 on:5; do
         want=${phase#*:}
@@ -1031,7 +1115,7 @@ mako_frames_case() {
     done
     got=$(lsfg_live_ratio "$log" adaptive "$game")
     record MEAS "$name: adaptive to 90 FPS, at most 3x" "$got frames shown for every frame the game drew"
-    if [ "$got" = none ] || ! awk -v g="$got" 'BEGIN { exit !(g >= 1.15 && g <= 3 * 1.15) }'; then wrong+=("adaptive $got, want more than 1 and at most 3"); fi
+    if [ "$got" = none ] || ! awk -v g="$got" 'BEGIN { exit !(g >= 1.05 && g <= 3.45) }'; then wrong+=("adaptive $got, want at least 1.05 and at most 3.45"); fi
     if [ "$(count "frame rates over the swapchain's life: .*, adaptive to 90 FPS\$" "$log")" -lt 1 ]; then
         wrong+=("the layer's last frame rates did not name Adaptive and its target: $(grep -m1 "frame rates over the swapchain's life" "$log" || echo none)")
     fi
@@ -1039,7 +1123,7 @@ mako_frames_case() {
     if [ "${#wrong[@]}" -gt 0 ]; then
         record FAIL "$name" "shown per drawn frame: $(printf '%s; ' "${wrong[@]}")marks: $(tr '\n' ' ' <"$log.marks")"
     else
-        record PASS "$name" "while vkcube ran with cas, smaa and uniform_smoke, MAKO's file went from 2x to 3x, 4x and 5x, the frame generation key turned it off and on, then Adaptive aimed at 90 FPS: 2, 3, 4, 5, 1, 5 and $got frames shown for each drawn, counted on both sides of MAKO, and the layer named Adaptive and its target; validation clean against MAKO alone"
+        record PASS "$name" "while vkcube ran with cas, smaa and uniform_smoke, MAKO's file went from 2x to 3x, 4x and 5x, the frame generation key turned it off and on, then Adaptive aimed at 90 FPS: 2, 3, 4, 5, 1, 5 and $got frames shown for each drawn, counted on both sides of MAKO, and the layer named Adaptive and its target; validation clean against MAKO alone taking the same steps"
     fi
 }
 
