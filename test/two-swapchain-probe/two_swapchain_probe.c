@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 enum
 {
@@ -12,6 +13,8 @@ enum
     CHAINS        = 2,
     SLOTS         = 2
 };
+
+static const double RETIRED_KEPT_SECONDS = 0.8;
 
 struct chain
 {
@@ -107,7 +110,7 @@ static int recordClear(VkCommandBuffer cmd, VkImage image, float red)
     return 0;
 }
 
-static int makeChain(VkPhysicalDevice physical, VkDevice device, VkCommandPool pool, struct chain* c, float red)
+static int makeChain(VkPhysicalDevice physical, VkDevice device, VkCommandPool pool, struct chain* c, float red, VkSwapchainKHR old)
 {
     VkSurfaceCapabilitiesKHR caps;
     if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical, c->surface, &caps) != VK_SUCCESS)
@@ -134,6 +137,7 @@ static int makeChain(VkPhysicalDevice physical, VkDevice device, VkCommandPool p
         .compositeAlpha   = alpha,
         .presentMode      = VK_PRESENT_MODE_FIFO_KHR,
         .clipped          = VK_TRUE,
+        .oldSwapchain     = old,
     };
     if (vkCreateSwapchainKHR(device, &info, NULL, &c->swapchain) != VK_SUCCESS)
         return fail("vkCreateSwapchainKHR failed");
@@ -328,7 +332,7 @@ static int presentRange(VkDevice device, VkQueue queue, struct chain* chains, un
     return 0;
 }
 
-static void destroyChain(VkInstance instance, VkDevice device, struct chain* c)
+static void destroySwapchainOf(VkDevice device, struct chain* c)
 {
     for (int s = 0; s < SLOTS; s++)
     {
@@ -338,20 +342,51 @@ static void destroyChain(VkInstance instance, VkDevice device, struct chain* c)
     for (uint32_t i = 0; c->rendered && i < c->imageCount; i++)
         vkDestroySemaphore(device, c->rendered[i], NULL);
     vkDestroySwapchainKHR(device, c->swapchain, NULL);
-    vkDestroySurfaceKHR(instance, c->surface, NULL);
     free(c->images);
     free(c->commands);
     free(c->rendered);
     free(c->imageFence);
 }
 
+static void destroyChain(VkInstance instance, VkDevice device, struct chain* c)
+{
+    destroySwapchainOf(device, c);
+    vkDestroySurfaceKHR(instance, c->surface, NULL);
+}
+
+static double secondsNow(void)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (double)now.tv_sec + (double)now.tv_nsec / 1e9;
+}
+
+static int retireFirst(VkPhysicalDevice physical, VkDevice device, VkQueue queue, VkCommandPool pool, struct chain* chains, unsigned long* frame)
+{
+    struct chain retired = chains[0];
+    struct chain fresh   = {.window = retired.window, .surface = retired.surface, .format = retired.format};
+    if (makeChain(physical, device, pool, &fresh, 0.75f, retired.swapchain) != 0)
+        return 1;
+    chains[0] = fresh;
+    fprintf(stderr, "two-swapchain-probe: retired the first swapchain and keeps it\n");
+    for (const double until = secondsNow() + RETIRED_KEPT_SECONDS; secondsNow() < until; (*frame)++)
+        if (presentOnce(device, queue, &chains[*frame % CHAINS]) != 0)
+            return 1;
+    if (vkDeviceWaitIdle(device) != VK_SUCCESS)
+        return fail("vkDeviceWaitIdle failed");
+    fprintf(stderr, "two-swapchain-probe: destroying the retired swapchain\n");
+    destroySwapchainOf(device, &retired);
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     char*               end    = NULL;
     const int           depth  = argc == 3 && strcmp(argv[2], "depth") == 0;
-    const unsigned long frames = argc == 2 || depth ? strtoul(argv[1], &end, 10) : 0;
-    if ((argc != 2 && !depth) || !end || *end != '\0' || frames < 8 || frames > 100000)
-        return fail("usage: two-swapchain-probe <presents, 8 to 100000> [depth]");
+    const int           retire = argc == 3 && strcmp(argv[2], "retire") == 0;
+    const unsigned long frames = argc == 2 || depth || retire ? strtoul(argv[1], &end, 10) : 0;
+    if ((argc != 2 && !depth && !retire) || !end || *end != '\0' || frames < 8 || frames > 100000)
+        return fail("usage: two-swapchain-probe <presents, 8 to 100000> [depth|retire]");
 
     xcb_connection_t* connection = xcb_connect(NULL, NULL);
     if (xcb_connection_has_error(connection))
@@ -460,9 +495,10 @@ int main(int argc, char** argv)
         return fail("vkCreateCommandPool failed");
 
     for (int c = 0; c < CHAINS; c++)
-        if (makeChain(physical, device, pool, &chains[c], c == 0 ? 0.75f : 0.25f) != 0)
+        if (makeChain(physical, device, pool, &chains[c], c == 0 ? 0.75f : 0.25f, VK_NULL_HANDLE) != 0)
             return 1;
 
+    unsigned long presents = frames;
     if (depth)
     {
         VkFormatProperties support;
@@ -487,6 +523,14 @@ int main(int argc, char** argv)
         if (presentRange(device, queue, chains, frames * 3 / 4, frames) != 0)
             return 1;
     }
+    else if (retire)
+    {
+        unsigned long frame = frames / 2;
+        if (presentRange(device, queue, chains, 0, frame) != 0 || retireFirst(physical, device, queue, pool, chains, &frame) != 0
+            || presentRange(device, queue, chains, frame, frame + frames / 2) != 0)
+            return 1;
+        presents = frame + frames / 2;
+    }
     else if (presentRange(device, queue, chains, 0, frames) != 0)
         return 1;
 
@@ -498,7 +542,7 @@ int main(int argc, char** argv)
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
     xcb_disconnect(connection);
-    printf("two-swapchain-probe: %lu presents alternating a format %d and a format %d swapchain on one device%s\n", frames, unorm, srgb,
-           depth ? ", two depth images bound and destroyed between them" : "");
+    printf("two-swapchain-probe: %lu presents alternating a format %d and a format %d swapchain on one device%s\n", presents, unorm, srgb,
+           depth ? ", two depth images bound and destroyed between them" : retire ? ", the first one retired by a new swapchain and kept alive across a resize" : "");
     return 0;
 }

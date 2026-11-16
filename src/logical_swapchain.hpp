@@ -58,6 +58,13 @@ namespace vkBasalt
         std::vector<bool>                   timingSamplesPending;
         bool                                timingEnabled = false;
         bool                                timingReadErrorLogged = false;
+        bool                                retired               = false;
+        bool                                awaitsRebuild         = false;
+
+        bool rebuildable() const
+        {
+            return !retired && !fakeImages.empty();
+        }
 
         void keepCreateInfo(const VkSwapchainCreateInfoKHR& createInfo)
         {

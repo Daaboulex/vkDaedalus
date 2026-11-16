@@ -75,6 +75,10 @@ check's message or a test already says is not repeated here.
   generation layer below needs the transfer bits to stay.
 - The pool of images the game receives grows only at its end: the game holds the first handles for
   the swapchain's life.
+- A swapchain made after the first runs a plain copy until no other swapchain has been made for
+  200 ms, then that swapchain alone gets its effects back. A swapchain named as the old one of a new
+  swapchain is retired and never rebuilt: the driver may free its images while it still exists, and
+  a frame generation layer above keeps it until its last present is retired.
 
 ## Waits
 

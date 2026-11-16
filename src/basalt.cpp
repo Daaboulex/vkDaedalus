@@ -831,6 +831,7 @@ namespace vkBasalt
     {
         LogicalDevice* pLogicalDevice = pLogicalSwapchain->pLogicalDevice;
 
+        pLogicalSwapchain->awaitsRebuild = false;
         pLogicalSwapchain->waitForEffects();
 
         pLogicalSwapchain->destroyEffectTimings();
@@ -866,7 +867,7 @@ namespace vkBasalt
     {
         for (auto& [_, pLogicalSwapchain] : swapchainMap)
         {
-            if (!pLogicalSwapchain->fakeImages.empty())
+            if (pLogicalSwapchain->rebuildable())
                 reloadEffectsForSwapchain(pLogicalSwapchain.get(), pConfig.get(), activeEffects);
         }
     }
@@ -1701,6 +1702,9 @@ namespace vkBasalt
             return VK_ERROR_DEVICE_LOST;
         }
 
+        if (LogicalSwapchain* old = findSwapchain(pCreateInfo->oldSwapchain))
+            old->retired = true;
+
         if (result != VK_SUCCESS)
             return result;
 
@@ -1755,7 +1759,7 @@ namespace vkBasalt
         std::vector<EffectCompileJobs::Compile> compiles;
         for (const auto& [_, pSwapchain] : swapchainMap)
         {
-            if (!pSwapchain || pSwapchain->fakeImages.empty())
+            if (!pSwapchain || !pSwapchain->rebuildable())
                 continue;
             for (EffectCompileRequest& request : gatherEffectCompileRequestsLocked(effectNames, pSwapchain.get(), effectRegistry.getActiveEffects()))
                 compiles.push_back([request = std::move(request)] {
@@ -2014,6 +2018,7 @@ namespace vkBasalt
                 pLogicalDevice, pLogicalSwapchain->imageExtent,
                 firstImages, pLogicalSwapchain->images)));
 
+            pLogicalSwapchain->awaitsRebuild = true;
             resizeDebounce.pending = true;
             resizeDebounce.lastResizeTime = std::chrono::steady_clock::now();
         }
@@ -2340,7 +2345,7 @@ namespace vkBasalt
             switchConfig(nextConfig);
             if (settingsManager.getSafeAntiCheat())
                 for (auto& [_, pSwapchain] : swapchainMap)
-                    if (pSwapchain && !pSwapchain->fakeImages.empty())
+                    if (pSwapchain && pSwapchain->rebuildable())
                         reallocateCommandBuffers(pSwapchain->pLogicalDevice, pSwapchain.get(),
                                                  getDepthState(pSwapchain->pLogicalDevice));
             std::vector<std::string> newEffects = pConfig->getOption<std::vector<std::string>>("effects", {});
@@ -2366,7 +2371,7 @@ namespace vkBasalt
         std::vector<EffectCompileRequest> requests;
         for (const auto& [_, pSwapchain] : swapchainMap)
         {
-            if (!pSwapchain || pSwapchain->fakeImages.empty())
+            if (!pSwapchain || !pSwapchain->rebuildable())
                 continue;
 
             std::vector<EffectCompileRequest> forSwapchain = gatherEffectCompileRequestsLocked(activeEffects, pSwapchain.get(), activeEffects);
@@ -2412,9 +2417,8 @@ namespace vkBasalt
         const std::vector<std::string> activeEffects = effectRegistry.getActiveEffects();
         for (auto& [_, pSwapchain] : swapchainMap)
         {
-            if (pSwapchain->fakeImages.empty())
-                continue;
-            reloadEffectsForSwapchain(pSwapchain.get(), pConfig.get(), activeEffects);
+            if (pSwapchain->awaitsRebuild && pSwapchain->rebuildable())
+                reloadEffectsForSwapchain(pSwapchain.get(), pConfig.get(), activeEffects);
         }
     }
 
@@ -2559,7 +2563,7 @@ namespace vkBasalt
                     pLogicalSwapchain->ratesReportedMs        = seen.intervalSumMs();
                 }
             }
-            if (pLogicalSwapchain && pLogicalSwapchain->chain && pLogicalSwapchain->chain->failed)
+            if (pLogicalSwapchain && pLogicalSwapchain->chain && pLogicalSwapchain->chain->failed && pLogicalSwapchain->rebuildable())
                 reloadEffectsForSwapchain(pLogicalSwapchain, pConfig.get(), effectRegistry.getActiveEffects());
         }
 
@@ -2858,7 +2862,7 @@ namespace vkBasalt
         {
             if (pLogicalSwapchain->pLogicalDevice != pLogicalDevice)
                 continue;
-            if (pLogicalSwapchain->fakeImages.empty())
+            if (!pLogicalSwapchain->rebuildable())
                 continue;
 
             reallocateCommandBuffers(pLogicalDevice, pLogicalSwapchain.get(), depth);
@@ -2920,7 +2924,7 @@ namespace vkBasalt
             {
                 if (pLogicalSwapchain->pLogicalDevice != pLogicalDevice)
                     continue;
-                if (pLogicalSwapchain->fakeImages.empty())
+                if (!pLogicalSwapchain->rebuildable())
                     continue;
                 if (pLogicalSwapchain->effectDepthImage != image)
                     continue;

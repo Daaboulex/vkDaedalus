@@ -5305,6 +5305,31 @@ lane_config() {
         fi
     fi
 
+    log="$dir/config-retired.log" home="$dir/config-retired-home" probe_control="$dir/config-retired-control.log"
+    fresh_home "$home-control"
+    run "$probe_control" "$home-control" "$icd" "$VALIDATION" 0 1 -- two-swapchain-probe "$CONFIG_FRAMES" retire
+    if [ "$(cat "$probe_control.rc")" = 77 ]; then
+        record SKIP "a resize rebuilds only the swapchain that waits" "$(tail -1 "$probe_control.stdout")"
+    elif ! why=$(exited_cleanly "$probe_control"); then
+        record FAIL "a resize rebuilds only the swapchain that waits" "the probe fails without the layer: $why $(tail -1 "$probe_control")"
+    else
+        fresh_home "$home" cas
+        run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- two-swapchain-probe "$CONFIG_FRAMES" retire
+        rebuilds=$(awk '/debounced resize reload/ { if (on) print n; on = 1; n = 0; next } on && /reloading [0-9]+ effects/ { n++ } on && /present cycle/ { print n; on = 0 } END { if (on) print n }' "$log" | paste -sd ' ' -)
+        rebuilt_while_retired=$(awk '/two-swapchain-probe: retired the first swapchain and keeps it/ { on = 1 } on && /debounced resize reload/ { found = 1 } /two-swapchain-probe: destroying the retired swapchain/ { on = 0 } END { print found + 0 }' "$log")
+        if ! why=$(plain_verdict "$log" "$probe_control"); then
+            record FAIL "a resize rebuilds only the swapchain that waits" "$why"
+        elif [ "$(count 'kept alive across a resize$' "$log.stdout")" -ne 1 ]; then
+            record FAIL "a resize rebuilds only the swapchain that waits" "the probe did not finish: $(tail -1 "$log.stdout")"
+        elif [ "$rebuilt_while_retired" != 1 ]; then
+            record FAIL "a resize rebuilds only the swapchain that waits" "no debounced rebuild ran while the retired swapchain was kept, so the case proves nothing"
+        elif ! awk '{ for (i = 1; i <= NF; i++) { seen++; if ($i != 1) bad = 1 } } END { exit (seen == 0 || bad) }' <<<"$rebuilds"; then
+            record FAIL "a resize rebuilds only the swapchain that waits" "the debounced rebuilds rebuilt ${rebuilds:-no} swapchain(s) each, want 1 each: only the one made last, never the other or the retired one"
+        else
+            record PASS "a resize rebuilds only the swapchain that waits" "two swapchains on one device, the first then retired by a new one and kept alive for 0.8 s: each debounced rebuild rebuilt only the swapchain made last, never the other or the retired one, validation clean"
+        fi
+    fi
+
     for mode in formats compute-only; do
         log="$dir/config-swapchain-$mode.log" home="$dir/config-swapchain-$mode-home" probe_control="$dir/config-swapchain-$mode-control.log"
         fresh_home "$home"
