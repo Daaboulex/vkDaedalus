@@ -711,6 +711,13 @@ static void overlayFacts(const fs::path& dir)
            "folding the sets back keeps the set MAKO runs now, the profile's own when the power source is unknown");
     expect(makoProfileWithPowerSets(tuned, true, MakoPowerSource::Docked) == tuned && makoProfileWithPowerSets(plain, false, MakoPowerSource::Docked) == plain,
            "a profile already as asked is left as it is");
+    const MakoProfile off = makoProfileSwitched(tuned, MakoPowerSource::Docked, &MakoSettings::frameGenerationEnabled, false);
+    expect(!off.power->docked.frameGenerationEnabled && off.power->handheld.frameGenerationEnabled && off.settings.frameGenerationEnabled,
+           "the frame generation key and switch act on the set MAKO runs now, plugged in here, whichever tab the card edits");
+    expect(!makoProfileSwitched(tuned, MakoPowerSource::Unknown, &MakoSettings::scalingEnabled, true).power->handheld.scalingEnabled
+               && makoProfileSwitched(tuned, MakoPowerSource::Unknown, &MakoSettings::scalingEnabled, true).settings.scalingEnabled
+               && makoProfileSwitched(plain, MakoPowerSource::Handheld, &MakoSettings::scalingEnabled, true).settings.scalingEnabled,
+           "the profile's own values while the power source is unknown or the profile has no power sets");
 
     MakoGpu game{"AMD Radeon RX 9070 XT", 0x1002, 0x7550, PciAddress{0, 3, 0, 0}};
     expect(!makoGpuNamesAnother("AMD Radeon RX 9070 XT", game) && !makoGpuNamesAnother("0x1002:0x7550", game) && !makoGpuNamesAnother("3:0.0", game),

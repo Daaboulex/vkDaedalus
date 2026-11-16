@@ -207,7 +207,7 @@ namespace vkBasalt
             const MakoProfile* inUse = makoProfileInUse();
             if (!inUse)
                 return fg;
-            const MakoSettings& set = makoSettingsFor(*inUse, makoEditedSet(*inUse));
+            const MakoSettings& set = makoSettingsFor(*inUse, powerSupplies.source);
             fg.on                   = set.frameGenerationEnabled;
             fg.live                 = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).frameGenerationProvisioned;
             fg.unavailable          = makoModelMissing(set.frameGenerationModel);
@@ -316,7 +316,7 @@ namespace vkBasalt
             const FrameGenerationState after = frameGenerationState();
             shortNoticeProblem               = !makoProblem.empty();
             const MakoProfile* inUse         = makoProfileInUse();
-            const MakoSettings* set          = inUse ? &makoSettingsFor(*inUse, makoEditedSet(*inUse)) : nullptr;
+            const MakoSettings* set          = inUse ? &makoSettingsFor(*inUse, powerSupplies.source) : nullptr;
             if (shortNoticeProblem)
                 shortNoticeLine = "not changed: " + makoProblem;
             else if (after.on && set)
@@ -458,7 +458,7 @@ namespace vkBasalt
 
         const FrameGenerationProfile* inUse     = !mako && blocker.empty() ? frameGenerationProfileInUse() : nullptr;
         const MakoProfile*            makoInUse = mako && blocker.empty() ? makoProfileInUse() : nullptr;
-        const MakoSettings*           makoSet   = makoInUse ? &makoSettingsFor(*makoInUse, makoEditedSet(*makoInUse)) : nullptr;
+        const MakoSettings*           makoSet   = makoInUse ? &makoSettingsFor(*makoInUse, powerSupplies.source) : nullptr;
         const std::string             amount    = makoSet ? (makoSet->adaptive ? std::string("Adaptive") : std::to_string(makoSet->multiplier) + "x")
                                                           : std::to_string(inUse ? inUse->multiplier : lowestOnMultiplier) + "x";
 

@@ -547,6 +547,13 @@ namespace vkBasalt
         return supplies;
     }
 
+    MakoProfile makoProfileSwitched(MakoProfile profile, MakoPowerSource runningNow, bool MakoSettings::*setting, bool on)
+    {
+        const MakoSettings& running = makoSettingsFor(profile, runningNow);
+        const_cast<MakoSettings&>(running).*setting = on;
+        return profile;
+    }
+
     MakoProfile makoProfileWithPowerSets(MakoProfile profile, bool separate, MakoPowerSource runningNow)
     {
         if (separate && !profile.power)

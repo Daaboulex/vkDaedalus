@@ -69,7 +69,8 @@ mains, USB or wireless supply is online, on battery when a battery is there and 
 values until it can tell. A dock alone changes nothing, and a laptop is on battery when unplugged. The card names
 the sets by that, edits the set MAKO uses now unless another tab is picked, and shows the tabs on a machine with a
 battery or for a profile that already holds both sets. "Separate settings on battery" makes both sets from the
-profile's values, since MAKO needs both, and removing it folds them back.
+profile's values, since MAKO needs both, and removing it folds them back. The On switches, the `Insert` key, the tiles
+and the notices always act on and show the set MAKO uses now; a tab picks only what the card's settings edit.
 
 ## Scaling
 

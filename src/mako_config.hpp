@@ -167,6 +167,7 @@ namespace vkBasalt
     const MakoSettings&     makoSettingsFor(const MakoProfile& profile, MakoPowerSource source);
     PowerSupplies           readPowerSupplies(const std::filesystem::path& root);
     MakoProfile             makoProfileWithPowerSets(MakoProfile profile, bool separate, MakoPowerSource runningNow);
+    MakoProfile             makoProfileSwitched(MakoProfile profile, MakoPowerSource runningNow, bool MakoSettings::*setting, bool on);
     bool                    makoGpuNamesAnother(const std::string& gpu, const MakoGpu& game);
 
     std::optional<std::string>

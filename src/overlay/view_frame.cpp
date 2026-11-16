@@ -230,7 +230,7 @@ namespace vkBasalt
         const bool         mako      = fg.layer == FrameGenerationLayer::Mako;
         const std::string  layerName = mako ? "MAKO" : "lsfg-vk";
         const MakoProfile* makoInUse = mako && fg.blocker.empty() ? makoProfileInUse() : nullptr;
-        const MakoSettings* makoSet  = makoInUse ? &makoSettingsFor(*makoInUse, makoEditedSet(*makoInUse)) : nullptr;
+        const MakoSettings* makoSet  = makoInUse ? &makoSettingsFor(*makoInUse, powerSupplies.source) : nullptr;
         std::string        fgLine    = "Off";
         std::string        fgTip     = fg.blocker;
         ImVec4             fgInk     = palette.muted;

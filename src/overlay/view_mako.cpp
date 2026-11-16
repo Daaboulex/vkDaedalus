@@ -262,17 +262,13 @@ namespace vkBasalt
             makoDll = makoDllStatus(makoFile->global);
         const MakoProfile*        inUse = makoProfileInUse();
         std::optional<MakoGlobal> global;
-        if (on && inUse && needsLosslessDll(makoSettingsFor(*inUse, makoEditedSet(*inUse))) && !makoDll->found && makoDll->inSteamLibrary)
+        if (on && inUse && needsLosslessDll(makoSettingsFor(*inUse, powerSupplies.source)) && !makoDll->found && makoDll->inSteamLibrary)
         {
             global      = makoFile->global;
             global->dll = *makoDll->inSteamLibrary;
         }
         if (inUse)
-        {
-            MakoProfile changed                                        = *inUse;
-            settingsOf(changed, makoEditedSet(changed)).frameGenerationEnabled = on;
-            saveMako(global, changed);
-        }
+            saveMako(global, makoProfileSwitched(*inUse, powerSupplies.source, &MakoSettings::frameGenerationEnabled, on));
         else if (on)
         {
             std::vector<std::string> games = ConfigSerializer::profileUsers()[activeProfileName];
@@ -677,10 +673,11 @@ namespace vkBasalt
         MakoProfile        tuned        = inUse ? (makoDraft ? *makoDraft : *inUse) : MakoProfile{};
         const MakoPowerSource edited    = makoEditedSet(tuned);
         MakoSettings&         set       = settingsOf(tuned, edited);
-        bool                  on        = inUse && set.scalingEnabled;
+        const MakoSettings&   running   = makoSettingsFor(tuned, powerSupplies.source);
+        bool                  on        = inUse && running.scalingEnabled;
         const bool            startedOn = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).scalingEnabled;
         const bool            pending   = inUse && makoSettingsFor(*inUse, powerSupplies.source).scalingEnabled != makoSettingsAtStart().scalingEnabled;
-        const std::string     amount    = shownChoice(makoScalingMethods, set.scalingMethod) + " " + factorText(set.scalingFactor);
+        const std::string     amount    = shownChoice(makoScalingMethods, running.scalingMethod) + " " + factorText(running.scalingFactor);
 
         ui::heading("Scaling");
         if (inUse)
@@ -720,16 +717,13 @@ namespace vkBasalt
             if (!makoDll)
                 makoDll = makoDllStatus(makoFile->global);
             std::optional<MakoGlobal> global;
-            if (on && needsLosslessDll(set) && !makoDll->found && makoDll->inSteamLibrary)
+            if (on && needsLosslessDll(running) && !makoDll->found && makoDll->inSteamLibrary)
             {
                 global      = makoFile->global;
                 global->dll = *makoDll->inSteamLibrary;
             }
             if (inUse)
-            {
-                set.scalingEnabled = on;
-                saveMako(global, tuned);
-            }
+                saveMako(global, makoProfileSwitched(tuned, powerSupplies.source, &MakoSettings::scalingEnabled, on));
             else if (on)
             {
                 std::vector<std::string> games = ConfigSerializer::profileUsers()[activeProfileName];
