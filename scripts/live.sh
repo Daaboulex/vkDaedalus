@@ -3388,6 +3388,11 @@ write_mako_stand_in() {
     printf '%s\n' '{ "file_format_version": "1.1.0", "layer": { "name": "VK_LAYER_MAKO_render", "description": "a MAKO the loader lists and never loads", "implementation_version": "5", "library_path": "libmako-render-stand-in.so", "type": "GLOBAL", "api_version": "1.4.350", "disable_environment": { "VKDAEDALUS_LIVE_MAKO_STAND_IN": "1" } } }' >"$1/.local/share/vulkan/implicit_layer.d/VkLayer_MAKO_render.json"
 }
 
+write_lossless_dll() {
+    mkdir -p "$1/.local/share/Steam/steamapps/common/Lossless Scaling"
+    : >"$1/.local/share/Steam/steamapps/common/Lossless Scaling/Lossless.dll"
+}
+
 ui_pick() {
     local map="$1" row="$2" choice="$3" log="$4"
     if [ -n "$(ui_line "$map" "##$row")" ]; then
@@ -3460,10 +3465,15 @@ drive_mako() {
         return 0
     fi
     ui_click "$map" "Frame generation" 1 "$log" || true
-    if ui_wait "$map" "Scaling" "" "" "$log" && ui_wait "$map" "lsfg-vk##Layer" 7 1 "$log" && ui_wait "$map" "MAKO##Layer" 8 1 "$log" && tile_says "$log" '^Frame generation tile: Off; Scaling tile: Off$'; then
-        ui_result "$ui_log" PASS "MAKO alone: a new profile runs MAKO" "with only MAKO installed the profile runs MAKO, the Scaling tile shows, lsfg-vk is greyed in the layer choice and the tiles say: $(tile_line "$log")"
+    if ui_wait "$map" "Scaling" "" "" "$log" && ui_wait "$map" "lsfg-vk##Layer" 7 1 "$log" && ui_wait "$map" "MAKO FG##Layer" 8 1 "$log" && ui_wait "$map" "MAKO LSFG##Layer" 8 0 "$log" && tile_says "$log" '^Frame generation tile: Off; Scaling tile: Off$'; then
+        ui_result "$ui_log" PASS "MAKO alone: a new profile runs MAKO" "with only MAKO installed the profile runs MAKO with MAKO's default model, so MAKO FG is the layer chosen, the Scaling tile shows, lsfg-vk is greyed and the tiles say: $(tile_line "$log")"
     else
-        ui_result "$ui_log" FAIL "MAKO alone: a new profile runs MAKO" "Scaling tile $( [ -n "$(ui_line "$map" Scaling)" ] && echo shown || echo missing), lsfg-vk choice greyed $(ui_field "$map" "lsfg-vk##Layer" 7), MAKO chosen $(ui_field "$map" "MAKO##Layer" 8), tiles: $(tile_line "$log")"
+        ui_result "$ui_log" FAIL "MAKO alone: a new profile runs MAKO" "Scaling tile $( [ -n "$(ui_line "$map" Scaling)" ] && echo shown || echo missing), lsfg-vk choice greyed $(ui_field "$map" "lsfg-vk##Layer" 7), MAKO FG chosen $(ui_field "$map" "MAKO FG##Layer" 8), MAKO LSFG chosen $(ui_field "$map" "MAKO LSFG##Layer" 8), tiles: $(tile_line "$log")"
+    fi
+    if [ -z "$(ui_line "$map" "Lossless Scaling##Model")" ] && [ -z "$(ui_line "$map" "##Model")" ] && [ -z "$(ui_line "$map" "MAKO##Layer")" ]; then
+        ui_result "$ui_log" PASS "the layer is asked once" "the card has the one Layer choice of lsfg-vk, MAKO LSFG and MAKO FG, and no Model row"
+    else
+        ui_result "$ui_log" FAIL "the layer is asked once" "the card still draws a Model row or a MAKO tab beside the three layer choices"
     fi
     ui_state "$map" mako-01-only "$ui_log" "MAKO alone installed: the profile runs MAKO, lsfg-vk greyed with its reason, the Scaling tile shown"
     ui_click "$map" "On###frameGeneration" 1 "$log" || true
@@ -3482,7 +3492,7 @@ drive_mako() {
     else
         ui_result "$ui_log" FAIL "MAKO: the GPU row" "MAKO's body has no row naming GPU 1 and the game's GPU: ${gpu_row:-none}"
     fi
-    ui_hover "$map" "Lossless Scaling##Model" "$log" || true
+    ui_hover "$map" "MAKO LSFG##Layer" "$log" || true
     ui_state "$map" mako-02-on "$ui_log" "MAKO switched on: its profile written; MAKO is not loaded in this game, which vkdaedalus-run did not start, so the card says MAKO needs it"
 
     ui_pick "$map" Mode Adaptive "$log" || true
@@ -3553,12 +3563,14 @@ drive_mako() {
         ui_result "$ui_log" FAIL "MAKO: HDR quality only on an HDR swapchain" "vkcube's sRGB swapchain drew the HDR quality row"
     fi
 
-    greyed_says "$map" "Lossless Scaling##Model" 1 "$log" "$ui_log" "MAKO: Lossless Scaling greyed without Lossless.dll" "with no Lossless.dll anywhere the Lossless Scaling model is greyed with the reason"
+    greyed_says "$map" "MAKO LSFG##Layer" 1 "$log" "$ui_log" "MAKO: MAKO LSFG greyed without Lossless.dll" "with no Lossless.dll anywhere MAKO LSFG is greyed with the reason"
     if [ "$(uname -m)" != x86_64 ]; then
-        greyed_says "$map" "MAKO FG##Model" 1 "$log" "$ui_log" "MAKO: MAKO FG greyed off x86-64" "on $(uname -m) the MAKO FG model is greyed: published for x86-64 only"
+        greyed_says "$map" "MAKO FG##Layer" 1 "$log" "$ui_log" "MAKO: MAKO FG greyed off x86-64" "on $(uname -m) MAKO FG is greyed: published for x86-64 only"
+    else
+        greyed_says "$map" "MAKO FG##Layer" 0 "$log" "$ui_log" "MAKO: MAKO FG needs no DLL" "with no Lossless.dll anywhere MAKO FG can still be chosen"
     fi
-    ui_hover "$map" "Lossless Scaling##Model" "$log" || true
-    ui_state "$map" mako-05-no-lossless "$ui_log" "no Lossless.dll: the Lossless Scaling model greyed with the reason; off x86-64 MAKO FG greyed too"
+    ui_hover "$map" "MAKO LSFG##Layer" "$log" || true
+    ui_state "$map" mako-05-no-lossless "$ui_log" "no Lossless.dll: MAKO LSFG greyed with the reason; off x86-64 MAKO FG greyed too"
     library="$home/games/steamapps/common/Lossless Scaling"
     mkdir -p "$library" "$home/.local/share/Steam/steamapps"
     : >"$library/Lossless.dll"
@@ -3573,9 +3585,15 @@ drive_mako() {
     else
         ui_result "$ui_log" FAIL "MAKO: Lossless.dll in a Steam library" "Look again never offered Set for $library/Lossless.dll"
     fi
-    ui_pick "$map" Model "Lossless Scaling" "$log" || true
-    mako_says "$config" '^frame_generation_model = "lossless-scaling"$' "$ui_log" "MAKO: Model" "Lossless Scaling picked once Lossless.dll is set"
-    restart_mark_says "$map" "Model" 1 "$log" "$ui_log" "MAKO: Model waits for the next start" "Lossless Scaling picked"
+    restart_mark_says "$map" "Layer" 0 "$log" "$ui_log" "the layer choice: nothing waits at first" "MAKO FG, the choice this profile started with"
+    ui_click "$map" "MAKO LSFG##Layer" 1 "$log" || true
+    mako_says "$config" '^frame_generation_model = "lossless-scaling"$' "$ui_log" "the layer choice: MAKO LSFG writes MAKO's model" "MAKO LSFG picked once Lossless.dll is set"
+    if file_says "$home/.config/vkdaedalus/profiles/default.conf" '^frameGenerationLayer = mako$' && ui_wait "$map" "MAKO LSFG##Layer" 8 1 "$log" && ui_wait "$map" "MAKO FG##Layer" 8 0 "$log"; then
+        ui_result "$ui_log" PASS "the layer choice: MAKO LSFG writes the profile's layer" "MAKO LSFG picked saved frameGenerationLayer = mako in default and is the one chosen"
+    else
+        ui_result "$ui_log" FAIL "the layer choice: MAKO LSFG writes the profile's layer" "MAKO LSFG picked left $(grep '^frameGenerationLayer' "$home/.config/vkdaedalus/profiles/default.conf" || echo 'no frameGenerationLayer') in default, MAKO LSFG chosen $(ui_field "$map" "MAKO LSFG##Layer" 8), MAKO FG chosen $(ui_field "$map" "MAKO FG##Layer" 8)"
+    fi
+    restart_mark_says "$map" "Layer" 1 "$log" "$ui_log" "the layer choice waits for the next start" "MAKO LSFG picked"
     greyed_says "$map" "Performance mode" 0 "$log" "$ui_log" "MAKO: the model frees Performance mode" "with the Lossless Scaling model Performance mode can be ticked"
     ui_click "$map" "Performance mode" 1 "$log" || true
     mako_says "$config" '^performance_mode = true$' "$ui_log" "MAKO: Performance mode" "ticked"
@@ -3715,7 +3733,7 @@ drive_mako() {
 }
 
 drive_layer_state() {
-    local log="$1" map="$2" state="$3" home="$4" ui_log="$1.ui" window gpu_row profile="$4/.config/vkdaedalus/profiles/default.conf"
+    local log="$1" map="$2" state="$3" home="$4" ui_log="$1.ui" window gpu_row model profile="$4/.config/vkdaedalus/profiles/default.conf"
     : >"$ui_log"
     if ! wait_for_line 'present cycle' 30 "$log"; then
         ui_result "$ui_log" FAIL "frame generation, $state" "the game never reached 30 presents"
@@ -3730,49 +3748,68 @@ drive_layer_state() {
     ui_click "$map" "Frame generation" 1 "$log" || true
     case "$state" in
         neither)
-            if tile_says "$log" '^Frame generation tile: Not installed \(Neither lsfg-vk nor MAKO is installed where this game.s Vulkan loader looks for layers\.\); no Scaling tile$' && [ -z "$(ui_line "$map" "MAKO##Layer")" ]; then
+            if tile_says "$log" '^Frame generation tile: Not installed \(Neither lsfg-vk nor MAKO is installed where this game.s Vulkan loader looks for layers\.\); no Scaling tile$' && [ -z "$(ui_line "$map" "MAKO FG##Layer")" ]; then
                 ui_result "$ui_log" PASS "frame generation, neither layer installed" "no layer choice, no Scaling tile, and the tiles say: $(tile_line "$log")"
             else
-                ui_result "$ui_log" FAIL "frame generation, neither layer installed" "layer choice $( [ -n "$(ui_line "$map" "MAKO##Layer")" ] && echo shown || echo hidden), the tiles say: $(tile_line "$log")"
+                ui_result "$ui_log" FAIL "frame generation, neither layer installed" "layer choice $( [ -n "$(ui_line "$map" "MAKO FG##Layer")" ] && echo shown || echo hidden), the tiles say: $(tile_line "$log")"
             fi
             ui_state "$map" fgl-01-neither "$ui_log" "neither layer installed: one line per layer with where it comes from, no controls"
             ;;
         lsfg-vk)
-            if tile_says "$log" '^Frame generation tile: Unavailable \(lsfg-vk\.dll is in no Steam library\); no Scaling tile$' && ui_wait "$map" "MAKO##Layer" 7 1 "$log" && ui_wait "$map" "lsfg-vk##Layer" 8 1 "$log"; then
-                ui_result "$ui_log" PASS "frame generation, lsfg-vk alone installed" "the profile runs lsfg-vk, MAKO is greyed in the layer choice, no Scaling tile, and without lsfg-vk.dll the tiles say: $(tile_line "$log")"
+            if tile_says "$log" '^Frame generation tile: Unavailable \(lsfg-vk\.dll is in no Steam library\); no Scaling tile$' && ui_wait "$map" "MAKO LSFG##Layer" 7 1 "$log" && ui_wait "$map" "MAKO FG##Layer" 7 1 "$log" && ui_wait "$map" "lsfg-vk##Layer" 8 1 "$log"; then
+                ui_result "$ui_log" PASS "frame generation, lsfg-vk alone installed" "the profile runs lsfg-vk, both MAKO choices are greyed, no Scaling tile, and without lsfg-vk.dll the tiles say: $(tile_line "$log")"
             else
-                ui_result "$ui_log" FAIL "frame generation, lsfg-vk alone installed" "MAKO choice greyed $(ui_field "$map" "MAKO##Layer" 7), lsfg-vk chosen $(ui_field "$map" "lsfg-vk##Layer" 8), the tiles say: $(tile_line "$log")"
+                ui_result "$ui_log" FAIL "frame generation, lsfg-vk alone installed" "MAKO LSFG greyed $(ui_field "$map" "MAKO LSFG##Layer" 7), MAKO FG greyed $(ui_field "$map" "MAKO FG##Layer" 7), lsfg-vk chosen $(ui_field "$map" "lsfg-vk##Layer" 8), the tiles say: $(tile_line "$log")"
             fi
-            ui_state "$map" fgl-02-lsfg-vk-only "$ui_log" "lsfg-vk alone installed, its DLL missing: MAKO greyed, lsfg-vk.dll not found, no Scaling tile"
+            greyed_says "$map" "lsfg-vk##Layer" 1 "$log" "$ui_log" "the layer choice: lsfg-vk greyed without lsfg-vk.dll" "with lsfg-vk.dll in no Steam library lsfg-vk is greyed with the reason, and stays the one chosen"
+            ui_hover "$map" "lsfg-vk##Layer" "$log" || true
+            ui_state "$map" fgl-02-lsfg-vk-only "$ui_log" "lsfg-vk alone installed, its DLL missing: every layer choice greyed with its own reason, lsfg-vk.dll not found, no Scaling tile"
             ;;
         both)
-            if tile_says "$log" '; no Scaling tile$' && ui_wait "$map" "lsfg-vk##Layer" 8 1 "$log" && ui_wait "$map" "MAKO##Layer" 7 0 "$log"; then
-                ui_result "$ui_log" PASS "frame generation, both installed" "a profile with no choice runs lsfg-vk, MAKO can be chosen, no Scaling tile"
+            if tile_says "$log" '; no Scaling tile$' && ui_wait "$map" "lsfg-vk##Layer" 8 1 "$log" && ui_wait "$map" "lsfg-vk##Layer" 7 0 "$log" && ui_wait "$map" "MAKO LSFG##Layer" 7 0 "$log"; then
+                ui_result "$ui_log" PASS "frame generation, both installed" "a profile with no choice runs lsfg-vk, and with both DLLs found lsfg-vk and MAKO LSFG can be chosen, no Scaling tile"
             else
-                ui_result "$ui_log" FAIL "frame generation, both installed" "lsfg-vk chosen $(ui_field "$map" "lsfg-vk##Layer" 8), MAKO greyed $(ui_field "$map" "MAKO##Layer" 7), the tiles say: $(tile_line "$log")"
+                ui_result "$ui_log" FAIL "frame generation, both installed" "lsfg-vk chosen $(ui_field "$map" "lsfg-vk##Layer" 8), lsfg-vk greyed $(ui_field "$map" "lsfg-vk##Layer" 7), MAKO LSFG greyed $(ui_field "$map" "MAKO LSFG##Layer" 7), the tiles say: $(tile_line "$log")"
             fi
             if gpu_row=$(ui_label_starting "$map" "GPU 1, " "$log") && [ "${#gpu_row}" -gt 7 ]; then
                 ui_result "$ui_log" PASS "lsfg-vk: the GPU row" "lsfg-vk's body starts with the GPU it generates frames on: $gpu_row"
             else
                 ui_result "$ui_log" FAIL "lsfg-vk: the GPU row" "lsfg-vk's body has no row naming GPU 1 and the game's GPU: ${gpu_row:-none}"
             fi
-            ui_state "$map" fgl-03-both-lsfg-vk "$ui_log" "both installed: a new profile runs lsfg-vk, MAKO a click away"
-            ui_click "$map" "MAKO##Layer" 1 "$log" || true
-            if file_says "$profile" '^frameGenerationLayer = mako$' && tile_says "$log" '; Scaling tile: Off$'; then
-                ui_result "$ui_log" PASS "frame generation, the layer choice" "MAKO picked saved frameGenerationLayer = mako in default and brought the Scaling tile"
+            ui_state "$map" fgl-03-both-lsfg-vk "$ui_log" "both installed: a new profile runs lsfg-vk, the MAKO choices a click away"
+            ui_click "$map" "MAKO LSFG##Layer" 1 "$log" || true
+            if file_says "$profile" '^frameGenerationLayer = mako$' && file_says "$home/mako.toml" '^frame_generation_model = "lossless-scaling"$' && tile_says "$log" '; Scaling tile: Off$' && ui_wait "$map" "MAKO LSFG##Layer" 8 1 "$log"; then
+                ui_result "$ui_log" PASS "the layer choice: MAKO LSFG" "MAKO LSFG picked saved frameGenerationLayer = mako in default and frame_generation_model = \"lossless-scaling\" in MAKO's profile, and brought the Scaling tile"
             else
-                ui_result "$ui_log" FAIL "frame generation, the layer choice" "MAKO picked left $(grep '^frameGenerationLayer' "$profile" || echo 'no frameGenerationLayer') in default, the tiles say: $(tile_line "$log")"
+                ui_result "$ui_log" FAIL "the layer choice: MAKO LSFG" "MAKO LSFG picked left $(grep '^frameGenerationLayer' "$profile" || echo 'no frameGenerationLayer') in default and $(grep '^frame_generation_model' "$home/mako.toml" || echo 'no frame_generation_model') in MAKO's file, the tiles say: $(tile_line "$log")"
             fi
-            ui_state "$map" fgl-04-both-mako "$ui_log" "both installed, MAKO picked: MAKO's groups and the Scaling tile"
-            ui_click "$map" "lsfg-vk##Layer" 1 "$log" || true
-            if file_says "$profile" '^frameGenerationLayer = lsfg-vk$' && tile_says "$log" '; no Scaling tile$'; then
-                ui_result "$ui_log" PASS "frame generation, the layer choice back" "lsfg-vk picked saved frameGenerationLayer = lsfg-vk and took the Scaling tile away"
+            if [ "$(count '^frame_generation_enabled = false$' "$home/mako.toml")" -eq 1 ]; then
+                ui_result "$ui_log" PASS "the layer choice switches nothing on" "the MAKO profile MAKO LSFG made keeps frame generation off"
             else
-                ui_result "$ui_log" FAIL "frame generation, the layer choice back" "lsfg-vk picked left $(grep '^frameGenerationLayer' "$profile" || echo 'no frameGenerationLayer'), the tiles say: $(tile_line "$log")"
+                ui_result "$ui_log" FAIL "the layer choice switches nothing on" "the MAKO profile MAKO LSFG made holds: $(tr '\n' ' ' <"$home/mako.toml")"
+            fi
+            ui_state "$map" fgl-04-both-mako "$ui_log" "both installed, MAKO LSFG picked: MAKO's groups and the Scaling tile"
+            if [ "$(uname -m)" = x86_64 ]; then
+                ui_click "$map" "MAKO FG##Layer" 1 "$log" || true
+                if file_says "$home/mako.toml" '^frame_generation_model = "mako-fg"$' && file_says "$profile" '^frameGenerationLayer = mako$' && ui_wait "$map" "MAKO FG##Layer" 8 1 "$log"; then
+                    ui_result "$ui_log" PASS "the layer choice: MAKO FG" "MAKO FG picked saved frame_generation_model = \"mako-fg\" in MAKO's profile and kept frameGenerationLayer = mako"
+                else
+                    ui_result "$ui_log" FAIL "the layer choice: MAKO FG" "MAKO FG picked left $(grep '^frame_generation_model' "$home/mako.toml" || echo 'no frame_generation_model') in MAKO's file and $(grep '^frameGenerationLayer' "$profile" || echo 'no frameGenerationLayer') in default"
+                fi
+                model=mako-fg
+            else
+                greyed_says "$map" "MAKO FG##Layer" 1 "$log" "$ui_log" "the layer choice: MAKO FG" "on $(uname -m) MAKO FG is greyed: published for x86-64 only"
+                model=lossless-scaling
+            fi
+            ui_click "$map" "lsfg-vk##Layer" 1 "$log" || true
+            if file_says "$profile" '^frameGenerationLayer = lsfg-vk$' && tile_says "$log" '; no Scaling tile$' && [ "$(count "^frame_generation_model = \"$model\"\$" "$home/mako.toml")" -eq 1 ]; then
+                ui_result "$ui_log" PASS "the layer choice: lsfg-vk" "lsfg-vk picked saved frameGenerationLayer = lsfg-vk, took the Scaling tile away and left MAKO's model at $model"
+            else
+                ui_result "$ui_log" FAIL "the layer choice: lsfg-vk" "lsfg-vk picked left $(grep '^frameGenerationLayer' "$profile" || echo 'no frameGenerationLayer') and $(grep '^frame_generation_model' "$home/mako.toml" || echo 'no frame_generation_model'), the tiles say: $(tile_line "$log")"
             fi
             ;;
         switched)
-            ui_click "$map" "MAKO##Layer" 1 "$log" || true
+            ui_click "$map" "MAKO LSFG##Layer" 1 "$log" || true
             ui_click "$map" "On###frameGeneration" 1 "$log" || true
             if tile_says "$log" '^Frame generation tile: MAKO, (next launch|needs a model .*); Scaling tile: Off$' && file_says "$profile" '^frameGenerationLayer = mako$'; then
                 ui_result "$ui_log" PASS "frame generation, the layer switched in the run" "vkdaedalus-run kept MAKO out for lsfg-vk with DISABLE_MAKO; MAKO picked and switched on is no blocker and the tiles say: $(tile_line "$log")"
@@ -3816,7 +3853,7 @@ drive_tile_row() {
     ui_wait "$map" "lsfg-vk##Layer" 8 1 "$log" || true
     DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove --window "$window" 1 1 || true
     ui_state "$map" "row-$tag-1-three" "$ui_log" "$display, three section tiles: the Frame generation card running lsfg-vk"
-    ui_click "$map" "MAKO##Layer" 1 "$log" || true
+    ui_click "$map" "MAKO LSFG##Layer" 1 "$log" || true
     if ! ui_wait "$map" "Scaling" "" "" "$log"; then
         ui_result "$ui_log" FAIL "the tile row at $display" "MAKO picked never brought the Scaling tile"
         return 0
@@ -3862,10 +3899,16 @@ lane_ui_layers() {
         local -a extra=()
         case "$state" in
             lsfg-vk) write_lsfg_stand_in "$home" ;;
-            both) write_lsfg_stand_in "$home" && write_mako_stand_in "$home" ;;
+            both)
+                write_lsfg_stand_in "$home"
+                write_mako_stand_in "$home"
+                write_lossless_dll "$home"
+                : >"$home/lsfg-vk.dll"
+                ;;
             switched)
                 write_lsfg_stand_in "$home"
                 write_mako_stand_in "$home"
+                write_lossless_dll "$home"
                 extra=("$VKB_LAYER/bin/vkdaedalus-run")
                 ;;
             disabled)
@@ -3900,6 +3943,7 @@ lane_ui_layers() {
         printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
         write_lsfg_stand_in "$home"
         write_mako_stand_in "$home"
+        write_lossless_dll "$home"
         background drive_tile_row "$log" "$map" "$tag" "$display"
         driver=$!
         run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" MAKO_CONFIG="$home/mako.toml" LSFGVK_CONFIG="$home/lsfg-vk.toml" \

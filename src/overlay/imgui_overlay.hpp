@@ -227,7 +227,10 @@ namespace vkBasalt
         FrameGenerationLayer profileFrameGenerationLayer();
         bool                 frameGenerationLayerInstalled(FrameGenerationLayer layer) const;
         void                 renderFrameGenerationView();
-        void                 renderLayerChoice(FrameGenerationLayer layer);
+        void                 renderLayerChoice(const FrameGenerationTab* chosen, bool waits);
+        const FrameGenerationTab* frameGenerationTabChosen(FrameGenerationLayer layer);
+        std::string          frameGenerationTabGreyed(const FrameGenerationTab& tab);
+        void                 chooseFrameGenerationTab(const FrameGenerationTab& tab);
         void                 renderFrameGenerationGpuRow(FrameGenerationLayer layer);
         void                 renderLsfgBody(bool flipped, bool on, bool live, const std::vector<std::string>& waiting);
         void                 renderFrameOrderNote();

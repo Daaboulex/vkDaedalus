@@ -7,10 +7,19 @@ MAKO), found by the layer's own rules.
 
 ## Pick the layer
 
-Each vkDaedalus profile runs one of the two. `vkdaedalus-run` loads that one alone and keeps the other out of the
-game, so a change of layer applies from the next launch. A profile that names no layer runs lsfg-vk when both are
-installed and the one installed when only one is, so nothing changes for anyone until they pick MAKO: launch options
-that set `ENABLE_MAKO=1` without `DISABLE_MAKO` keep getting MAKO. A layer the profile names always wins.
+The card's Layer choice has three entries, and each vkDaedalus profile runs one of them:
+
+- lsfg-vk, which needs `lsfg-vk.dll`.
+- MAKO LSFG, which is MAKO running Lossless Scaling's model and needs `Lossless.dll`.
+- MAKO FG, which is MAKO running its own model and needs no DLL.
+
+An entry whose layer, DLL or model is missing is greyed with that reason. The layer is kept in the vkDaedalus profile
+and MAKO's model in MAKO's profile. `vkdaedalus-run` loads the profile's layer alone and keeps the other out of the
+game, and MAKO picks its model when the game starts, so every change of the choice applies from the next launch.
+
+A profile that names no layer runs lsfg-vk when both are installed and the one installed when only one is, so nothing
+changes for anyone until they pick MAKO: launch options that set `ENABLE_MAKO=1` without `DISABLE_MAKO` keep getting
+MAKO. A layer the profile names always wins.
 
 ## Turn it on
 
@@ -26,8 +35,7 @@ they run on, frame generation, MAKO's scaling and the display.
 
 `vkdaedalus-run` finds `lsfg-vk.dll` and `Lossless.dll` in every Steam library that `libraryfolders.vdf` lists and
 writes the one it finds into the layer's file. No game gets lsfg-vk switched on while `lsfg-vk.dll` is missing, since
-lsfg-vk would then fail the game's swapchain. MAKO needs `Lossless.dll` only for its Lossless Scaling model and the LS1
-scaling methods; its own model, MAKO FG, needs none.
+lsfg-vk would then fail the game's swapchain. MAKO needs `Lossless.dll` only for MAKO LSFG and the LS1 scaling methods.
 
 The card's Live, Output and Next launch groups belong to the vkDaedalus profile the game runs; its lsfg-vk or MAKO
 group is the layer's own and the same for every game.
@@ -37,7 +45,7 @@ group is the layer's own and the same for every game.
 | Layer | Changes live | Changes when the game rebuilds its swapchain | Changes at the next launch |
 |---|---|---|---|
 | lsfg-vk | multiplier, flow scale, performance mode, colour space, transfer function | | vsync, the swapchain image count, half precision, the DLL path, a profile switch |
-| MAKO | On, the multiplier, Adaptive and its target, flow scale, MAKO FG mode, performance mode, the pacing group, HDR quality, gamescope VRR, the scaling method and sharpness, a profile switch | the scaling factor, supersampling | Ready at start, the model, Ultra performance, Scaling on, Keep swapchain image count, Mailbox compatibility, half precision, `Lossless.dll` |
+| MAKO | On, the multiplier, Adaptive and its target, flow scale, MAKO FG mode, performance mode, the pacing group, HDR quality, gamescope VRR, the scaling method and sharpness, a profile switch | the scaling factor, supersampling | Ready at start, the choice between MAKO LSFG and MAKO FG, Ultra performance, Scaling on, Keep swapchain image count, Mailbox compatibility, half precision, `Lossless.dll` |
 
 lsfg-vk reads a live change and has the game rebuild its swapchain. Off sets the multiplier to 1, which passes frames
 through, so switching on again needs no new launch. MAKO looks at its file four times a second, applies a live

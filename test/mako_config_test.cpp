@@ -1,5 +1,6 @@
 #include "mako_config.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -718,6 +719,41 @@ static void overlayFacts(const fs::path& dir)
                && makoProfileSwitched(tuned, MakoPowerSource::Unknown, &MakoSettings::scalingEnabled, true).settings.scalingEnabled
                && makoProfileSwitched(plain, MakoPowerSource::Handheld, &MakoSettings::scalingEnabled, true).settings.scalingEnabled,
            "the profile's own values while the power source is unknown or the profile has no power sets");
+
+    expect(frameGenerationTabs.size() == 3 && frameGenerationTabs[0].shown == "lsfg-vk" && frameGenerationTabs[1].shown == "MAKO LSFG"
+               && frameGenerationTabs[2].shown == "MAKO FG",
+           "the card's layer choice is lsfg-vk, MAKO LSFG and MAKO FG, in that order");
+    expect(frameGenerationTabs[0].layer == FrameGenerationLayer::LsfgVk && frameGenerationTabs[0].makoModel.empty()
+               && frameGenerationTabs[1].layer == FrameGenerationLayer::Mako && frameGenerationTabs[1].makoModel == "lossless-scaling"
+               && frameGenerationTabs[2].layer == FrameGenerationLayer::Mako && frameGenerationTabs[2].makoModel == "mako-fg",
+           "lsfg-vk writes the profile's layer alone, and each MAKO choice writes the layer mako with its frame_generation_model");
+    for (const FrameGenerationTab& tab : frameGenerationTabs)
+        if (tab.layer == FrameGenerationLayer::Mako)
+            expect(std::any_of(makoFrameGenerationModels.begin(), makoFrameGenerationModels.end(),
+                               [&](const FrameGenerationChoice& model) { return model.name == tab.makoModel; }),
+                   "the model " + std::string(tab.makoModel) + " a MAKO choice writes is one MAKO's file takes");
+    expect(&frameGenerationTabOf(FrameGenerationLayer::LsfgVk, "lossless-scaling") == &frameGenerationTabs[0]
+               && &frameGenerationTabOf(FrameGenerationLayer::Mako, "lossless-scaling") == &frameGenerationTabs[1]
+               && &frameGenerationTabOf(FrameGenerationLayer::Mako, "mako-fg") == &frameGenerationTabs[2],
+           "a profile shows the choice its layer and MAKO's model name, and MAKO's model counts for nothing while it runs lsfg-vk");
+    const MakoProfile lossless = makoProfileWithModel(tuned, MakoPowerSource::Handheld, "lossless-scaling");
+    expect(lossless.power->handheld.frameGenerationModel == "lossless-scaling" && lossless.power->docked.frameGenerationModel == "mako-fg"
+               && lossless.settings.frameGenerationModel == "mako-fg",
+           "a MAKO choice writes its model into the power set the card edits and leaves the others");
+    expect(makoProfileWithModel(plain, MakoPowerSource::Handheld, "lossless-scaling").settings.frameGenerationModel == "lossless-scaling"
+               && makoProfileWithModel(tuned, MakoPowerSource::Unknown, "lossless-scaling").settings.frameGenerationModel == "lossless-scaling",
+           "and into the profile's own values when it has no power sets or the card edits those");
+    expect(frameGenerationTabWaits(frameGenerationTabs[1], FrameGenerationLayer::LsfgVk, "lossless-scaling")
+               && frameGenerationTabWaits(frameGenerationTabs[0], FrameGenerationLayer::Mako, "mako-fg"),
+           "a choice of the layer that is not loaded waits for the next launch");
+    expect(frameGenerationTabWaits(frameGenerationTabs[1], FrameGenerationLayer::Mako, "mako-fg")
+               && frameGenerationTabWaits(frameGenerationTabs[2], FrameGenerationLayer::Mako, "lossless-scaling"),
+           "and so does a choice of the model MAKO did not start with");
+    expect(!frameGenerationTabWaits(frameGenerationTabs[1], FrameGenerationLayer::Mako, "lossless-scaling")
+               && !frameGenerationTabWaits(frameGenerationTabs[2], FrameGenerationLayer::Mako, "mako-fg")
+               && !frameGenerationTabWaits(frameGenerationTabs[0], FrameGenerationLayer::LsfgVk, "lossless-scaling")
+               && !frameGenerationTabWaits(frameGenerationTabs[0], std::nullopt, "mako-fg"),
+           "the choice this run started with waits for nothing, whatever MAKO's model is while lsfg-vk runs");
 
     MakoGpu game{"AMD Radeon RX 9070 XT", 0x1002, 0x7550, PciAddress{0, 3, 0, 0}};
     expect(!makoGpuNamesAnother("AMD Radeon RX 9070 XT", game) && !makoGpuNamesAnother("0x1002:0x7550", game) && !makoGpuNamesAnother("3:0.0", game),

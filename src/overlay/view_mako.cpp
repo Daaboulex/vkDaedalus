@@ -233,8 +233,6 @@ namespace vkBasalt
         {
             const MakoSettings& now  = makoSettingsFor(*inUse, powerSupplies.source);
             const MakoSettings  then = makoSettingsAtStart();
-            if (now.frameGenerationModel != then.frameGenerationModel)
-                waiting.push_back("Model");
             if (now.frameGenerationProvisioned != then.frameGenerationProvisioned)
                 waiting.push_back("Ready at start");
             if (now.ultraPerformance != then.ultraPerformance)
@@ -362,7 +360,6 @@ namespace vkBasalt
             ui::noteBox("Ready at start is off, so MAKO sets up no frame generation when the game starts: On works from a launch with it on", palette.warn);
         bool                      changed = false;
         bool                      held    = false;
-        std::optional<MakoGlobal> global;
         const bool                recovery = set.dynamicCadenceRecovery;
         const auto                pending  = [&](const char* label) { return std::find(waiting.begin(), waiting.end(), std::string(label)) != waiting.end(); };
         const auto                slide    = [&](const char* label, const char* id, auto& value, auto lowest, auto highest, const std::string& valueText, const char* tip) {
@@ -441,13 +438,13 @@ namespace vkBasalt
             std::snprintf(text, sizeof(text), "%.2f", set.flowScale);
             slide("Flow scale", "##Flow scale", set.flowScale, MakoLimits::lowestFlowScale, MakoLimits::highestFlowScale, text, "Lower is faster and looks worse");
             ui::panelRow();
-            greyed(set.frameGenerationModel != "mako-fg", "MAKO FG model only", [&] {
+            greyed(set.frameGenerationModel != "mako-fg", "MAKO FG only", [&] {
                 if (pickFrom("MAKO FG mode", makoFgModes, set.makoFgMode, column, none))
                     changed = true;
             });
             ui::panelRow();
             const std::string losslessMissing = makoModelMissing("lossless-scaling");
-            greyed(set.frameGenerationModel != "lossless-scaling" || !losslessMissing.empty(), losslessMissing.empty() ? "Lossless Scaling model only" : losslessMissing.c_str(), [&] {
+            greyed(set.frameGenerationModel != "lossless-scaling" || !losslessMissing.empty(), losslessMissing.empty() ? "MAKO LSFG only" : losslessMissing.c_str(), [&] {
                 changed = ui::checkbox("Performance mode", &set.performanceMode) || changed;
                 ImGui::SetItemTooltip("Much faster, slightly lower quality");
             });
@@ -511,16 +508,6 @@ namespace vkBasalt
             caption("Next launch", "profile", "Saved now and read when a game on this profile starts.");
             ui::beginPanel();
             const float nextColumn = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
-            ui::panelRow();
-            if (pickFrom("Model", makoFrameGenerationModels, set.frameGenerationModel, nextColumn, [&](std::string_view model) { return makoModelMissing(std::string(model)); }))
-            {
-                changed = true;
-                global  = makoGlobalWithDll(set);
-            }
-            restartMarkAtRight("Model", pending("Model"));
-            for (const FrameGenerationChoice& model : makoFrameGenerationModels)
-                if (const std::string why = makoModelMissing(std::string(model.name)); !why.empty())
-                    whyGreyed(std::string(model.shown) + ": " + why);
             flag("Ready at start", set.frameGenerationProvisioned, "MAKO sets up frame generation when the game starts; needed to switch it on while the game runs", true);
             flag("Ultra performance", set.ultraPerformance, "Less GPU and memory use for low-power devices, at some cost in quality", true);
             bool after = effectsAfterFrameGenerationSaved();
@@ -585,7 +572,7 @@ namespace vkBasalt
         else
             makoDraft.reset();
         if (changed)
-            saveMako(global, tuned);
+            saveMako(std::nullopt, tuned);
         if (!makoProblem.empty())
             ui::errorText(("Not changed: " + makoProblem).c_str());
         ui::endScrollArea();

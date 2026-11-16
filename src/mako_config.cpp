@@ -566,6 +566,26 @@ namespace vkBasalt
         return profile;
     }
 
+    const FrameGenerationTab& frameGenerationTabOf(FrameGenerationLayer layer, std::string_view makoModel)
+    {
+        for (const FrameGenerationTab& tab : frameGenerationTabs)
+            if (tab.layer == layer && (layer == FrameGenerationLayer::LsfgVk || tab.makoModel == makoModel))
+                return tab;
+        return frameGenerationTabs.back();
+    }
+
+    MakoProfile makoProfileWithModel(MakoProfile profile, MakoPowerSource edited, std::string_view model)
+    {
+        const MakoSettings& set                             = makoSettingsFor(profile, edited);
+        const_cast<MakoSettings&>(set).frameGenerationModel = std::string(model);
+        return profile;
+    }
+
+    bool frameGenerationTabWaits(const FrameGenerationTab& chosen, std::optional<FrameGenerationLayer> loaded, std::string_view makoModelAtStart)
+    {
+        return layerChangeWaits(loaded, chosen.layer) || (chosen.layer == FrameGenerationLayer::Mako && chosen.makoModel != makoModelAtStart);
+    }
+
     bool makoGpuNamesAnother(const std::string& gpu, const MakoGpu& game)
     {
         const auto idText = [](uint32_t id) {

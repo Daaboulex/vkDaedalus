@@ -495,7 +495,11 @@ namespace vkBasalt
         std::vector<std::string> waiting;
         if (blocker.empty() && effectsAfterFrameGenerationSaved() != thisRunAfter)
             waiting.push_back("Effects after frame generation");
-        if (layerChangeWaits(loadedFrameGenerationLayer(), fg.layer))
+        const FrameGenerationTab* chosen     = frameGenerationTabChosen(fg.layer);
+        const std::string         modelNow   = makoInUse ? makoSet->frameGenerationModel : MakoSettings{}.frameGenerationModel;
+        const bool                layerWaits = frameGenerationTabWaits(frameGenerationTabOf(fg.layer, modelNow), loadedFrameGenerationLayer(),
+                                                                       makoSettingsAtStart().frameGenerationModel);
+        if (layerWaits)
             waiting.push_back("Layer");
         if (mako && blocker.empty())
             for (const std::string& changed : makoWaiting(makoInUse))
@@ -553,12 +557,20 @@ namespace vkBasalt
 
         const bool  neither = !frameGenerationLayerInstalled(FrameGenerationLayer::LsfgVk) && !frameGenerationLayerInstalled(FrameGenerationLayer::Mako);
         const float gap     = ui::px(ui::Size::gap);
-        const float layerW  = ImGui::CalcTextSize("Layer").x + 2.0f * gap + ui::buttonWidth("lsfg-vk", ui::Kind::Quiet) + ui::buttonWidth("MAKO", ui::Kind::Quiet)
-                             + ui::px(restartMarkGap + restartMarkSize) + ui::px(ui::Size::groupGap);
-        ui::alignRight((neither ? 0.0f : layerW) + ui::px(ui::Size::box) + gap + ImGui::CalcTextSize("On").x);
+        float       layerW  = ImGui::CalcTextSize("Layer").x + ui::px(restartMarkGap + restartMarkSize) + ui::px(ui::Size::groupGap);
+        for (const FrameGenerationTab& tab : frameGenerationTabs)
+            layerW += gap + ui::buttonWidth(std::string(tab.shown).c_str(), ui::Kind::Quiet);
+        const float controls = (neither ? 0.0f : layerW) + ui::px(ui::Size::box) + gap + ImGui::CalcTextSize("On").x;
+        ImGui::SameLine();
+        if (ImGui::GetContentRegionAvail().x < controls)
+        {
+            ImGui::NewLine();
+            ImGui::Dummy(ImVec2(0.0f, 0.0f));
+        }
+        ui::alignRight(controls);
         if (!neither)
         {
-            renderLayerChoice(fg.layer);
+            renderLayerChoice(chosen, layerWaits);
             ImGui::SameLine(0.0f, ui::px(ui::Size::groupGap));
         }
         ImGui::BeginDisabled(!blocker.empty());
@@ -606,31 +618,87 @@ namespace vkBasalt
             renderLsfgBody(flipped, on, fg.live, waiting);
     }
 
-    void ImGuiOverlay::renderLayerChoice(FrameGenerationLayer layer)
+    const FrameGenerationTab* ImGuiOverlay::frameGenerationTabChosen(FrameGenerationLayer layer)
     {
-        const OverlayPalette&      palette = activePalette();
-        const std::string          tip     = "The frame generation layer of the vkDaedalus profile " + activeProfileName
-                                + ". Read when a game starts: vkdaedalus-run loads this layer alone and keeps the other out.";
-        ui::label("Layer");
-        ImGui::SetItemTooltip("%s", tip.c_str());
-        for (const auto& [choice, shown] : {std::pair{FrameGenerationLayer::LsfgVk, "lsfg-vk"}, std::pair{FrameGenerationLayer::Mako, "MAKO"}})
+        if (layer == FrameGenerationLayer::LsfgVk)
+            return &frameGenerationTabOf(layer, "");
+        if (!readMakoOnce())
+            return nullptr;
+        const MakoProfile* inUse = makoProfileInUse();
+        return &frameGenerationTabOf(layer, inUse ? makoSettingsFor(*inUse, makoEditedSet(*inUse)).frameGenerationModel : MakoSettings{}.frameGenerationModel);
+    }
+
+    std::string ImGuiOverlay::frameGenerationTabGreyed(const FrameGenerationTab& tab)
+    {
+        const bool mako = tab.layer == FrameGenerationLayer::Mako;
+        if (!frameGenerationLayerInstalled(tab.layer))
+            return std::string(mako ? "MAKO" : "lsfg-vk") + " is not installed where this game's Vulkan loader looks";
+        if (activeProfilePath.empty())
+            return "This run reads a fixed config file, which keeps no frame generation layer";
+        if (mako)
+            return readMakoOnce() ? makoModelMissing(std::string(tab.makoModel)) : "";
+        if (!readFrameGenerationOnce())
+            return "";
+        if (!frameGenerationDll)
+            frameGenerationDll = lsfgDllStatus(frameGenerationFile->global);
+        return frameGenerationDll->found || frameGenerationDll->inSteamLibrary ? "" : "lsfg-vk.dll is in no Steam library";
+    }
+
+    void ImGuiOverlay::chooseFrameGenerationTab(const FrameGenerationTab& tab)
+    {
+        frameGenerationLayerChoice = tab.layer;
+        autoSaveProfile();
+        Logger::info("frame generation layer of profile " + activeProfileName + " set to " + std::string(frameGenerationLayerName(tab.layer))
+                     + (tab.makoModel.empty() ? "" : " with the model " + std::string(tab.makoModel)));
+        bool notInstalled = false;
+        if (tab.layer != FrameGenerationLayer::Mako || !makoBlocker(notInstalled).empty())
+            return;
+        if (const MakoProfile* inUse = makoProfileInUse())
         {
-            const std::string why = !frameGenerationLayerInstalled(choice) ? std::string(shown) + " is not installed where this game's Vulkan loader looks"
-                                    : activeProfilePath.empty()            ? std::string("This run reads a fixed config file, which keeps no frame generation layer")
-                                                                           : std::string();
-            const std::string item = std::string(shown) + "##Layer";
+            const MakoPowerSource edited = makoEditedSet(*inUse);
+            if (makoSettingsFor(*inUse, edited).frameGenerationModel == tab.makoModel)
+                return;
+            const MakoProfile changed = makoProfileWithModel(*inUse, edited, tab.makoModel);
+            saveMako(makoGlobalWithDll(makoSettingsFor(changed, edited)), changed);
+            return;
+        }
+        if (tab.makoModel == MakoSettings{}.frameGenerationModel)
+            return;
+        std::vector<std::string> games = ConfigSerializer::profileUsers()[activeProfileName];
+        if (std::find(games.begin(), games.end(), activeGameName) == games.end())
+            games.push_back(activeGameName);
+        MakoProfile made                   = newMakoProfileFor(activeProfileName, games);
+        made.settings.frameGenerationModel = std::string(tab.makoModel);
+        saveMako(makoGlobalWithDll(made.settings), made);
+        if (makoProblem.empty())
+            frameGenerationAssignmentsChanged("");
+    }
+
+    void ImGuiOverlay::renderLayerChoice(const FrameGenerationTab* chosen, bool waits)
+    {
+        const OverlayPalette& palette = activePalette();
+        const std::string     kept    = "Read when a game starts: vkdaedalus-run loads this layer alone and keeps the other out.\nThe layer is kept in the vkDaedalus profile "
+                                        + activeProfileName;
+        ui::label("Layer");
+        ImGui::SetItemTooltip("%s.", kept.c_str());
+        for (const FrameGenerationTab& tab : frameGenerationTabs)
+        {
+            const bool        lossless = tab.makoModel == "lossless-scaling";
+            const std::string what     = tab.layer == FrameGenerationLayer::LsfgVk ? "lsfg-vk, which needs lsfg-vk.dll.\n" + kept + "."
+                                         : lossless                                ? "MAKO running Lossless Scaling's model, which needs Lossless.dll.\n" + kept
+                                                                                         + ", the model in MAKO's profile."
+                                                                                   : "MAKO running its own model, MAKO FG, which needs no DLL.\n" + kept
+                                                                                         + ", the model in MAKO's profile.";
+            const std::string why      = frameGenerationTabGreyed(tab);
+            const std::string item     = std::string(tab.shown) + "##Layer";
             ImGui::SameLine(0.0f, ui::px(ui::Size::gap));
             ImGui::BeginDisabled(!why.empty());
-            if (ui::tab(item.c_str(), layer == choice) && layer != choice)
-            {
-                frameGenerationLayerChoice = choice;
-                autoSaveProfile();
-                Logger::info(std::string("frame generation layer of profile ") + activeProfileName + " set to " + std::string(frameGenerationLayerName(choice)));
-            }
+            if (ui::tab(item.c_str(), chosen == &tab) && chosen != &tab)
+                chooseFrameGenerationTab(tab);
             ImGui::EndDisabled();
-            ImGui::SetItemTooltip("%s", why.empty() ? tip.c_str() : why.c_str());
+            ImGui::SetItemTooltip("%s", why.empty() ? what.c_str() : why.c_str());
         }
-        restartMark("Layer", layerChangeWaits(loadedFrameGenerationLayer(), layer), palette);
+        restartMark("Layer", waits, palette);
     }
 
     void ImGuiOverlay::renderFrameOrderNote()

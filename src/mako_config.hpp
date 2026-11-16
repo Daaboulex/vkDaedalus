@@ -21,6 +21,16 @@ namespace vkBasalt
 
     inline constexpr std::array<FrameGenerationChoice, 2> makoFrameGenerationModels = {
         {{"lossless-scaling", "Lossless Scaling"}, {"mako-fg", "MAKO FG"}}};
+    struct FrameGenerationTab
+    {
+        FrameGenerationLayer layer;
+        std::string_view     makoModel;
+        std::string_view     shown;
+    };
+    inline constexpr std::array<FrameGenerationTab, 3> frameGenerationTabs = {{{FrameGenerationLayer::LsfgVk, "", "lsfg-vk"},
+                                                                               {FrameGenerationLayer::Mako, "lossless-scaling", "MAKO LSFG"},
+                                                                               {FrameGenerationLayer::Mako, "mako-fg", "MAKO FG"}}};
+
     inline constexpr std::array<FrameGenerationChoice, 4> makoFgModes = {
         {{"quality", "Quality"}, {"balanced", "Balanced"}, {"performance", "Performance"}, {"extra-performance", "Extra performance"}}};
     inline constexpr std::array<FrameGenerationChoice, 4> makoScalingMethods = {
@@ -169,6 +179,9 @@ namespace vkBasalt
     MakoProfile             makoProfileWithPowerSets(MakoProfile profile, bool separate, MakoPowerSource runningNow);
     MakoProfile             makoProfileSwitched(MakoProfile profile, MakoPowerSource runningNow, bool MakoSettings::*setting, bool on);
     bool                    makoGpuNamesAnother(const std::string& gpu, const MakoGpu& game);
+    const FrameGenerationTab& frameGenerationTabOf(FrameGenerationLayer layer, std::string_view makoModel);
+    MakoProfile               makoProfileWithModel(MakoProfile profile, MakoPowerSource edited, std::string_view model);
+    bool frameGenerationTabWaits(const FrameGenerationTab& chosen, std::optional<FrameGenerationLayer> loaded, std::string_view makoModelAtStart);
 
     std::optional<std::string>
     makoTextWith(const std::string& text, const std::optional<MakoGlobal>& global, const std::optional<MakoProfile>& profile, std::string& problem);
