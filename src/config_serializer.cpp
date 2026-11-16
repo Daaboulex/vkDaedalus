@@ -1161,20 +1161,26 @@ namespace vkBasalt
                 else
                     Logger::warn("setting " + key + " = " + value + " is neither true nor false, so effects stay before frame generation");
             }
+            else if (key == "frameGenerationLayer")
+            {
+                settings.frameGenerationLayer = frameGenerationLayerNamed(value);
+                if (!settings.frameGenerationLayer)
+                    Logger::warn("setting " + key + " = " + value + " names neither lsfg-vk nor mako, so the profile runs the frame generation layer that is installed, lsfg-vk when both are");
+            }
         });
 
         return settings;
     }
 
-    bool ConfigSerializer::effectsAfterFrameGenerationFor(const std::string& program)
+    ProfileSettings ConfigSerializer::profileSettingsFor(const std::string& program)
     {
         const ActiveProfile active = getActiveProfile(program);
         if (active.kind == ProfileKind::Bypass)
-            return false;
+            return {};
         std::string path = getProfilePath(active.name);
         if (active.kind == ProfileKind::Named && !std::filesystem::exists(path))
             path = getProfilePath(DEFAULT_PROFILE_NAME);
-        return loadProfileSettings(path).effectsAfterFrameGeneration.value_or(false);
+        return loadProfileSettings(path);
     }
 
     bool ConfigSerializer::saveToPath(
@@ -1192,6 +1198,8 @@ namespace vkBasalt
             writtenKeys.insert("gpus");
         if (profileSettings.effectsAfterFrameGeneration)
             writtenKeys.insert("effectsAfterFrameGeneration");
+        if (profileSettings.frameGenerationLayer)
+            writtenKeys.insert("frameGenerationLayer");
         for (const auto& [effectName, path] : effectPaths)
         {
             if (!path.empty())
@@ -1211,6 +1219,8 @@ namespace vkBasalt
             file << "gpus = " << *profileSettings.gpus << "\n";
         if (profileSettings.effectsAfterFrameGeneration)
             file << "effectsAfterFrameGeneration = " << (*profileSettings.effectsAfterFrameGeneration ? "true" : "false") << "\n";
+        if (profileSettings.frameGenerationLayer)
+            file << "frameGenerationLayer = " << frameGenerationLayerName(*profileSettings.frameGenerationLayer) << "\n";
         file << "\n";
 
         for (const auto& line : carried)

@@ -820,4 +820,31 @@ namespace vkBasalt
     {
         return dllStatusAt(makoDllPath(global), makoDllUnderCommon);
     }
+
+    bool makoLayerLoaded()
+    {
+        static const bool loaded = libraryMapped(makoLayerLibrary);
+        return loaded;
+    }
+
+    std::optional<bool> makoLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate)
+    {
+        return layerListedBy(enumerate, makoLayerName);
+    }
+
+    std::optional<bool> makoLayerVisible()
+    {
+        static const std::optional<bool> visible = layerVisible(makoLayerName);
+        return visible;
+    }
+
+    bool makoSettingsFromEnvironment()
+    {
+        return std::getenv("MAKO_ENV") != nullptr;
+    }
+
+    std::string_view loadedFrameGenerationLayerName()
+    {
+        return makoLayerLoaded() ? "MAKO" : "lsfg-vk";
+    }
 }

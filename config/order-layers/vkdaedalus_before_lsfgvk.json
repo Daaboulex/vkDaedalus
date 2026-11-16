@@ -5,11 +5,14 @@
     "type": "GLOBAL",
     "api_version": "1.0.0",
     "implementation_version": "1",
-    "description": "vkDaedalus's effects run on the game's own frames before lsfg-vk generates frames from them",
+    "description": "vkDaedalus's effects run on the game's own frames before lsfg-vk generates frames from them, for a game whose profile runs lsfg-vk",
     "component_layers": [
       "VK_LAYER_VKDAEDALUS_post_processing",
       "VK_LAYER_LSFGVK_frame_generation"
     ],
+    "enable_environment": {
+      "DISABLE_MAKO": "1"
+    },
     "disable_environment": {
       "VKDAEDALUS_AFTER_LSFGVK": "1"
     }

@@ -1,0 +1,20 @@
+{
+  "file_format_version": "1.1.2",
+  "layer": {
+    "name": "VK_LAYER_DAABOULEX_mako_before_vkdaedalus",
+    "type": "GLOBAL",
+    "api_version": "1.0.0",
+    "implementation_version": "1",
+    "description": "MAKO generates frames first and vkDaedalus's effects run on every frame shown, for a game whose profile runs MAKO and asks for it",
+    "component_layers": [
+      "VK_LAYER_MAKO_render",
+      "VK_LAYER_VKDAEDALUS_post_processing"
+    ],
+    "enable_environment": {
+      "VKDAEDALUS_AFTER_MAKO": "1"
+    },
+    "disable_environment": {
+      "DISABLE_VKDAEDALUS_MAKO_ORDER": "1"
+    }
+  }
+}

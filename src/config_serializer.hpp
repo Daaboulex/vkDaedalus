@@ -8,6 +8,7 @@
 #include <set>
 
 #include "effects/effect_config.hpp"
+#include "frame_generation_place.hpp"
 #include "launch_notice.hpp"
 
 namespace vkBasalt
@@ -55,8 +56,9 @@ namespace vkBasalt
 
     struct ProfileSettings
     {
-        std::optional<std::string> gpus;
-        std::optional<bool>        effectsAfterFrameGeneration;
+        std::optional<std::string>          gpus;
+        std::optional<bool>                 effectsAfterFrameGeneration;
+        std::optional<FrameGenerationLayer> frameGenerationLayer;
     };
 
     struct GameSettings
@@ -136,7 +138,7 @@ namespace vkBasalt
         static GameSettings    loadGameSettings(const std::string& gameName);
         static GameSettings    loadGameSettingsFile(const std::string& path);
         static bool            saveGameSettings(const std::string& gameName, const GameSettings& settings);
-        static bool            effectsAfterFrameGenerationFor(const std::string& program);
+        static ProfileSettings profileSettingsFor(const std::string& program);
 
         static bool saveToPath(
             const std::string& filePath,

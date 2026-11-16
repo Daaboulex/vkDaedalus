@@ -633,6 +633,44 @@ static void powerSupplies(const fs::path& dir)
     expect(source("crowded") == MakoPowerSource::Unknown, "more than 64 entries are not read");
 }
 
+static VkResult listsBoth(uint32_t* count, VkLayerProperties* layers)
+{
+    if (layers != nullptr)
+    {
+        std::snprintf(layers[0].layerName, VK_MAX_EXTENSION_NAME_SIZE, "%s", "VK_LAYER_LSFGVK_frame_generation");
+        std::snprintf(layers[1].layerName, VK_MAX_EXTENSION_NAME_SIZE, "%s", "VK_LAYER_MAKO_render");
+    }
+    *count = 2;
+    return VK_SUCCESS;
+}
+
+static VkResult listsLsfgVk(uint32_t* count, VkLayerProperties* layers)
+{
+    if (layers != nullptr)
+        std::snprintf(layers[0].layerName, VK_MAX_EXTENSION_NAME_SIZE, "%s", "VK_LAYER_LSFGVK_frame_generation");
+    *count = 1;
+    return VK_SUCCESS;
+}
+
+static VkResult listsNothing(uint32_t*, VkLayerProperties*)
+{
+    return VK_ERROR_INITIALIZATION_FAILED;
+}
+
+static void detection()
+{
+    expect(makoLayerListedBy(listsBoth) == true && makoLayerListedBy(listsLsfgVk) == false,
+           "MAKO is installed when the game's loader lists VK_LAYER_MAKO_render");
+    expect(!makoLayerListedBy(listsNothing) && !makoLayerListedBy(nullptr), "a loader that cannot list its layers leaves it unknown");
+    expect(!makoLayerLoaded() && loadedFrameGenerationLayerName() == "lsfg-vk",
+           "MAKO is not loaded in a process that never mapped its library, so the log names lsfg-vk");
+    unsetenv("MAKO_ENV");
+    expect(!makoSettingsFromEnvironment(), "without MAKO_ENV MAKO reads its file");
+    setenv("MAKO_ENV", "", 1);
+    expect(makoSettingsFromEnvironment(), "with MAKO_ENV set at all MAKO takes its settings from the environment, as MAKO checks");
+    unsetenv("MAKO_ENV");
+}
+
 int main(int argc, char** argv)
 {
     if (argc < 2)
@@ -651,6 +689,7 @@ int main(int argc, char** argv)
     syncAndRename(dir);
     saving(dir);
     powerSupplies(dir);
+    detection();
     paths(dir);
     if (failures)
         std::printf("%d MAKO file check(s) failed\n", failures);

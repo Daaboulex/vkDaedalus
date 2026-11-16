@@ -22,16 +22,35 @@ int main()
     const std::string loader = "/nix/store/y-vulkan-loader/lib/libvulkan.so.1";
     const std::string driver = "/run/opengl-driver/lib/libvulkan_radeon.so";
 
-    expect(vkBasalt::frameGenerationPlace({lsfg, loader}, true) == FrameGenerationPlace::BelowTheLayer,
+    const std::string mako = "/usr/lib/libmako-render.so";
+    expect(vkBasalt::frameGenerationPlace({lsfg, loader}, true, vkBasalt::lsfgLayerLibrary) == FrameGenerationPlace::BelowTheLayer,
            "lsfg-vk in the chain below the layer is below it");
-    expect(vkBasalt::frameGenerationPlace({loader, driver}, true) == FrameGenerationPlace::AboveTheLayer,
+    expect(vkBasalt::frameGenerationPlace({mako, loader}, true, vkBasalt::makoLayerLibrary) == FrameGenerationPlace::BelowTheLayer,
+           "MAKO in the chain below the layer is below it");
+    expect(vkBasalt::frameGenerationPlace({lsfg, loader}, true, vkBasalt::makoLayerLibrary) == FrameGenerationPlace::AboveTheLayer,
+           "MAKO loaded with only lsfg-vk below the layer is above it");
+    expect(vkBasalt::frameGenerationPlaceWords(FrameGenerationPlace::BelowTheLayer, "MAKO") == "MAKO runs below the layer: effects before frame generation" &&
+               vkBasalt::frameGenerationPlaceWords(FrameGenerationPlace::AboveTheLayer, "lsfg-vk") == "lsfg-vk runs above the layer: effects after frame generation",
+           "the log names the layer that generates the frames");
+    using vkBasalt::FrameGenerationLayer;
+    expect(vkBasalt::defaultFrameGenerationLayer(false, false) == FrameGenerationLayer::LsfgVk &&
+               vkBasalt::defaultFrameGenerationLayer(true, false) == FrameGenerationLayer::LsfgVk &&
+               vkBasalt::defaultFrameGenerationLayer(false, true) == FrameGenerationLayer::Mako &&
+               vkBasalt::defaultFrameGenerationLayer(true, true) == FrameGenerationLayer::LsfgVk,
+           "a profile with no choice runs the layer that is installed, lsfg-vk when both are or neither is");
+    expect(vkBasalt::frameGenerationLayerNamed(vkBasalt::frameGenerationLayerName(FrameGenerationLayer::Mako)) == FrameGenerationLayer::Mako &&
+               vkBasalt::frameGenerationLayerNamed(vkBasalt::frameGenerationLayerName(FrameGenerationLayer::LsfgVk)) == FrameGenerationLayer::LsfgVk &&
+               !vkBasalt::frameGenerationLayerNamed("MAKO") && vkBasalt::frameGenerationLayerName(FrameGenerationLayer::Mako) == "mako",
+           "each layer reads back by its name, and no other name is a layer");
+
+    expect(vkBasalt::frameGenerationPlace({loader, driver}, true, vkBasalt::lsfgLayerLibrary) == FrameGenerationPlace::AboveTheLayer,
            "lsfg-vk loaded but not below the layer is above it");
-    expect(vkBasalt::frameGenerationPlace({loader, driver}, false) == FrameGenerationPlace::NotLoaded,
+    expect(vkBasalt::frameGenerationPlace({loader, driver}, false, vkBasalt::lsfgLayerLibrary) == FrameGenerationPlace::NotLoaded,
            "lsfg-vk neither below nor loaded is not loaded");
-    expect(vkBasalt::frameGenerationPlace({}, false) == FrameGenerationPlace::NotLoaded, "an empty chain has no lsfg-vk");
-    expect(!vkBasalt::isLsfgLayerLibrary("/opt/notlsfg/liblsfg-vk-layer.so.backup/libother.so"),
+    expect(vkBasalt::frameGenerationPlace({}, false, vkBasalt::lsfgLayerLibrary) == FrameGenerationPlace::NotLoaded, "an empty chain has no lsfg-vk");
+    expect(!vkBasalt::isLayerLibrary("/opt/notlsfg/liblsfg-vk-layer.so.backup/libother.so", vkBasalt::lsfgLayerLibrary),
            "only the file name decides, not a folder named like lsfg-vk's library");
-    expect(vkBasalt::isLsfgLayerLibrary("liblsfg-vk-layer.so"), "a bare file name is read");
+    expect(vkBasalt::isLayerLibrary("liblsfg-vk-layer.so", vkBasalt::lsfgLayerLibrary), "a bare file name is read");
 
     expect(vkBasalt::layerLibrariesBelow({lsfg, "/nix/store/v/lib/libVkLayer_khronos_validation.so", loader}) ==
                std::vector<std::string>{"liblsfg-vk-layer.so", "libVkLayer_khronos_validation.so"},

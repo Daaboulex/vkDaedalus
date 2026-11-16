@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 
+#include "frame_generation_place.hpp"
 #include "vulkan_include.hpp"
 
 namespace vkBasalt
@@ -143,9 +144,13 @@ namespace vkBasalt
     std::optional<std::string> fileInSteamLibraries(const std::string& underCommon);
     std::optional<std::string> lsfgDllInSteamLibraries();
 
-    bool                frameGenerationLayerLoaded();
-    std::optional<bool> lsfgLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate);
-    std::optional<bool> frameGenerationLayerVisible();
+    bool                       libraryMapped(std::string_view library);
+    std::optional<bool>        layerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate, std::string_view layer);
+    std::optional<bool>        layerVisible(std::string_view layer);
+    bool                       frameGenerationLayerLoaded();
+    std::optional<bool>        lsfgLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate);
+    std::optional<bool>        frameGenerationLayerVisible();
+    std::optional<std::string> frameGenerationLayerDisabledBy(FrameGenerationLayer layer);
 }
 
 #endif

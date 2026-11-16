@@ -431,18 +431,18 @@ int main(int argc, char** argv)
 
     std::ofstream(profiles / "after.conf") << "effectsAfterFrameGeneration = true\n";
     std::ofstream(configs / ".active_profiles", std::ios::app) << "orderafter.exe=after\norderfallback=gone\norderbypassed=none\n";
-    if (!ConfigSerializer::effectsAfterFrameGenerationFor("orderafter.exe") || ConfigSerializer::effectsAfterFrameGenerationFor("orderunset"))
+    if (!ConfigSerializer::profileSettingsFor("orderafter.exe").effectsAfterFrameGeneration.value_or(false) || ConfigSerializer::profileSettingsFor("orderunset").effectsAfterFrameGeneration.value_or(false))
     {
         std::printf("FAIL: a profile saying effectsAfterFrameGeneration = true must give after, and default with no file before\n");
         return 1;
     }
     std::ofstream(profiles / "default.conf") << "effectsAfterFrameGeneration = true\n";
-    if (!ConfigSerializer::effectsAfterFrameGenerationFor("orderfallback"))
+    if (!ConfigSerializer::profileSettingsFor("orderfallback").effectsAfterFrameGeneration.value_or(false))
     {
         std::printf("FAIL: a named profile whose file is missing must fall back to the default profile, as the layer does\n");
         return 1;
     }
-    if (ConfigSerializer::effectsAfterFrameGenerationFor("orderbypassed"))
+    if (ConfigSerializer::profileSettingsFor("orderbypassed").effectsAfterFrameGeneration.value_or(false))
     {
         std::printf("FAIL: a bypassed program must keep the default order\n");
         return 1;
@@ -455,6 +455,34 @@ int main(int argc, char** argv)
         || ConfigSerializer::loadProfileSettings(orderFile).effectsAfterFrameGeneration != std::optional<bool>(true))
     {
         std::printf("FAIL: a save that does not set the order must keep the saved one: %s\n", readFile(orderFile).c_str());
+        return 1;
+    }
+
+    std::ofstream(profiles / "mako.conf") << "frameGenerationLayer = mako\neffectsAfterFrameGeneration = true\n";
+    std::ofstream(profiles / "odd.conf") << "frameGenerationLayer = MAKO\n";
+    std::ofstream(configs / ".active_profiles", std::ios::app) << "layermako=mako\nlayerodd=odd\nlayergone=missing\nlayerbypassed=none\n";
+    if (ConfigSerializer::profileSettingsFor("layermako").frameGenerationLayer != std::optional(FrameGenerationLayer::Mako) ||
+        !ConfigSerializer::profileSettingsFor("layermako").effectsAfterFrameGeneration.value_or(false) ||
+        ConfigSerializer::profileSettingsFor("layerodd").frameGenerationLayer || ConfigSerializer::profileSettingsFor("layerbypassed").frameGenerationLayer)
+    {
+        std::printf("FAIL: a profile saying frameGenerationLayer = mako must run MAKO, while a name the layer does not have and a bypassed program choose none\n");
+        return 1;
+    }
+    std::ofstream(profiles / "default.conf") << "frameGenerationLayer = lsfg-vk\n";
+    if (ConfigSerializer::profileSettingsFor("layergone").frameGenerationLayer != std::optional(FrameGenerationLayer::LsfgVk))
+    {
+        std::printf("FAIL: a named profile whose file is missing must take the default profile's layer, as the layer does\n");
+        return 1;
+    }
+    ProfileSettings chosen;
+    chosen.frameGenerationLayer = FrameGenerationLayer::Mako;
+    const std::string layerFile = (configs / "layersaved.conf").string();
+    if (!ConfigSerializer::saveToPath(layerFile, {}, {}, {}, {}, {}, chosen, std::nullopt)
+        || !ConfigSerializer::saveToPath(layerFile, {}, {}, {}, {}, {}, ProfileSettings{}, std::nullopt)
+        || ConfigSerializer::loadProfileSettings(layerFile).frameGenerationLayer != std::optional(FrameGenerationLayer::Mako)
+        || readFile(layerFile).find("frameGenerationLayer = mako\n") == std::string::npos)
+    {
+        std::printf("FAIL: the layer is saved as frameGenerationLayer = mako, and a save that does not set it keeps it: %s\n", readFile(layerFile).c_str());
         return 1;
     }
 

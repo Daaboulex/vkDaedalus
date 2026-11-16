@@ -6,6 +6,7 @@
 #include <sstream>
 #include "frame_generation.hpp"
 #include "frame_generation_place.hpp"
+#include "mako_config.hpp"
 #include "latency_stats.hpp"
 #include "logical_device.hpp"
 #include "overlay/report.hpp"
@@ -78,7 +79,7 @@ namespace vkBasalt
         for (const OverlayGpu& gpu : state.gpus)
             facts.gpus.push_back("GPU " + std::to_string(gpu.number) + ": " + gpu.name + (gpu.status.empty() ? "" : ", " + gpu.status));
         facts.layersBelow          = pLogicalDevice->layersBelow;
-        facts.frameGenerationPlace = frameGenerationPlaceWords(pLogicalDevice->frameGenerationPlace);
+        facts.frameGenerationPlace = frameGenerationPlaceWords(pLogicalDevice->frameGenerationPlace, loadedFrameGenerationLayerName());
         const std::streamoff most  = 2 << 20;
         facts.files.emplace_back(fixed ? facts.profile : "profile " + facts.profile, tail(fixed ? *fixed : ConfigSerializer::getProfilePath(facts.profile), most));
         facts.files.emplace_back("game " + activeGameName, tail(ConfigSerializer::getGamePath(activeGameName), most));

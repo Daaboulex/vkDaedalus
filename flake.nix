@@ -1384,12 +1384,22 @@
                 ours=$(jq -er .layer.name ${./config/vkdaedalus.json.in})
                 lsfg=$(sed -n 's/.*lsfgLayerName = sizeof(void\*) == 8 ? "\([A-Za-z0-9_]*\)".*/\1/p' ${./src/frame_generation.hpp})
                 [ -n "$lsfg" ] || { echo "lsfgLayerName is gone from frame_generation.hpp, so the order layers cannot be checked against it"; exit 1; }
-                before=$(jq -ec '.layer.component_layers' ${./config/order-layers/vkdaedalus_before_lsfgvk.json})
-                after=$(jq -ec '.layer.component_layers' ${./config/order-layers/lsfgvk_before_vkdaedalus.json})
-                [ "$before" = "[\"$ours\",\"$lsfg\"]" ] \
-                  || { echo "the default order layer lists $before, want $ours then $lsfg, so the loader drops it or keeps the wrong order"; exit 1; }
-                [ "$after" = "[\"$lsfg\",\"$ours\"]" ] \
-                  || { echo "the after order layer lists $after, want $lsfg then $ours, so the loader drops it or keeps the wrong order"; exit 1; }
+                mako=$(sed -n 's/.*makoLayerName *= *"\([A-Za-z0-9_]*\)".*/\1/p' ${./src/mako_config.hpp})
+                [ -n "$mako" ] || { echo "makoLayerName is gone from mako_config.hpp, so the order layers cannot be checked against it"; exit 1; }
+                for pair in "vkdaedalus_before_lsfgvk $ours $lsfg" "lsfgvk_before_vkdaedalus $lsfg $ours" "vkdaedalus_before_mako $ours $mako" "mako_before_vkdaedalus $mako $ours"; do
+                  read -r file first second <<<"$pair"
+                  listed=$(jq -ec '.layer.component_layers' ${./config/order-layers}/$file.json)
+                  [ "$listed" = "[\"$first\",\"$second\"]" ] \
+                    || { echo "the order layer $file lists $listed, want $first then $second, so the loader drops it or keeps the wrong order"; exit 1; }
+                done
+                touch $out
+              '';
+
+          checks.run-loads-only-the-profiles-layer =
+            pkgs.runCommand "run-loads-only-the-profiles-layer" { nativeBuildInputs = [ pkgs.jq ]; }
+              ''
+                bash ${./test/run-layers/check.sh} ${self'.packages.vkdaedalus}/bin/vkdaedalus-run \
+                  ${self'.packages.vkdaedalus}/share/vkdaedalus/order-layers "$PWD/work"
                 touch $out
               '';
 

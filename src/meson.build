@@ -217,7 +217,7 @@ executable('vkdaedalus-profile',
     install : true)
 
 executable('vkdaedalus-frame-order',
-    '../tools/frame_order.cpp', 'config_serializer.cpp', 'logger.cpp', 'frame_generation.cpp', 'toml_edit.cpp',
+    '../tools/frame_order.cpp', 'config_serializer.cpp', 'logger.cpp', 'frame_generation.cpp', 'mako_config.cpp', 'toml_edit.cpp',
     include_directories : vkBasalt_include_path,
     dependencies : [tomlplusplus_dep, dl_dep, dependency('vulkan')],
     install : true)

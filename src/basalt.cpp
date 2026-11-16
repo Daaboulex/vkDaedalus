@@ -1171,9 +1171,11 @@ namespace vkBasalt
             if (dladdr(reinterpret_cast<void*>(link->pfnNextGetInstanceProcAddr), &below) && below.dli_fname)
                 librariesBelow.emplace_back(below.dli_fname);
         }
-        const FrameGenerationPlace place = frameGenerationPlace(librariesBelow, frameGenerationLayerLoaded());
+        const bool                 makoLoaded = makoLayerLoaded();
+        const FrameGenerationPlace place      = makoLoaded ? frameGenerationPlace(librariesBelow, true, makoLayerLibrary)
+                                                           : frameGenerationPlace(librariesBelow, frameGenerationLayerLoaded(), lsfgLayerLibrary);
         if (place != FrameGenerationPlace::NotLoaded && hooked)
-            Logger::info(frameGenerationPlaceWords(place));
+            Logger::info(frameGenerationPlaceWords(place, loadedFrameGenerationLayerName()));
 
         InstanceDispatch dispatchTable;
         fillDispatchTableInstance(*pInstance, gpa, &dispatchTable);
@@ -2502,7 +2504,7 @@ namespace vkBasalt
         char                          line[320];
         std::snprintf(line, sizeof(line), "frame rates %s: game %.1f FPS %s, shown %.1f FPS %s; %s", over.c_str(), rates.gameFps,
                       rates.gameMeasured ? "measured" : "estimated", rates.shownFps, rates.shownMeasured ? "measured" : "estimated",
-                      frameGenerationPlaceWords(device.frameGenerationPlace));
+                      frameGenerationPlaceWords(device.frameGenerationPlace, loadedFrameGenerationLayerName()).c_str());
         Logger::info(std::string(line) + (multiplier ? ", " + std::to_string(*multiplier) + "x" : std::string()));
     }
 

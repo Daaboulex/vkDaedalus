@@ -381,6 +381,19 @@ int main(int argc, char** argv)
                "lsfg-vk.dll in a Steam library outside the home is found, where lsfg-vk itself does not look");
     }
 
+    unsetenv("DISABLE_LSFGVK");
+    unsetenv("DISABLE_MAKO");
+    expect(!frameGenerationLayerDisabledBy(FrameGenerationLayer::LsfgVk) && !frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako),
+           "with no DISABLE variable set, neither layer is kept out");
+    setenv("DISABLE_MAKO", "1", 1);
+    expect(!frameGenerationLayerDisabledBy(FrameGenerationLayer::LsfgVk) && frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako) == "DISABLE_MAKO",
+           "DISABLE_MAKO keeps out a profile running MAKO and is no problem for one running lsfg-vk");
+    setenv("DISABLE_LSFGVK", "", 1);
+    expect(frameGenerationLayerDisabledBy(FrameGenerationLayer::LsfgVk) == "DISABLE_LSFGVK",
+           "DISABLE_LSFGVK set at all keeps lsfg-vk out, as the loader reads a disable variable");
+    unsetenv("DISABLE_LSFGVK");
+    unsetenv("DISABLE_MAKO");
+
     if (failures)
         std::printf("%d frame generation check(s) failed\n", failures);
     return failures ? 1 : 0;

@@ -14,6 +14,8 @@
 
 namespace vkBasalt
 {
+    inline constexpr std::string_view makoLayerName = "VK_LAYER_MAKO_render";
+
     inline constexpr std::array<FrameGenerationChoice, 2> makoFrameGenerationModels = {
         {{"lossless-scaling", "Lossless Scaling"}, {"mako-fg", "MAKO FG"}}};
     inline constexpr std::array<FrameGenerationChoice, 4> makoFgModes = {
@@ -180,6 +182,12 @@ namespace vkBasalt
 
     std::optional<std::string> makoDllPath(const MakoGlobal& global);
     DllStatus                  makoDllStatus(const MakoGlobal& global);
+
+    bool                makoLayerLoaded();
+    std::optional<bool> makoLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate);
+    std::optional<bool> makoLayerVisible();
+    bool                makoSettingsFromEnvironment();
+    std::string_view    loadedFrameGenerationLayerName();
 }
 
 #endif

@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace vkBasalt
@@ -14,11 +16,39 @@ namespace vkBasalt
         AboveTheLayer,
     };
 
-    inline bool isLsfgLayerLibrary(const std::string& path)
+    enum class FrameGenerationLayer
+    {
+        LsfgVk,
+        Mako,
+    };
+
+    inline std::string_view frameGenerationLayerName(FrameGenerationLayer layer)
+    {
+        return layer == FrameGenerationLayer::Mako ? "mako" : "lsfg-vk";
+    }
+
+    inline std::optional<FrameGenerationLayer> frameGenerationLayerNamed(std::string_view name)
+    {
+        if (name == frameGenerationLayerName(FrameGenerationLayer::LsfgVk))
+            return FrameGenerationLayer::LsfgVk;
+        if (name == frameGenerationLayerName(FrameGenerationLayer::Mako))
+            return FrameGenerationLayer::Mako;
+        return std::nullopt;
+    }
+
+    inline FrameGenerationLayer defaultFrameGenerationLayer(bool lsfgVkInstalled, bool makoInstalled)
+    {
+        return makoInstalled && !lsfgVkInstalled ? FrameGenerationLayer::Mako : FrameGenerationLayer::LsfgVk;
+    }
+
+    inline constexpr std::string_view lsfgLayerLibrary = "liblsfg-vk-layer";
+    inline constexpr std::string_view makoLayerLibrary = "libmako-render.so";
+
+    inline bool isLayerLibrary(const std::string& path, std::string_view library)
     {
         const size_t      slash = path.rfind('/');
         const std::string name  = slash == std::string::npos ? path : path.substr(slash + 1);
-        return name.rfind("liblsfg-vk-layer", 0) == 0;
+        return name.starts_with(library);
     }
 
     inline std::vector<std::string> layerLibrariesBelow(const std::vector<std::string>& librariesBelow)
@@ -34,12 +64,12 @@ namespace vkBasalt
         return names;
     }
 
-    inline FrameGenerationPlace frameGenerationPlace(const std::vector<std::string>& librariesBelow, bool lsfgLoaded)
+    inline FrameGenerationPlace frameGenerationPlace(const std::vector<std::string>& librariesBelow, bool loaded, std::string_view layerLibrary)
     {
         for (const std::string& library : librariesBelow)
-            if (isLsfgLayerLibrary(library))
+            if (isLayerLibrary(library, layerLibrary))
                 return FrameGenerationPlace::BelowTheLayer;
-        return lsfgLoaded ? FrameGenerationPlace::AboveTheLayer : FrameGenerationPlace::NotLoaded;
+        return loaded ? FrameGenerationPlace::AboveTheLayer : FrameGenerationPlace::NotLoaded;
     }
 
     inline bool effectsRunAfterFrameGeneration(FrameGenerationPlace place)
@@ -73,14 +103,14 @@ namespace vkBasalt
         return steps;
     }
 
-    inline const char* frameGenerationPlaceWords(FrameGenerationPlace place)
+    inline std::string frameGenerationPlaceWords(FrameGenerationPlace place, std::string_view layer)
     {
         switch (place)
         {
-            case FrameGenerationPlace::NotLoaded: return "lsfg-vk is not loaded";
-            case FrameGenerationPlace::BelowTheLayer: return "lsfg-vk runs below the layer: effects before frame generation";
-            case FrameGenerationPlace::AboveTheLayer: return "lsfg-vk runs above the layer: effects after frame generation";
+            case FrameGenerationPlace::NotLoaded: return std::string(layer) + " is not loaded";
+            case FrameGenerationPlace::BelowTheLayer: return std::string(layer) + " runs below the layer: effects before frame generation";
+            case FrameGenerationPlace::AboveTheLayer: return std::string(layer) + " runs above the layer: effects after frame generation";
         }
-        return "lsfg-vk's place is unknown";
+        return std::string(layer) + "'s place is unknown";
     }
 }

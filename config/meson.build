@@ -16,4 +16,5 @@ configure_file(
 
 install_data('vkdaedalus.conf', install_dir : join_paths(data_dir, 'vkdaedalus'))
 install_data('order-layers/vkdaedalus_before_lsfgvk.json', 'order-layers/lsfgvk_before_vkdaedalus.json',
+    'order-layers/vkdaedalus_before_mako.json', 'order-layers/mako_before_vkdaedalus.json',
     install_dir : join_paths(data_dir, 'vkdaedalus', 'order-layers'))

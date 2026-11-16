@@ -29,7 +29,7 @@ namespace vkBasalt
             out += "  " + layer + "\n";
         if (facts.layersBelow.empty())
             out += "  none\n";
-        out += "lsfg-vk: " + facts.frameGenerationPlace + "\n";
+        out += "Frame generation: " + facts.frameGenerationPlace + "\n";
         for (const auto& [name, text] : facts.files)
             out += "\n== " + name + "\n" + (text.empty() ? std::string("(empty or missing)\n") : text) + (text.empty() || text.back() == '\n' ? "" : "\n");
         return out;

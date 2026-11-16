@@ -776,20 +776,17 @@ namespace vkBasalt
         return fileInSteamLibraries(lsfgDllUnderCommon);
     }
 
-    bool frameGenerationLayerLoaded()
+    bool libraryMapped(std::string_view library)
     {
-        static const bool loaded = [] {
-            std::ifstream maps("/proc/self/maps");
-            std::string   line;
-            while (std::getline(maps, line))
-                if (line.find("liblsfg-vk-layer") != std::string::npos)
-                    return true;
-            return false;
-        }();
-        return loaded;
+        std::ifstream maps("/proc/self/maps");
+        std::string   line;
+        while (std::getline(maps, line))
+            if (line.find(library) != std::string::npos)
+                return true;
+        return false;
     }
 
-    std::optional<bool> lsfgLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate)
+    std::optional<bool> layerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate, std::string_view layer)
     {
         uint32_t count = 0;
         if (enumerate == nullptr || enumerate(&count, nullptr) != VK_SUCCESS)
@@ -799,20 +796,42 @@ namespace vkBasalt
         if (listed != VK_SUCCESS && listed != VK_INCOMPLETE)
             return std::nullopt;
         layers.resize(count);
-        return std::any_of(layers.begin(), layers.end(), [](const VkLayerProperties& layer) { return lsfgLayerName == layer.layerName; });
+        return std::any_of(layers.begin(), layers.end(), [&](const VkLayerProperties& properties) { return layer == properties.layerName; });
+    }
+
+    std::optional<bool> layerVisible(std::string_view layer)
+    {
+        void* loader = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_NOLOAD);
+        if (loader == nullptr)
+            return std::nullopt;
+        const std::optional<bool> listed =
+            layerListedBy(reinterpret_cast<PFN_vkEnumerateInstanceLayerProperties>(dlsym(loader, "vkEnumerateInstanceLayerProperties")), layer);
+        dlclose(loader);
+        return listed;
+    }
+
+    bool frameGenerationLayerLoaded()
+    {
+        static const bool loaded = libraryMapped(lsfgLayerLibrary);
+        return loaded;
+    }
+
+    std::optional<bool> lsfgLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate)
+    {
+        return layerListedBy(enumerate, lsfgLayerName);
     }
 
     std::optional<bool> frameGenerationLayerVisible()
     {
-        static const std::optional<bool> visible = []() -> std::optional<bool> {
-            void* loader = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_NOLOAD);
-            if (loader == nullptr)
-                return std::nullopt;
-            const std::optional<bool> listed =
-                lsfgLayerListedBy(reinterpret_cast<PFN_vkEnumerateInstanceLayerProperties>(dlsym(loader, "vkEnumerateInstanceLayerProperties")));
-            dlclose(loader);
-            return listed;
-        }();
+        static const std::optional<bool> visible = layerVisible(lsfgLayerName);
         return visible;
+    }
+
+    std::optional<std::string> frameGenerationLayerDisabledBy(FrameGenerationLayer layer)
+    {
+        const std::string variable = layer == FrameGenerationLayer::Mako ? "DISABLE_MAKO" : "DISABLE_LSFGVK";
+        if (std::getenv(variable.c_str()) == nullptr)
+            return std::nullopt;
+        return variable;
     }
 }
