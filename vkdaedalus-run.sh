@@ -43,7 +43,11 @@ if [ -n "${VKDAEDALUS_RUN+set}" ] && [ -n "${VKDAEDALUS_RUN_CALLER_DISABLED+set}
 fi
 
 export ENABLE_VKDAEDALUS=1
-export VK_ADD_IMPLICIT_LAYER_PATH="@order_layers@${VK_ADD_IMPLICIT_LAYER_PATH:+:$VK_ADD_IMPLICIT_LAYER_PATH}"
+if [ -n "${VK_IMPLICIT_LAYER_PATH+set}" ]; then
+  export VK_IMPLICIT_LAYER_PATH="@order_layers@${VK_IMPLICIT_LAYER_PATH:+:$VK_IMPLICIT_LAYER_PATH}"
+else
+  export VK_ADD_IMPLICIT_LAYER_PATH="@order_layers@${VK_ADD_IMPLICIT_LAYER_PATH:+:$VK_ADD_IMPLICIT_LAYER_PATH}"
+fi
 export VKDAEDALUS_RUN=1
 caller_disabled=""
 if [ -n "${DISABLE_LSFGVK+set}" ]; then

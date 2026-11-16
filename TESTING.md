@@ -98,7 +98,8 @@ runs vkcube under it: started with vkdaedalus-run for a profile running MAKO,
 with the effects before and after it, the game must map MAKO's library and no
 lsfg-vk (the one named with `--lsfg-vk`, else a pass-through layer the loader
 would load in its place), run the MAKO profile vkdaedalus-run made before the
-start and get the profile's order in the loader's chain; with MAKO Scaler at
+start and get the profile's order in the loader's chain, also when started with
+`VK_IMPLICIT_LAYER_PATH` set, which makes the loader ignore `VK_ADD_IMPLICIT_LAYER_PATH`; with MAKO Scaler at
 1.5x the game must draw at its 1280x720 window divided by the factor while
 MAKO says it presents at the window's size, a Sharpness set on the Scaling card
 while it runs must reach MAKO's file and be rebuilt in place by MAKO, and

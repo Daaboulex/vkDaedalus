@@ -32,7 +32,9 @@ vkDaedalus, lsfg-vk and MAKO are implicit layers, and the loader fixes their ord
 Vulkan instance. So the order is chosen per profile and applies from the next start.
 
 `vkdaedalus-run` puts the folder `share/vkdaedalus/order-layers` first in `VK_ADD_IMPLICIT_LAYER_PATH`,
-which the loader reads before every other implicit layer folder. It holds four order layers, two for each frame
+which the loader reads before every other implicit layer folder. When `VK_IMPLICIT_LAYER_PATH` is set the loader
+reads only that and ignores `VK_ADD_IMPLICIT_LAYER_PATH`, so the folder goes first in `VK_IMPLICIT_LAYER_PATH`
+instead. It holds four order layers, two for each frame
 generation layer. Each is a meta layer that names vkDaedalus and that layer in one order, and the loader keeps the
 first placement it reads:
 

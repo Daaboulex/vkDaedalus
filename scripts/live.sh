@@ -788,9 +788,16 @@ game_maps() {
 }
 
 mako_loads_case() {
-    local icd="$1" dir="$2" order="$3" control="$4" log home chain top want why wrong=()
+    local icd="$1" dir="$2" order="$3" control="$4" how="${5:-added}" log home chain top want why wrong=() where
     local name="vkdaedalus-run loads MAKO alone, effects $order"
-    log="$dir/mako-run-$order.log" home="$dir/mako-run-$order-home"
+    local -a paths=(VK_ADD_IMPLICIT_LAYER_PATH="$MAKO_DIR:$dir/mako-lsfg-vk")
+    where="the folders added to the loader's search"
+    if [ "$how" = override ]; then
+        name+=", VK_IMPLICIT_LAYER_PATH set"
+        paths=(VK_IMPLICIT_LAYER_PATH="$MAKO_DIR:$dir/mako-lsfg-vk:$VKB_LAYER/share/vulkan/implicit_layer.d")
+        where="VK_IMPLICIT_LAYER_PATH naming MAKO's folder before the layer's, which makes the loader ignore VK_ADD_IMPLICIT_LAYER_PATH"
+    fi
+    log="$dir/mako-run-$order-$how.log" home="$dir/mako-run-$order-$how-home"
     fresh_home "$home" cas
     mkdir -p "$home/.config/vkdaedalus/profiles"
     printf 'frameGenerationLayer = mako\n' >"$home/.config/vkdaedalus/profiles/default.conf"
@@ -801,7 +808,7 @@ mako_loads_case() {
     fi
     background game_maps "$log" "$home"
     driver=$!
-    run "$log" "$home" "$icd" "$VALIDATION" 1 1 -- env VK_ADD_IMPLICIT_LAYER_PATH="$MAKO_DIR:$dir/mako-lsfg-vk" "$VKB_LAYER/bin/vkdaedalus-run" vkcube --c "$FRAMES" --wsi "$native_wsi"
+    run "$log" "$home" "$icd" "$VALIDATION" 1 1 -- env "${paths[@]}" "$VKB_LAYER/bin/vkdaedalus-run" vkcube --c "$FRAMES" --wsi "$native_wsi"
     driver_finished "game_maps"
     if ! why=$(mako_ran "$log"); then
         record FAIL "$name" "$why"
@@ -824,7 +831,7 @@ mako_loads_case() {
     if [ "${#wrong[@]}" -gt 0 ]; then
         record FAIL "$name" "$(printf '%s; ' "${wrong[@]}")"
     else
-        record PASS "$name" "with the game's profile naming MAKO as its frame generation layer and lsfg-vk installed beside it, the game mapped libmako-render.so and no lsfg-vk, ran MAKO's profile vkdaedalus default made before it started, and the loader's chain was $chain; validation clean against MAKO alone"
+        record PASS "$name" "with the game's profile naming MAKO as its frame generation layer, lsfg-vk installed beside it and the layers found through $where, the game mapped libmako-render.so and no lsfg-vk, ran MAKO's profile vkdaedalus default made before it started, and the loader's chain was $chain; validation clean against MAKO alone"
     fi
 }
 
@@ -994,6 +1001,7 @@ mako_cases() {
         record SKIP "DISABLE_MAKO in the launch options keeps MAKO out" "this build has no vkdaedalus-run (a plain meson build installs none)"
     else
         for order in before after; do mako_loads_case "$icd" "$dir" "$order" "$control"; done
+        mako_loads_case "$icd" "$dir" before "$control" override
         mako_live_case "$icd" "$dir"
         mako_kept_case "$icd" "$dir" "$control"
     fi
