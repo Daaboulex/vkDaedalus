@@ -103,7 +103,7 @@ namespace vkBasalt
     };
 
     using SegmentEffectBuilder = std::function<SegmentRows(
-        LogicalDevice* device, uint32_t gpu, size_t firstRow, size_t rows, const std::vector<VkImage>& slots, uint32_t imageCount)>;
+        LogicalDevice* device, uint32_t gpu, size_t firstRow, size_t rows, const std::vector<VkImage>& slots, uint32_t imageCount, const std::vector<VkImage>& target)>;
 
     VkDeviceSize sharedBufferBytes(VkExtent2D extent, uint32_t texelBytes);
 

@@ -678,7 +678,7 @@ namespace vkBasalt
             try
             {
                 const SegmentEffectBuilder buildRows = [&](LogicalDevice* device, uint32_t gpu, size_t firstRow, size_t rows,
-                                                           const std::vector<VkImage>& slots, uint32_t imageCount) {
+                                                           const std::vector<VkImage>& slots, uint32_t imageCount, const std::vector<VkImage>& target) {
                     segmentPools.push_back(std::make_shared<SharedReshadeTexturePool>(device));
                     const auto local = [&](size_t s) {
                         return std::vector<VkImage>(slots.begin() + imageCount * s, slots.begin() + imageCount * (s + 1));
@@ -686,7 +686,7 @@ namespace vkBasalt
                     const auto build = [&](size_t row, const std::vector<VkImage>& from, const std::vector<VkImage>& to) {
                         return buildRow(device, pLogicalDevice, pLogicalSwapchain, pConfig, effectStrings[row], from, to, segmentPools.back(), uniformStorages, gpu, "");
                     };
-                    BuiltRows<std::shared_ptr<Effect>> built = buildRowsSkippingDropped<std::shared_ptr<Effect>>(effectStrings, firstRow, rows, local, local(rows), build);
+                    BuiltRows<std::shared_ptr<Effect>> built = buildRowsSkippingDropped<std::shared_ptr<Effect>>(effectStrings, firstRow, rows, local, target, build);
                     dropped.insert(dropped.end(), built.dropped.begin(), built.dropped.end());
                     if (built.effects.empty() && rows > 0)
                         segmentEmptied = true;

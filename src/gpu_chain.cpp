@@ -268,14 +268,19 @@ namespace vkBasalt
                 else
                 {
                     segment.effects.push_back(std::make_shared<SharedCopyEffect>(&device, extent, slot(0), inBuffers, SharedCopyDirection::BufferToImage));
-                    SegmentRows built      = buildRows(&device, segment.gpu, segment.firstRow, segment.rows, segment.slots, count);
+                    const bool  intoSwapchain = last && device.supportsMutableFormat;
+                    SegmentRows built         = buildRows(&device, segment.gpu, segment.firstRow, segment.rows, segment.slots, count,
+                                                          intoSwapchain ? swapchainImages : slot(segment.rows));
                     segment.firstRowEffect = segment.effects.size();
                     segment.rowNames       = std::move(built.names);
                     for (auto& effect : built.effects)
                         segment.effects.push_back(std::move(effect));
                     if (last)
                     {
-                        segment.effects.push_back(std::make_shared<TransferEffect>(&device, extent, slot(segment.rows), swapchainImages));
+                        if (!intoSwapchain)
+                            segment.effects.push_back(std::make_shared<TransferEffect>(&device, extent, slot(segment.rows), swapchainImages));
+                        else if (segment.firstRowEffect == segment.effects.size())
+                            segment.effects.push_back(std::make_shared<TransferEffect>(&device, extent, slot(0), swapchainImages));
                     }
                     else
                     {
