@@ -26,25 +26,29 @@ has the overlay open. Releases still reach the game, so a key
 held when the overlay opened does not stick. An X11 game started without
 `vkdaedalus-run` gets a keyboard and pointer grab instead.
 
-## The order around lsfg-vk
+## The order around frame generation
 
-vkDaedalus and lsfg-vk are both implicit layers, and the loader fixes their order when the game
-creates its Vulkan instance. So the order is chosen per profile and applies from the next start.
+vkDaedalus, lsfg-vk and MAKO are implicit layers, and the loader fixes their order when the game creates its
+Vulkan instance. So the order is chosen per profile and applies from the next start.
 
 `vkdaedalus-run` puts the folder `share/vkdaedalus/order-layers` first in `VK_ADD_IMPLICIT_LAYER_PATH`,
-which the loader reads before every other implicit layer folder. It holds two order layers. Each is a
-meta layer that names the two layers in one order, and the loader keeps the first placement it reads:
+which the loader reads before every other implicit layer folder. It holds four order layers, two for each frame
+generation layer. Each is a meta layer that names vkDaedalus and that layer in one order, and the loader keeps the
+first placement it reads:
 
 | Order layer | Nearest the game | Active |
 |---|---|---|
-| `VK_LAYER_DAABOULEX_vkdaedalus_before_lsfgvk` | vkDaedalus: effects run on the game's own frames, and lsfg-vk builds the frames between from them | by default |
+| `VK_LAYER_DAABOULEX_vkdaedalus_before_lsfgvk` | vkDaedalus: effects run on the game's own frames, and lsfg-vk builds the frames between from them | with `VKDAEDALUS_RUN_FRAME_GENERATION_LAYER=lsfg-vk`, unless `VKDAEDALUS_AFTER_LSFGVK=1` |
 | `VK_LAYER_DAABOULEX_lsfgvk_before_vkdaedalus` | lsfg-vk: effects run on every frame shown | with `VKDAEDALUS_AFTER_LSFGVK=1` |
+| `VK_LAYER_DAABOULEX_vkdaedalus_before_mako` | vkDaedalus: effects run on the game's own frames, and MAKO builds the frames between from them | with `VKDAEDALUS_RUN_FRAME_GENERATION_LAYER=mako`, unless `VKDAEDALUS_AFTER_MAKO=1` |
+| `VK_LAYER_DAABOULEX_mako_before_vkdaedalus` | MAKO: effects run on every frame shown | with `VKDAEDALUS_AFTER_MAKO=1` |
 
-Before the game starts, `vkdaedalus-run` clears any `VKDAEDALUS_AFTER_LSFGVK` it inherited, reads the
-game's profile and sets the variable when the profile asks for effects after frame generation. A game
-started with `ENABLE_VKDAEDALUS=1` alone reads no order layer, so the loader places the two layers in
-the order it finds their files. The Performance card's lsfg-vk line shows the order this run got, read
-from the layers below vkDaedalus.
+Before the game starts, `vkdaedalus-run` clears the order variables it inherited, reads the game's profile, names
+the profile's layer in `VKDAEDALUS_RUN_FRAME_GENERATION_LAYER` and sets that layer's after variable when the profile
+asks for effects after frame generation, so exactly one order layer is on. It keeps the other layer out with its
+`DISABLE_` variable and enables MAKO with `ENABLE_MAKO=1`. A game started with `ENABLE_VKDAEDALUS=1` alone reads no
+order layer, so the loader places the layers in the order it finds their files. The Performance card's Order line
+shows the order this run got, read from the layers below vkDaedalus.
 
 ## A second GPU
 

@@ -21,7 +21,7 @@ than 16384 times in 10 seconds keeps its latest 16384, and the page then gives t
 
 For n intervals t1 .. tn, in milliseconds:
 
-- window = t1 + ... + tn, the time the statistics cover;
+- window = the sum of t1 .. tn, the time the statistics cover;
 - average = window / n;
 - FPS = 1000 / average, which is n frames over the window, not the mean of per-frame FPS;
 - min and max are the shortest and longest interval;
@@ -46,6 +46,12 @@ that rate times the multiplier, estimated, since lsfg-vk adds multiplier - 1 fra
 real ones. With its effects after frame generation it sees every frame shown: that FPS is measured,
 and the game's own rate is it divided by the multiplier, estimated. At multiplier 1, or without
 lsfg-vk in the game, both are the measured rate.
+
+MAKO counts the same way at a fixed multiplier. In Adaptive it changes how many frames it shows per
+real frame as it goes, so only the rate the layer times is given, the game's own with the effects
+before frame generation and the frames shown with the effects after it, beside the target: the FPS
+MAKO aims at, or the display's refresh, which MAKO takes from gamescope and replaces with that FPS
+while gamescope reports none.
 
 ```example
 rates: 60.00 FPS timed, multiplier 3, effects before

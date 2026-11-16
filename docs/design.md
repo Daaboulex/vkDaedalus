@@ -32,6 +32,8 @@ check's message or a test already says is not repeated here.
 - lsfg-vk's source is under a Creative Commons licence that allows no derivatives and no commercial
   use. One check compiles it unmodified into a test probe. It is never linked into the layer and
   never shipped.
+- MAKO's source, under the GPL, is pinned at a release only so that one check compiles MAKO's own
+  file reader unmodified into a test probe. It is never linked into the layer and never shipped.
 - The ReShade compiler carries the patches in `subprojects/packagefiles/reshade/`, applied by the Nix
   build and the meson build alike. The file list is the record.
 - A ReShade patch that upstream absorbs stops applying and names itself.
@@ -143,11 +145,32 @@ check's message or a test already says is not repeated here.
 ## Frame generation
 
 - lsfg-vk stays a layer of its own. Its licence allows no derivatives, so its core is not linked in.
-- The overlay edits the one file lsfg-vk and `lsfg-vk-ui` read, by lsfg-vk's own rules. One file has
-  two editors, and no second copy of the settings exists.
+- MAKO stays a layer of its own too, and everything it exposes is driven from the overlay, as
+  lsfg-vk is. Its Qt app, `mako-cli` and the Decky plugin stay optional.
+- The overlay edits the one file each layer and its own programs read, by the layer's own rules. One
+  file has two editors, and no second copy of the settings exists.
 - Frame generation works the first time, with nothing configured by hand.
-- Installed means the game's loader lists lsfg-vk. The loader also lists a manifest that is disabled
-  or whose library is missing, and the game still runs, so loaded is read from the libraries the
-  process has mapped.
+- Installed means the game's loader lists the layer. The loader also lists a manifest that is
+  disabled or whose library is missing, and the game still runs, so loaded is read from the
+  libraries the process has mapped.
+- One frame generation layer per game: two in one chain would each generate frames from the other's.
+  The choice lives in the vkDaedalus profile, and `vkdaedalus-run` loads that layer and keeps the
+  other out with its `DISABLE_` variable.
+- A new profile runs lsfg-vk when both are installed, so nothing changes for anyone until they pick
+  MAKO.
+- Exactly one order layer is on in a game started with `vkdaedalus-run`. The two that put
+  vkDaedalus first are keyed on the layer `vkdaedalus-run` names, never on a `DISABLE_` variable:
+  the launch options can set those too, and `DISABLE_MAKO` from them once turned on the lsfg-vk order
+  layer beside MAKO's.
+- A `DISABLE_` variable does not say who set it, so `vkdaedalus-run` records the ones the game was
+  started with before it sets its own. Only those are named as the reason a layer is out; one it set
+  for the other layer leaves the profile's new layer to the next launch.
+- `mako-launch` is not used: it replaces `VK_IMPLICIT_LAYER_PATH`, which drops vkDaedalus.
+  `vkdaedalus-run` sets the one variable of it MAKO needs, `ENABLE_MAKO=1`.
+- MAKO generates frames only on the game's GPU, so the card offers no GPU and never writes MAKO's
+  `gpu` key; it offers to clear one that names another GPU.
+- MAKO's power sets are read by MAKO's own rule from `/sys/class/power_supply`, the same check
+  comparing it with MAKO's code, and the card names them by what MAKO switches on, plugged in or on
+  battery, not docked or handheld.
 - The loader keeps a layer's first placement and reads the files of one folder in no set order. So
   the default order layer turns itself off when the other order is asked for.

@@ -8,7 +8,8 @@
 
 A Vulkan post-processing layer with an in-game overlay: add, tune and reorder ReShade and built-in
 effects while the game runs, on X11 and Wayland, natively or under Wine and Proton. It also switches
-lsfg-vk frame generation per game, runs effects on a second GPU and shows what it adds to each frame.
+lsfg-vk or MAKO frame generation per game, runs effects on a second GPU and shows what it adds to
+each frame.
 
 In Steam, set a game's launch options to `vkdaedalus-run %command%`, start the game and press `End`.
 
@@ -43,8 +44,9 @@ AMD Radeon RX 9070 XT as its second GPU (2026-10-25).
   `.exe` under Wine and Proton), runs one, and `none` keeps the layer out of a program.
 - **Shader manager**: point it at shader packs; it finds their `Shaders/` and
   `Textures/` folders and test-compiles every shader.
-- **Frame generation** through lsfg-vk, switched and tuned per game from the
-  overlay, with effects before or after it per game.
+- **Frame generation** through lsfg-vk or MAKO, the layer picked, switched and
+  tuned per game from the overlay, with effects before or after it per game,
+  and MAKO's scaling.
 - **Multi-GPU offload**: effects can run on another GPU; the GPUs page also
   shows every GPU's usage and memory.
 - **Performance card**: frame statistics and what vkDaedalus adds to a frame, an
@@ -123,7 +125,7 @@ nixpkgs.overlays = [ inputs.vkdaedalus.overlays.default ];
 | [Configuration](docs/configuration.md) | every file vkDaedalus keeps and who writes it |
 | [Environment variables](docs/environment.md) | every variable it reads |
 | [ReShade shaders](docs/shaders.md) | shader packs, what runs, the compiled effects cache |
-| [Frame generation](docs/frame-generation.md) | lsfg-vk from the overlay, effects before or after it |
+| [Frame generation](docs/frame-generation.md) | lsfg-vk or MAKO from the overlay, effects before or after it, MAKO's scaling |
 | [Run effects on a second GPU](docs/second-gpu.md) | moving rows to another GPU and its limits |
 | [Safe Anti-Cheat](docs/safe-anti-cheat.md) | what it turns off and what it cannot do |
 | [Limitations](docs/limitations.md) | known limits and what applies only at the next start |

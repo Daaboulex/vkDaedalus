@@ -18,8 +18,18 @@
   and the top bar says so.
 - Intel GPU usage is estimated from the clock ratio.
 - NVIDIA usage needs `libnvidia-ml.so.1` (`nvidia-utils`).
-- Upscaling is absent on purpose: the layer receives a frame already drawn at full size, so there is
-  nothing to upscale from. Use gamescope's `-F fsr` or Proton's FSR instead.
+- Upscaling is absent from the layer on purpose: it receives a frame already drawn at full size, so
+  there is nothing to upscale from. Use MAKO's Scaling in a profile that runs MAKO, gamescope's
+  `-F fsr` or Proton's FSR instead.
+- MAKO FG, MAKO's own frame generation model, is published for x86-64 only. Elsewhere MAKO generates
+  frames only with the Lossless Scaling model and `Lossless.dll`, and scales either way.
+- Whether MAKO FG is installed is read beside the MAKO library the game loaded, so in a game started
+  without MAKO the card cannot tell and does not say it is missing.
+- GPU headroom is offered only on an AMD GPU: MAKO reads it from AMD's `gpu_busy_percent`.
+- No live lane runs MAKO on an HDR swapchain, so HDR quality's effect is not proven live. MAKO hands
+  an HDR swapchain's colour space to a shader layer below it through a device function vkDaedalus
+  does not export; which colour space the effects see in an HDR game with the effects before MAKO is
+  an open question.
 
 ## What changes only at the next start
 
@@ -27,7 +37,9 @@ Everything else in the overlay applies while the game runs: effects on and off, 
 reordering effects, parameters, profiles, Safe Anti-Cheat, moving a row to a GPU the profile listed at
 start, keys and the overlay's own settings. Frame generation's key and its On switch, the multiplier,
 flow scale, performance mode, colour space and transfer function also apply live: lsfg-vk reloads its
-file and the game rebuilds its swapchain.
+file and the game rebuilds its swapchain. MAKO's Live, Pacing and Output groups and its Scaling method
+and sharpness apply live as MAKO reads its file; its scaling factor and supersampling apply when the
+game rebuilds its swapchain.
 
 The controls below are saved at once and marked with the restart icon until a start uses them.
 
@@ -37,6 +49,8 @@ The controls below are saved at once and marked with the restart icon until a st
 | A profile switch, rename or new list of games for frame generation | lsfg-vk takes its profile when the game starts and finds it again by name on a reload. | None | live lane ui: "frame generation follows the profile" |
 | Force vsync (FIFO), Keep swapchain image count | lsfg-vk reads them when it builds its swapchain, and its reload copies only the multiplier, flow scale, performance mode, colour space and transfer function (lsfg-vk-layer/src/hooks.cpp, Layer::update). | None | live lane ui: "Frame generation: Force vsync (FIFO) waits for the next start" and the same for Keep swapchain image count |
 | Half precision, lsfg-vk.dll | lsfg-vk reads them once, when it starts its own Vulkan instance. | None | live lane ui: "Frame generation: Half precision waits for the next start", "Frame generation: Half precision applies at the next start" |
+| MAKO's Ready at start, model, Ultra performance, Scaling on, Keep swapchain image count, Mailbox compatibility, half precision and `Lossless.dll` | MAKO reads them when the game starts and keeps them for the process; it logs a change to one as waiting for a restart. | None | live lane ui: "MAKO: Model waits for the next start", "MAKO: Ready at start waits for the next start", "MAKO: Mailbox compatibility waits for the next start", "MAKO: Half precision waits for the next start", "MAKO: Lossless.dll waits for the next start", "Scaling: On waits for the next start" |
+| The frame generation layer of a profile | `vkdaedalus-run` loads the profile's layer alone when the game starts, and the loader fixes the layers then. | None | live lane ui: "frame generation, the layer switched in the run"; check run-loads-only-the-profiles-layer |
 | Frame generation in a game started without lsfg-vk | A layer cannot join an instance that already exists. When lsfg-vk is installed and its DLL is found, vkdaedalus-run adds a 1x profile, so lsfg-vk loads in every game it starts. | Start the game through vkdaedalus-run | live lane ui: "vkdaedalus-run readies lsfg-vk" |
 | Depth capture | The layer chooses its image hooks when the game asks for its device functions. | None | live lane ui: "Settings: Depth capture waits for the next start", "Settings: depth capture runs from the next start" |
 | A GPU listed after the game's device was made | The four sharing extensions have to be on the game's device when it is created. | List the GPU in the profile before the game starts | live lane offload: "a GPU listed mid-game is used from the next start"; meson test gpu-assignment |

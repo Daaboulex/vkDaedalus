@@ -39,7 +39,11 @@ A profile holds effects with their values, and these lines:
 ```ini
 gpus = 10de:21c4,1002:13c0
 effectsAfterFrameGeneration = false
+frameGenerationLayer = mako
 ```
+
+`frameGenerationLayer` is `lsfg-vk` or `mako`, the frame generation layer `vkdaedalus-run` loads for the games that run
+the profile. A profile without it runs lsfg-vk when both are installed and the one installed when only one is.
 
 A program's own file holds what belongs to the game, whichever profile it runs:
 
