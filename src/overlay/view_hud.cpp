@@ -20,19 +20,20 @@ namespace vkBasalt
     void ImGuiOverlay::renderHud()
     {
         ImGuiIO&          io     = ImGui::GetIO();
-        const FrameLayout layout = frameLayout(io.DisplaySize.x, io.DisplaySize.y, desktopScale().scale);
-        const float       s      = layout.scale;
+        const float       s      = frameScale(io.DisplaySize.x, io.DisplaySize.y, desktopScale().scale);
         applyFrameScale(s);
         ui::beginFrame(fonts);
         const OverlayPalette&         palette    = activePalette();
         const std::vector<HudItem>    items      = *hudItemsFrom(settingsManager.getHudItems());
-        const std::optional<uint32_t> multiplier = std::find(items.begin(), items.end(), HudItem::Fps) != items.end() ? frameGenerationMultiplierHere() : std::nullopt;
-        const bool                    after      = multiplier && effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace);
+        const bool                          fps        = std::find(items.begin(), items.end(), HudItem::Fps) != items.end();
+        const std::optional<uint32_t>       multiplier = fps ? frameGenerationMultiplierHere() : std::nullopt;
+        const std::optional<AdaptiveTarget> adaptive   = fps ? frameGenerationAdaptiveHere() : std::nullopt;
+        const bool                          after      = (multiplier || adaptive) && effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace);
         const std::optional<double>   effects    = latency.effectTimingOn && latency.effectsOn && latency.effectsSpanMilliseconds
                                                        ? std::optional<double>(*latency.effectsSpanMilliseconds)
                                                        : std::nullopt;
         const std::vector<std::string> lines =
-            hudLines(items, frameStats(latency.lastSecondMs), frameStats(latency.lastTenSecondsMs), multiplier, after, effects);
+            hudLines(items, frameStats(latency.lastSecondMs), frameStats(latency.lastTenSecondsMs), multiplier, adaptive, after, effects);
         if (lines.empty())
             return;
         if (!hudLogged)

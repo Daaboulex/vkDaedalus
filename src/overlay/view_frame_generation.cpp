@@ -18,6 +18,7 @@
 #include "latency_stats.hpp"
 #include "overlay/desktop_scale.hpp"
 #include "overlay/frame_draw.hpp"
+#include "overlay/frame_generation_rows.hpp"
 #include "overlay/ui_map.hpp"
 #include "overlay/widgets.hpp"
 
@@ -52,23 +53,6 @@ namespace vkBasalt
                 ui::endCombo();
             }
             return chosen;
-        }
-
-        std::optional<std::filesystem::file_time_type> writeTimeOf(const std::string& path)
-        {
-            std::error_code unreadable;
-            const auto      written = std::filesystem::last_write_time(path, unreadable);
-            if (unreadable)
-                return std::nullopt;
-            return written;
-        }
-
-        std::string joined(const std::vector<std::string>& names)
-        {
-            std::string out;
-            for (const std::string& name : names)
-                out += (out.empty() ? "" : ", ") + name;
-            return out;
         }
     }
 
@@ -123,6 +107,12 @@ namespace vkBasalt
         if (!syncLsfgActiveIn(path, ConfigSerializer::profileUsers(), problem))
             Logger::warn("lsfg-vk's file " + path + " keeps its game lists, so frame generation may follow another profile: " + problem);
         refreshFrameGenerationFile(true);
+        const std::string makoPath = makoConfigPath();
+        if (!renamedFrom.empty() && !renameMakoProfile(makoPath, frameGenerationProfileNameOf(renamedFrom), frameGenerationProfileNameOf(activeProfileName), problem))
+            Logger::warn("MAKO's profile " + frameGenerationProfileNameOf(renamedFrom) + " keeps its name, so frame generation stays with the old name: " + problem);
+        if (!syncMakoActiveIn(makoPath, ConfigSerializer::profileUsers(), problem))
+            Logger::warn("MAKO's file " + makoPath + " keeps its game lists, so frame generation may follow another profile: " + problem);
+        refreshMakoFile(true);
     }
 
     std::vector<std::string> ImGuiOverlay::frameGenerationGlobalsWaiting() const
@@ -180,10 +170,61 @@ namespace vkBasalt
             return false;
         if (frameOrderProfilePath != activeProfilePath)
         {
+            const ProfileSettings saved = ConfigSerializer::loadProfileSettings(activeProfilePath);
             frameOrderProfilePath       = activeProfilePath;
-            effectsAfterFrameGeneration = ConfigSerializer::loadProfileSettings(activeProfilePath).effectsAfterFrameGeneration.value_or(false);
+            effectsAfterFrameGeneration = saved.effectsAfterFrameGeneration.value_or(false);
+            frameGenerationLayerChoice  = saved.frameGenerationLayer;
         }
         return effectsAfterFrameGeneration;
+    }
+
+    bool ImGuiOverlay::frameGenerationLayerInstalled(FrameGenerationLayer layer) const
+    {
+        if (layer == FrameGenerationLayer::Mako)
+            return makoLayerLoaded() || makoLayerVisible() == true;
+        return frameGenerationLayerLoaded() || frameGenerationLayerVisible() == true;
+    }
+
+    FrameGenerationLayer ImGuiOverlay::profileFrameGenerationLayer()
+    {
+        effectsAfterFrameGenerationSaved();
+        if (frameOrderProfilePath == activeProfilePath && frameGenerationLayerChoice)
+            return *frameGenerationLayerChoice;
+        return defaultFrameGenerationLayer(frameGenerationLayerInstalled(FrameGenerationLayer::LsfgVk), frameGenerationLayerInstalled(FrameGenerationLayer::Mako));
+    }
+
+    std::string ImGuiOverlay::frameGenerationBlocker(FrameGenerationLayer layer, bool& notInstalled)
+    {
+        return layer == FrameGenerationLayer::Mako ? makoBlocker(notInstalled) : frameGenerationBlocker(notInstalled);
+    }
+
+    ImGuiOverlay::FrameGenerationState ImGuiOverlay::frameGenerationState()
+    {
+        FrameGenerationState fg;
+        fg.layer   = profileFrameGenerationLayer();
+        fg.blocker = frameGenerationBlocker(fg.layer, fg.notInstalled);
+        if (fg.notInstalled && !frameGenerationLayerInstalled(FrameGenerationLayer::LsfgVk) && !frameGenerationLayerInstalled(FrameGenerationLayer::Mako))
+            fg.blocker = "Neither lsfg-vk nor MAKO is installed where this game's Vulkan loader looks for layers.";
+        if (!fg.blocker.empty())
+            return fg;
+        if (fg.layer == FrameGenerationLayer::Mako)
+        {
+            const MakoProfile* inUse = makoProfileInUse();
+            if (!inUse)
+                return fg;
+            const MakoSettings& set = makoSettingsFor(*inUse, makoEditedSet(*inUse));
+            fg.on                   = set.frameGenerationEnabled;
+            fg.live                 = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).frameGenerationProvisioned;
+            fg.unavailable          = makoModelMissing(set.frameGenerationModel);
+            return fg;
+        }
+        fg.on   = generatesFrames(frameGenerationProfileInUse());
+        fg.live = frameGenerationLiveHere();
+        if (!frameGenerationDll)
+            frameGenerationDll = lsfgDllStatus(frameGenerationFile->global);
+        if (!frameGenerationDll->found && !frameGenerationDll->inSteamLibrary)
+            fg.unavailable = "lsfg-vk.dll is in no Steam library";
+        return fg;
     }
 
     std::string ImGuiOverlay::frameGenerationBlocker(bool& notInstalled)
@@ -200,7 +241,7 @@ namespace vkBasalt
         }
         if (lsfgSettingsFromEnvironment())
             return "LSFGVK_ENV is set, so lsfg-vk reads its settings from the game's launch options, not its file.";
-        if (!loaded && std::getenv("DISABLE_LSFGVK") != nullptr)
+        if (!loaded && frameGenerationLayerDisabledBy(FrameGenerationLayer::LsfgVk))
             return "DISABLE_LSFGVK in the game's launch options keeps lsfg-vk out of it.";
         if (!readFrameGenerationOnce())
             return "lsfg-vk refuses its file " + lsfgConfigPath() + ": " + frameGenerationFileProblem + ".";
@@ -261,13 +302,33 @@ namespace vkBasalt
     void ImGuiOverlay::toggleFrameGeneration()
     {
         refreshFrameGenerationFile(false);
-        bool              notInstalled = false;
-        const std::string blocker      = frameGenerationBlocker(notInstalled);
+        refreshMakoFile(false);
+        const FrameGenerationLayer layer        = profileFrameGenerationLayer();
+        bool                       notInstalled = false;
+        const std::string          blocker      = frameGenerationBlocker(layer, notInstalled);
         shortNoticeStart               = std::chrono::steady_clock::now();
         shortNoticeProblem             = !blocker.empty();
         if (!blocker.empty())
         {
             shortNoticeLine = "unavailable: " + blocker;
+            Logger::info("frame generation key: " + shortNoticeLine);
+            return;
+        }
+        if (layer == FrameGenerationLayer::Mako)
+        {
+            const FrameGenerationState before = frameGenerationState();
+            switchMako(!before.on);
+            const FrameGenerationState after = frameGenerationState();
+            shortNoticeProblem               = !makoProblem.empty();
+            const MakoProfile* inUse         = makoProfileInUse();
+            const MakoSettings* set          = inUse ? &makoSettingsFor(*inUse, makoEditedSet(*inUse)) : nullptr;
+            if (shortNoticeProblem)
+                shortNoticeLine = "not changed: " + makoProblem;
+            else if (after.on && set)
+                shortNoticeLine = "MAKO " + (set->adaptive ? std::string("adaptive") : std::to_string(set->multiplier) + "x") + ", on"
+                                  + (after.live ? "" : ", from the next launch");
+            else
+                shortNoticeLine = "off";
             Logger::info("frame generation key: " + shortNoticeLine);
             return;
         }
@@ -283,7 +344,7 @@ namespace vkBasalt
         Logger::info("frame generation key: " + shortNoticeLine);
     }
 
-    void ImGuiOverlay::renderPipelineStrip()
+    void ImGuiOverlay::renderPipelineStrip(FrameGenerationLayer layer)
     {
         const OverlayPalette& palette = activePalette();
         if (frameGenerationGpuName.empty())
@@ -298,9 +359,16 @@ namespace vkBasalt
         for (size_t i = 0; i < active.size(); i++)
             if (!pEffectRegistry->getEffectOnDevice(active[i], pLogicalDevice).gpuRefusal.empty())
                 effectGpus[i] = gameGpu;
-        const std::optional<uint32_t>   multiplier = frameGenerationMultiplierHere();
-        const std::vector<PipelineStep> steps =
-            pipelineSteps(pLogicalDevice->frameGenerationPlace, multiplier.has_value(), state.effectsEnabled ? effectGpus : std::vector<uint32_t>{});
+        const std::optional<uint32_t> multiplier = frameGenerationMultiplierHere();
+        const std::string             running(loadedFrameGenerationLayerName());
+        const bool                    makoHere   = makoLayerLoaded() && readMakoOnce() && makoLiveHere() && makoAtStart;
+        const MakoSettings*           makoNow    = makoHere ? &makoSettingsFor(*makoProfileInUse(), powerSupplies.source) : nullptr;
+        const bool                    adaptive   = frameGenerationAdaptiveHere().has_value();
+        std::vector<PipelineStep>     steps      = pipelineSteps(pLogicalDevice->frameGenerationPlace, multiplier.has_value() || adaptive,
+                                                                 state.effectsEnabled ? effectGpus : std::vector<uint32_t>{});
+        if (makoNow && makoSettingsFor(*makoAtStart, powerSupplies.source).scalingEnabled)
+            steps.insert(steps.end() - 1, PipelineStep{"Scaling", {gameGpu}});
+        const std::optional<std::string> elsewhere = layer == FrameGenerationLayer::Mako ? makoGpuElsewhere() : std::nullopt;
         ScaleInputs outputs;
         outputs.waylandOutputs              = desktopOutputs;
         outputs.swapchainWidth              = currentWidth;
@@ -322,7 +390,9 @@ namespace vkBasalt
         {
             const PipelineStep& step       = steps[i];
             const bool          generation = step.what == "Frame generation";
-            const std::string   name       = generation ? "lsfg-vk " + std::to_string(*multiplier) + "x" : step.what;
+            const std::string   name       = generation               ? running + (multiplier ? " " + std::to_string(*multiplier) + "x" : " adaptive")
+                                             : step.what == "Scaling" ? shownChoice(makoScalingMethods, makoNow->scalingMethod)
+                                                                      : step.what;
             std::string         where      = "GPU ";
             for (size_t g = 0; g < step.gpus.size(); g++)
                 where += (g ? " and " : "") + std::to_string(step.gpus[g]);
@@ -346,18 +416,35 @@ namespace vkBasalt
             const float  w     = std::max(ui::px(96.0f), std::max(named.x, sub.x) + 2.0f * padX);
             const float  textY = at.y + (h - named.y - sub.y) * 0.5f;
             draw->AddRectFilled(at, ImVec2(at.x + w, at.y + h), ImGui::GetColorU32(generation ? ui::mix(palette.row, palette.accent, 0.16f) : palette.row), ui::px(ui::Size::surface));
+            if (generation && elsewhere && running == "MAKO")
+                draw->AddRect(at, ImVec2(at.x + w, at.y + h), ImGui::GetColorU32(palette.warn), ui::px(ui::Size::surface), ui::px(1.5f));
             draw->AddText(fonts.bold, title, ImVec2(at.x + padX, textY), ImGui::GetColorU32(generation ? palette.accent : palette.text), name.c_str());
             draw->AddText(fonts.body, under, ImVec2(at.x + padX, textY + named.y), ImGui::GetColorU32(palette.faint), where.c_str());
             ImGui::ItemSize(ImVec2(w, h));
             const std::string item = name + " step";
             UiMap::nameNextItem(item.c_str());
             ImGui::ItemAdd(ImRect(at, ImVec2(at.x + w, at.y + h)), ImGui::GetID(item.c_str()));
-            if (generation)
+            if (generation && running == "MAKO")
+                ImGui::SetItemTooltip("%s", ("MAKO generates frames on " + frameGenerationGpuName + ", the GPU the game renders on: MAKO does not support\n"
+                                             "frame generation on another GPU than the game's.")
+                                                .c_str());
+            else if (step.what == "Scaling")
+                ImGui::SetItemTooltip("MAKO scales each frame on the game's GPU");
+            else if (generation)
                 ImGui::SetItemTooltip("%s", ("lsfg-vk 2 generates frames on " + frameGenerationGpuName + ", the GPU the game renders on: it hands each frame to its pipeline as memory\n"
                                              "only that GPU and its driver can open, and it has no setting for another GPU.")
                                                 .c_str());
             else if (step.what == "Display" && refresh)
                 ImGui::SetItemTooltip("The current mode of the display this swapchain fills, as the compositor reports it");
+        }
+        if (elsewhere)
+        {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(palette.warn, "%s", elsewhere->c_str());
+            ImGui::SameLine(0.0f, ui::px(ui::Size::groupGap));
+            UiMap::nameNextItem("Use the game's GPU");
+            if (ui::lineButton("Use the game's GPU"))
+                useGamesGpuInMako();
         }
     }
 
@@ -365,18 +452,30 @@ namespace vkBasalt
     {
         const OverlayPalette& palette = activePalette();
         refreshFrameGenerationFile(false);
+        refreshMakoFile(false);
 
-        bool              notInstalled = false;
-        const std::string blocker      = frameGenerationBlocker(notInstalled);
+        const FrameGenerationState fg      = frameGenerationState();
+        const bool                 mako    = fg.layer == FrameGenerationLayer::Mako;
+        const std::string          name    = mako ? "MAKO" : "lsfg-vk";
+        const std::string&         blocker = fg.blocker;
+        const bool                 loaded  = mako ? makoLayerLoaded() : frameGenerationLayerLoaded();
+        bool                       on      = blocker.empty() && fg.on;
 
-        const FrameGenerationProfile* inUse = blocker.empty() ? frameGenerationProfileInUse() : nullptr;
-        const bool                    live  = blocker.empty() && frameGenerationLiveHere();
-        bool                          on    = blocker.empty() && generatesFrames(inUse);
+        const FrameGenerationProfile* inUse     = !mako && blocker.empty() ? frameGenerationProfileInUse() : nullptr;
+        const MakoProfile*            makoInUse = mako && blocker.empty() ? makoProfileInUse() : nullptr;
+        const MakoSettings*           makoSet   = makoInUse ? &makoSettingsFor(*makoInUse, makoEditedSet(*makoInUse)) : nullptr;
+        const std::string             amount    = makoSet ? (makoSet->adaptive ? std::string("Adaptive") : std::to_string(makoSet->multiplier) + "x")
+                                                          : std::to_string(inUse ? inUse->multiplier : lowestOnMultiplier) + "x";
 
         const bool               thisRunAfter = effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace);
         std::vector<std::string> waiting;
         if (blocker.empty() && effectsAfterFrameGenerationSaved() != thisRunAfter)
             waiting.push_back("Effects after frame generation");
+        if ((makoLayerLoaded() && !mako) || (frameGenerationLayerLoaded() && mako))
+            waiting.push_back("Layer");
+        if (mako && blocker.empty())
+            for (const std::string& changed : makoWaiting(makoInUse))
+                waiting.push_back(changed);
         if (inUse && frameGenerationAtStart && frameGenerationAtStart->name == inUse->name)
         {
             if (inUse->overridePresentMode != frameGenerationAtStart->overridePresentMode)
@@ -384,31 +483,40 @@ namespace vkBasalt
             if (inUse->preserveSwapchainImageCount != frameGenerationAtStart->preserveSwapchainImageCount)
                 waiting.push_back("Keep swapchain image count");
         }
-        if (blocker.empty())
+        if (!mako && blocker.empty())
             for (const std::string& global : frameGenerationGlobalsWaiting())
                 waiting.push_back(global);
 
+        const std::string readyFromFirstLaunch = startedWithVkdaedalusRun() ? "" : "\nA game started with vkdaedalus-run has " + name + " ready from its first launch.";
         ui::heading("Frame generation");
         if (inUse)
             ImGui::SetItemTooltip("Kept in lsfg-vk's profile '%s', used in: %s", inUse->name.c_str(), joined(inUse->activeIn).c_str());
+        else if (makoInUse)
+            ImGui::SetItemTooltip("Kept in MAKO's profile '%s', used in: %s", makoInUse->name.c_str(), joined(makoInUse->activeIn).c_str());
         ImGui::SameLine();
         ImGui::AlignTextToFramePadding();
         if (!blocker.empty())
-            ImGui::TextColored(palette.faint, "%s", notInstalled ? "Not installed" : "Unavailable");
-        else if (!on && !frameGenerationLayerLoaded())
+            ImGui::TextColored(palette.faint, "%s", fg.notInstalled ? "Not installed" : "Unavailable");
+        else if (!on && !loaded)
         {
             ImGui::TextColored(palette.muted, "Off, not loaded");
-            ImGui::SetItemTooltip("lsfg-vk was not loaded when this game started, so On runs from the next launch.%s",
-                                  std::getenv("VKDAEDALUS_RUN") == nullptr ? "\nA game started with vkdaedalus-run has lsfg-vk ready from its first launch." : "");
+            ImGui::SetItemTooltip("%s was not loaded when this game started, so On runs from the next launch.%s", name.c_str(), readyFromFirstLaunch.c_str());
         }
         else if (!on)
             ImGui::TextColored(palette.muted, "Off");
-        else if (live)
-            ImGui::TextColored(palette.ok, "%ux, on", inUse->multiplier);
+        else if (mako && !fg.unavailable.empty())
+        {
+            ImGui::TextColored(palette.warn, "%s, needs a model", amount.c_str());
+            ImGui::SetItemTooltip("%s", fg.unavailable.c_str());
+        }
+        else if (fg.live)
+            ImGui::TextColored(palette.ok, "%s, on", amount.c_str());
         else
         {
-            ImGui::TextColored(palette.warn, "%ux, next launch", inUse ? inUse->multiplier : lowestOnMultiplier);
-            ImGui::SetItemTooltip("lsfg-vk was not loaded when this game started");
+            ImGui::TextColored(palette.warn, "%s, next launch", amount.c_str());
+            ImGui::SetItemTooltip("%s", !loaded ? (name + " was not loaded when this game started").c_str()
+                                        : mako  ? "MAKO set up no frame generation when this game started: Ready at start was off, or MAKO ran another profile"
+                                                : "lsfg-vk was not loaded when this game started");
         }
         if (!waiting.empty())
         {
@@ -418,23 +526,44 @@ namespace vkBasalt
             ui::chip(pending.c_str(), palette.warn, tip.c_str());
         }
 
-        ui::alignRight(ui::px(ui::Size::box) + ui::px(ui::Size::gap) + ImGui::CalcTextSize("On").x);
+        const bool  neither = !frameGenerationLayerInstalled(FrameGenerationLayer::LsfgVk) && !frameGenerationLayerInstalled(FrameGenerationLayer::Mako);
+        const float gap     = ui::px(ui::Size::gap);
+        const float layerW  = ImGui::CalcTextSize("Layer").x + 2.0f * gap + ui::buttonWidth("lsfg-vk", ui::Kind::Quiet) + ui::buttonWidth("MAKO", ui::Kind::Quiet)
+                             + ui::px(restartMarkGap + restartMarkSize) + ui::px(ui::Size::groupGap);
+        ui::alignRight((neither ? 0.0f : layerW) + ui::px(ui::Size::box) + gap + ImGui::CalcTextSize("On").x);
+        if (!neither)
+        {
+            renderLayerChoice(fg.layer);
+            ImGui::SameLine(0.0f, ui::px(ui::Size::groupGap));
+        }
         ImGui::BeginDisabled(!blocker.empty());
         const bool flipped = ui::checkbox("On###frameGeneration", &on);
         ImGui::EndDisabled();
-        if (notInstalled)
-            ImGui::SetItemTooltip("lsfg-vk is not installed");
+        const bool unprovisioned = mako && loaded && makoLiveHere() && makoAtStart && !makoSettingsFor(*makoAtStart, powerSupplies.source).frameGenerationProvisioned;
+        if (fg.notInstalled)
+            ImGui::SetItemTooltip("%s is not installed", name.c_str());
+        else if (blocker.empty() && unprovisioned)
+            ImGui::SetItemTooltip("Ready at start was off when this game started, so MAKO set up no frame generation:\nOn runs from the next launch.");
         else if (blocker.empty())
-            ImGui::SetItemTooltip("Adds generated frames, about one frame more input lag.\nOff keeps these settings in lsfg-vk's profile%s.%s", live ? ", so On is live again" : "",
-                                  std::getenv("VKDAEDALUS_RUN") == nullptr ? "\nA game started with vkdaedalus-run has lsfg-vk ready from its first launch." : "");
+            ImGui::SetItemTooltip("Adds generated frames, about one frame more input lag.\nOff keeps these settings in %s's profile%s.%s", name.c_str(),
+                                  fg.live ? ", so On is live again" : "", readyFromFirstLaunch.c_str());
 
+        if (neither)
+        {
+            ui::divider();
+            ui::errorText("lsfg-vk is not installed where this game's Vulkan loader looks for layers. It comes from lsfg-vk.dev.");
+            ui::errorText("MAKO is not installed where this game's Vulkan loader looks for layers. It comes from github.com/eugeniosegala/MAKO.");
+            ui::footer();
+            ui::note("No frame generation layer installed");
+            return;
+        }
         if (!blocker.empty())
         {
             ui::divider();
             ui::errorText(blocker.c_str());
             ui::footer();
-            if (notInstalled)
-                ui::note("lsfg-vk 2 not installed");
+            if (fg.notInstalled)
+                ui::note(mako ? "MAKO not installed" : "lsfg-vk 2 not installed");
             return;
         }
         if (frameGenerationGpuName.empty())
@@ -444,7 +573,64 @@ namespace vkBasalt
             frameGenerationGpuName = properties.deviceName;
         }
         ui::beginScrollArea("##framegenerationbody");
-        renderPipelineStrip();
+        renderPipelineStrip(fg.layer);
+        if (mako)
+            renderMakoBody(flipped, on, waiting);
+        else
+            renderLsfgBody(flipped, on, fg.live, waiting);
+    }
+
+    void ImGuiOverlay::renderLayerChoice(FrameGenerationLayer layer)
+    {
+        const OverlayPalette&      palette = activePalette();
+        const std::string          tip     = "The frame generation layer of the vkDaedalus profile " + activeProfileName
+                                + ". Read when a game starts: vkdaedalus-run loads this layer alone and keeps the other out.";
+        const std::optional<FrameGenerationLayer> running = makoLayerLoaded()             ? std::optional(FrameGenerationLayer::Mako)
+                                                            : frameGenerationLayerLoaded() ? std::optional(FrameGenerationLayer::LsfgVk)
+                                                                                           : std::nullopt;
+        ui::label("Layer");
+        ImGui::SetItemTooltip("%s", tip.c_str());
+        for (const auto& [choice, shown] : {std::pair{FrameGenerationLayer::LsfgVk, "lsfg-vk"}, std::pair{FrameGenerationLayer::Mako, "MAKO"}})
+        {
+            const std::string why = !frameGenerationLayerInstalled(choice) ? std::string(shown) + " is not installed where this game's Vulkan loader looks"
+                                    : activeProfilePath.empty()            ? std::string("This run reads a fixed config file, which keeps no frame generation layer")
+                                                                           : std::string();
+            const std::string item = std::string(shown) + "##Layer";
+            ImGui::SameLine(0.0f, ui::px(ui::Size::gap));
+            ImGui::BeginDisabled(!why.empty());
+            if (ui::tab(item.c_str(), layer == choice) && layer != choice)
+            {
+                frameGenerationLayerChoice = choice;
+                autoSaveProfile();
+                Logger::info(std::string("frame generation layer of profile ") + activeProfileName + " set to " + std::string(frameGenerationLayerName(choice)));
+            }
+            ImGui::EndDisabled();
+            ImGui::SetItemTooltip("%s", why.empty() ? tip.c_str() : why.c_str());
+        }
+        restartMark("Layer", running && *running != layer, palette);
+    }
+
+    void ImGuiOverlay::renderFrameOrderNote()
+    {
+        const OverlayPalette&            palette      = activePalette();
+        const bool                       thisRunAfter = effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace);
+        const bool                       after        = effectsAfterFrameGenerationSaved();
+        const std::optional<std::string> named        = programNamedByVkdaedalusRun();
+        if (after != thisRunAfter && !startedWithVkdaedalusRun())
+            ui::noteBox("Not started with vkdaedalus-run. Launch option: vkdaedalus-run %command%", palette.warn);
+        else if (after != thisRunAfter && named && activeGameName != *named)
+            ui::noteBox(("vkdaedalus-run named this game " + *named + " and vkDaedalus names it " + activeGameName + ", so the launcher reads another profile.").c_str(),
+                        palette.warn);
+        else if (after != thisRunAfter)
+            ui::noteBox(thisRunAfter ? "Effects after frame generation in this run, before in the profile" : "Effects before frame generation in this run, after in the profile",
+                        palette.warn);
+    }
+
+    void ImGuiOverlay::renderLsfgBody(bool flipped, bool on, bool live, const std::vector<std::string>& waiting)
+    {
+        const OverlayPalette&         palette      = activePalette();
+        const FrameGenerationProfile* inUse        = frameGenerationProfileInUse();
+        const bool                    thisRunAfter = effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace);
         if (on && live)
         {
             const FrameStats frames = frameStats(latency.lastSecondMs);
@@ -616,15 +802,7 @@ namespace vkBasalt
             ImGui::EndTable();
         }
 
-        const bool after = effectsAfterFrameGenerationSaved();
-        if (after != thisRunAfter && std::getenv("VKDAEDALUS_RUN") == nullptr)
-            ui::noteBox("Not started with vkdaedalus-run. Launch option: vkdaedalus-run %command%", palette.warn);
-        else if (const char* named = std::getenv("VKDAEDALUS_RUN_PROGRAM"); after != thisRunAfter && named != nullptr && activeGameName != named)
-            ui::noteBox(("vkdaedalus-run named this game " + std::string(named) + " and vkDaedalus names it " + activeGameName + ", so the launcher reads another profile.").c_str(),
-                        palette.warn);
-        else if (after != thisRunAfter)
-            ui::noteBox(thisRunAfter ? "Effects after frame generation in this run, before in the profile" : "Effects before frame generation in this run, after in the profile",
-                        palette.warn);
+        renderFrameOrderNote();
 
         if (held)
             frameGenerationDraft = tuned;

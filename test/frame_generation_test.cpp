@@ -383,18 +383,47 @@ int main(int argc, char** argv)
                "lsfg-vk.dll in a Steam library outside the home is found, where lsfg-vk itself does not look");
     }
 
-    unsetenv("DISABLE_LSFGVK");
-    unsetenv("DISABLE_MAKO");
+    for (const char* name : {"DISABLE_LSFGVK", "DISABLE_MAKO", "VKDAEDALUS_RUN", "VKDAEDALUS_RUN_FRAME_GENERATION_LAYER", "VKDAEDALUS_RUN_CALLER_DISABLED"})
+        unsetenv(name);
     expect(!frameGenerationLayerDisabledBy(FrameGenerationLayer::LsfgVk) && !frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako),
            "with no DISABLE variable set, neither layer is kept out");
     setenv("DISABLE_MAKO", "1", 1);
     expect(!frameGenerationLayerDisabledBy(FrameGenerationLayer::LsfgVk) && frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako) == "DISABLE_MAKO",
-           "DISABLE_MAKO keeps out a profile running MAKO and is no problem for one running lsfg-vk");
+           "DISABLE_MAKO in a game started without vkdaedalus-run came from its launch options: it keeps out a profile running MAKO and is no problem for one running lsfg-vk");
     setenv("DISABLE_LSFGVK", "", 1);
     expect(frameGenerationLayerDisabledBy(FrameGenerationLayer::LsfgVk) == "DISABLE_LSFGVK",
            "DISABLE_LSFGVK set at all keeps lsfg-vk out, as the loader reads a disable variable");
     unsetenv("DISABLE_LSFGVK");
+    setenv("VKDAEDALUS_RUN", "1", 1);
+    setenv("VKDAEDALUS_RUN_FRAME_GENERATION_LAYER", "lsfg-vk", 1);
+    setenv("VKDAEDALUS_RUN_CALLER_DISABLED", "", 1);
+    expect(frameGenerationLayerOfThisRun() == FrameGenerationLayer::LsfgVk && !frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako),
+           "a DISABLE_MAKO that vkdaedalus-run set because the profile ran lsfg-vk is no blocker: the profile switched to MAKO starts it at the next launch");
+    setenv("VKDAEDALUS_RUN_CALLER_DISABLED", "DISABLE_MAKO", 1);
+    expect(frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako) == "DISABLE_MAKO",
+           "a DISABLE_MAKO the game was started with keeps MAKO out at the next launch too, though this run ran lsfg-vk");
+    setenv("VKDAEDALUS_RUN_CALLER_DISABLED", "DISABLE_LSFGVK DISABLE_MAKO", 1);
+    expect(frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako) == "DISABLE_MAKO", "the record names every DISABLE variable the game was started with, one word each");
+    setenv("VKDAEDALUS_RUN_CALLER_DISABLED", "DISABLE_LSFGVK", 1);
+    expect(!frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako), "a record naming only DISABLE_LSFGVK leaves DISABLE_MAKO to vkdaedalus-run");
+    unsetenv("VKDAEDALUS_RUN_CALLER_DISABLED");
+    expect(frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako) == "DISABLE_MAKO",
+           "with no record of what the game was started with, a DISABLE_MAKO counts as the launch options', so nothing is offered that cannot start");
+    setenv("VKDAEDALUS_RUN_CALLER_DISABLED", "", 1);
+    setenv("VKDAEDALUS_RUN_FRAME_GENERATION_LAYER", "mako", 1);
+    expect(frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako) == "DISABLE_MAKO",
+           "vkdaedalus-run sets no DISABLE_MAKO when it starts MAKO, so one in that run keeps MAKO out");
     unsetenv("DISABLE_MAKO");
+    setenv("DISABLE_LSFGVK", "1", 1);
+    expect(!frameGenerationLayerDisabledBy(FrameGenerationLayer::LsfgVk),
+           "a DISABLE_LSFGVK that vkdaedalus-run set because the profile ran MAKO is no blocker for the profile switched to lsfg-vk");
+    unsetenv("DISABLE_LSFGVK");
+    setenv("DISABLE_MAKO", "1", 1);
+    setenv("VKDAEDALUS_RUN_FRAME_GENERATION_LAYER", "neither", 1);
+    expect(!frameGenerationLayerOfThisRun() && frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako) == "DISABLE_MAKO",
+           "a run layer that names neither layer is ignored, and DISABLE_MAKO keeps MAKO out");
+    for (const char* name : {"DISABLE_LSFGVK", "DISABLE_MAKO", "VKDAEDALUS_RUN", "VKDAEDALUS_RUN_FRAME_GENERATION_LAYER", "VKDAEDALUS_RUN_CALLER_DISABLED"})
+        unsetenv(name);
 
     if (failures)
         std::printf("%d frame generation check(s) failed\n", failures);

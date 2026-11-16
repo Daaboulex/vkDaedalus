@@ -14,6 +14,7 @@ overlay_src = [
     'overlay/view_shader_test.cpp',
     'overlay/view_main.cpp',
     'overlay/view_frame_generation.cpp',
+    'overlay/view_mako.cpp',
     'overlay/view_gpus.cpp',
     'overlay/overlay_style.cpp',
     'overlay/frame_draw.cpp',

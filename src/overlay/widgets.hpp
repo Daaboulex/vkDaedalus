@@ -73,7 +73,7 @@ namespace vkBasalt::ui
     bool      listItem(const char* label, const char* tag, bool enabled = true);
     bool      disclosure(const char* id, const char* shown, const ImVec4& ink, float maxWidth, const char* trailing = nullptr, bool openAtFirst = false);
     bool      disclosureOpen(const char* id);
-    bool      tab(const char* label, bool selected);
+    bool      tab(const char* label, bool selected, float width = 0.0f);
     bool      checkbox(const char* label, bool* value);
     bool      slider(const char* label, ImGuiDataType type, void* value, const void* lowest, const void* highest, const char* format = nullptr,
                      ImGuiSliderFlags flags = 0);

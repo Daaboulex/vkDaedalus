@@ -11,7 +11,7 @@
       "VK_LAYER_LSFGVK_frame_generation"
     ],
     "enable_environment": {
-      "DISABLE_MAKO": "1"
+      "VKDAEDALUS_RUN_FRAME_GENERATION_LAYER": "lsfg-vk"
     },
     "disable_environment": {
       "VKDAEDALUS_AFTER_LSFGVK": "1"

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "frame_generation.hpp"
+#include "gpu_assignment.hpp"
 
 namespace vkBasalt
 {
@@ -151,10 +152,20 @@ namespace vkBasalt
         MakoPowerSource source  = MakoPowerSource::Unknown;
     };
 
+    struct MakoGpu
+    {
+        std::string               name;
+        uint32_t                  vendorId = 0;
+        uint32_t                  deviceId = 0;
+        std::optional<PciAddress> pci;
+    };
+
     std::optional<MakoFile> parseMakoFile(const std::string& text, std::string& problem);
     MakoSettings            makoSettingsInEffect(MakoSettings settings);
     const MakoSettings&     makoSettingsFor(const MakoProfile& profile, MakoPowerSource source);
     PowerSupplies           readPowerSupplies(const std::filesystem::path& root);
+    MakoProfile             makoProfileWithPowerSets(MakoProfile profile, bool separate, MakoPowerSource runningNow);
+    bool                    makoGpuNamesAnother(const std::string& gpu, const MakoGpu& game);
 
     std::optional<std::string>
     makoTextWith(const std::string& text, const std::optional<MakoGlobal>& global, const std::optional<MakoProfile>& profile, std::string& problem);
@@ -187,6 +198,8 @@ namespace vkBasalt
     std::optional<bool> makoLayerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate);
     std::optional<bool> makoLayerVisible();
     bool                makoSettingsFromEnvironment();
+    bool                underGamescope();
+    std::optional<std::string> makoFgMissing();
     std::string_view    loadedFrameGenerationLayerName();
 }
 

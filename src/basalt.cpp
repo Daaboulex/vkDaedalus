@@ -2498,14 +2498,21 @@ namespace vkBasalt
     {
         if (intervals == 0 || milliseconds <= 0.0 || (Logger::logLevel() > LogLevel::Info && !Logger::isHistoryEnabled()))
             return;
-        const double                  timed      = static_cast<double>(intervals) * 1000.0 / milliseconds;
-        const std::optional<uint32_t> multiplier = device.imguiOverlay ? device.imguiOverlay->frameGenerationMultiplierHere() : std::nullopt;
-        const FrameRates              rates      = frameRatesOf(timed, multiplier, effectsRunAfterFrameGeneration(device.frameGenerationPlace));
-        char                          line[320];
-        std::snprintf(line, sizeof(line), "frame rates %s: game %.1f FPS %s, shown %.1f FPS %s; %s", over.c_str(), rates.gameFps,
-                      rates.gameMeasured ? "measured" : "estimated", rates.shownFps, rates.shownMeasured ? "measured" : "estimated",
-                      frameGenerationPlaceWords(device.frameGenerationPlace, loadedFrameGenerationLayerName()).c_str());
-        Logger::info(std::string(line) + (multiplier ? ", " + std::to_string(*multiplier) + "x" : std::string()));
+        const double                        timed      = static_cast<double>(intervals) * 1000.0 / milliseconds;
+        const std::optional<uint32_t>       multiplier = device.imguiOverlay ? device.imguiOverlay->frameGenerationMultiplierHere() : std::nullopt;
+        const std::optional<AdaptiveTarget> adaptive   = device.imguiOverlay ? device.imguiOverlay->frameGenerationAdaptiveHere() : std::nullopt;
+        const bool                          after      = effectsRunAfterFrameGeneration(device.frameGenerationPlace);
+        const FrameRates                    rates      = frameRatesOf(timed, multiplier, after);
+        const std::string                   place      = frameGenerationPlaceWords(device.frameGenerationPlace, loadedFrameGenerationLayerName());
+        char                                line[320];
+        if (adaptive)
+            std::snprintf(line, sizeof(line), "frame rates %s: %s %.1f FPS measured; %s, %s", over.c_str(), after ? "shown" : "game", timed, place.c_str(),
+                          adaptiveWords(*adaptive).c_str());
+        else
+            std::snprintf(line, sizeof(line), "frame rates %s: game %.1f FPS %s, shown %.1f FPS %s; %s%s", over.c_str(), rates.gameFps,
+                          rates.gameMeasured ? "measured" : "estimated", rates.shownFps, rates.shownMeasured ? "measured" : "estimated", place.c_str(),
+                          multiplier ? (", " + std::to_string(*multiplier) + "x").c_str() : "");
+        Logger::info(line);
     }
 
     VKAPI_ATTR VkResult VKAPI_CALL vkBasalt_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo)

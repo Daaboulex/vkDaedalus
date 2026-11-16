@@ -9,6 +9,7 @@
 #include "effects/effect_registry.hpp"
 #include "latency_stats.hpp"
 #include "overlay/frame_draw.hpp"
+#include "overlay/frame_generation_rows.hpp"
 #include "overlay/motion.hpp"
 #include "overlay/ui_map.hpp"
 #include "overlay/widgets.hpp"
@@ -36,12 +37,14 @@ namespace vkBasalt
             const float  s    = rect.h / 64.0f;
             const float  size = 22.0f * s;
             const ImVec4 ink  = dim ? palette.disabled : (selected ? palette.accent : palette.secondary);
-            drawIcon(list, icon, ImVec2(rect.x + (rect.w - size) * 0.5f, rect.y + 10.0f * s), size, ImGui::GetColorU32(ink));
             const float       textSize = FontSize::caption * s;
             const std::string shown    = title;
             const ImVec2      extent   = font->CalcTextSizeA(textSize, FLT_MAX, rect.w - 6.0f * s, shown.c_str());
+            const bool        wrapped  = extent.y > textSize * 1.5f;
             const ImVec4      clip(rect.x, rect.y, rect.right(), rect.bottom());
-            list->AddText(font, textSize, ImVec2(rect.x + std::max(3.0f * s, (rect.w - extent.x) * 0.5f), rect.y + 38.0f * s),
+            if (!wrapped)
+                drawIcon(list, icon, ImVec2(rect.x + (rect.w - size) * 0.5f, rect.y + 10.0f * s), size, ImGui::GetColorU32(ink));
+            list->AddText(font, textSize, ImVec2(rect.x + std::max(3.0f * s, (rect.w - extent.x) * 0.5f), wrapped ? rect.y + (rect.h - extent.y) * 0.5f : rect.y + 38.0f * s),
                           ImGui::GetColorU32(dim ? palette.disabled : (selected ? palette.bright : palette.text)), shown.c_str(), nullptr, rect.w - 6.0f * s, &clip);
             return state;
         }
@@ -73,7 +76,14 @@ namespace vkBasalt
         io.MouseDrawCursor = true;
         if (pEffectRegistry)
             pEffectRegistry->clearEditedParameters();
-        const FrameLayout layout = frameLayout(io.DisplaySize.x, io.DisplaySize.y, desktopScale().scale);
+        refreshFrameGenerationFile(false);
+        refreshMakoFile(false);
+        const FrameGenerationState fg      = frameGenerationState();
+        const bool                 scaling = fg.layer == FrameGenerationLayer::Mako && !fg.notInstalled
+                             && (makoLayerLoaded() || !frameGenerationLayerDisabledBy(FrameGenerationLayer::Mako));
+        if (!scaling && openSection == OverlaySection::Scaling)
+            openSection = OverlaySection::FrameGeneration;
+        const FrameLayout layout = frameLayout(io.DisplaySize.x, io.DisplaySize.y, desktopScale().scale, scaling ? 4 : 3);
         applyFrameScale(layout.scale);
         ui::beginFrame(fonts);
         const OverlayPalette& palette = activePalette();
@@ -105,7 +115,7 @@ namespace vkBasalt
         renderProfileTile(layout.leftTiles[0], palette);
         renderEffectsSwitchTile(layout.leftTiles[1], palette);
         renderSafeAntiCheatTile(layout.leftTiles[2], palette);
-        renderSectionTiles(layout, palette);
+        renderSectionTiles(layout, palette, fg);
         renderRightTiles(layout, palette);
         ImGui::End();
 
@@ -128,6 +138,7 @@ namespace vkBasalt
                         renderMainView(keyboard);
                     break;
                 case OverlaySection::FrameGeneration: renderFrameGenerationView(); break;
+                case OverlaySection::Scaling: renderScalingView(); break;
                 case OverlaySection::Gpus: renderGpusView(); break;
                 case OverlaySection::Performance: renderLatencyView(); break;
                 case OverlaySection::Shaders: renderShaderManagerView(); break;
@@ -202,7 +213,7 @@ namespace vkBasalt
         return running;
     }
 
-    void ImGuiOverlay::renderSectionTiles(const FrameLayout& layout, const OverlayPalette& palette)
+    void ImGuiOverlay::renderSectionTiles(const FrameLayout& layout, const OverlayPalette& palette, const FrameGenerationState& fg)
     {
         ImDrawList* list = ImGui::GetWindowDrawList();
         const float s    = layout.scale;
@@ -216,20 +227,48 @@ namespace vkBasalt
                                                               : std::to_string(effectsOn) + " on";
         const ImVec4      effectsInk   = !state.effectsEnabled ? palette.muted : effectsShort ? palette.warn : palette.accent;
 
-        bool                          missing  = false;
-        const std::string             fgBlock  = frameGenerationBlocker(missing);
-        const FrameGenerationProfile* inUse    = fgBlock.empty() ? frameGenerationProfileInUse() : nullptr;
-        std::string                   fgLine   = "Off";
-        ImVec4                        fgInk    = palette.muted;
-        if (!fgBlock.empty())
+        const bool         mako      = fg.layer == FrameGenerationLayer::Mako;
+        const std::string  layerName = mako ? "MAKO" : "lsfg-vk";
+        const MakoProfile* makoInUse = mako && fg.blocker.empty() ? makoProfileInUse() : nullptr;
+        const MakoSettings* makoSet  = makoInUse ? &makoSettingsFor(*makoInUse, makoEditedSet(*makoInUse)) : nullptr;
+        std::string        fgLine    = "Off";
+        std::string        fgTip     = fg.blocker;
+        ImVec4             fgInk     = palette.muted;
+        if (!fg.blocker.empty())
         {
-            fgLine = missing ? "Not installed" : "Unavailable";
+            fgLine = fg.notInstalled ? "Not installed" : "Unavailable";
             fgInk  = palette.disabled;
         }
-        else if (generatesFrames(inUse))
+        else if (!fg.unavailable.empty())
         {
-            fgLine = std::to_string(inUse->multiplier) + "x" + (frameGenerationLiveHere() ? ", on" : ", next launch");
-            fgInk  = frameGenerationLiveHere() ? palette.accent : palette.warn;
+            fgLine = mako ? "MAKO, needs a model" : "Unavailable";
+            fgTip  = fg.unavailable;
+            fgInk  = palette.warn;
+        }
+        else if (fg.on && fg.live)
+        {
+            fgLine = layerName + " " + (makoSet ? (makoSet->adaptive ? std::string("adaptive") : std::to_string(makoSet->multiplier) + "x")
+                                                : std::to_string(frameGenerationProfileInUse()->multiplier) + "x");
+            fgInk  = palette.accent;
+        }
+        else if (fg.on)
+        {
+            fgLine = layerName + ", next launch";
+            fgInk  = palette.warn;
+        }
+        std::string  scalingLine = "Off";
+        std::string  scalingTip  = fg.blocker;
+        ImVec4       scalingInk  = palette.muted;
+        if (!fg.blocker.empty())
+        {
+            scalingLine = "Unavailable";
+            scalingInk  = palette.disabled;
+        }
+        else if (makoSet && makoSet->scalingEnabled)
+        {
+            const bool started = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).scalingEnabled;
+            scalingLine        = started ? shownChoice(makoScalingMethods, makoSet->scalingMethod) + " " + factorText(makoSet->scalingFactor) : "Next launch";
+            scalingInk         = started ? palette.accent : palette.warn;
         }
         const size_t gpusRunning = 1 + static_cast<size_t>(std::count_if(state.gpus.begin(), state.gpus.end(),
                                                                        [](const OverlayGpu& gpu) { return gpu.number != gameGpu && gpu.runsChain; }));
@@ -245,32 +284,49 @@ namespace vkBasalt
             std::string    line;
             ImVec4         lineInk;
             bool           dim;
+            std::string    tip;
         };
-        if (!layout.compact)
-            list->AddRectFilled(topLeft(layout.sectionTiles[0]), bottomRight(layout.sectionTiles[2]), ImGui::GetColorU32(palette.bar), ui::px(ui::Size::radius));
-        const Tile tiles[3] = {{OverlaySection::Effects, "Effects", "Effects", Icon::Sliders, effectsLine, effectsInk, false},
-                               {OverlaySection::FrameGeneration, "Frame generation", "Frame generation", Icon::Frames, fgLine, fgInk, !fgBlock.empty()},
-                               {OverlaySection::Gpus, "GPUs", gpuTotal == 1 ? "GPU" : "GPUs", Icon::Chip, gpuLine, palette.accent, false}};
-        for (size_t i = 0; i < 3; i++)
+        const size_t      count = layout.sectionCount;
+        const std::string tiles = "Frame generation tile: " + fgLine + (fgTip.empty() ? "" : " (" + fgTip + ")") + (count == 4 ? "; Scaling tile: " + scalingLine : "; no Scaling tile");
+        if (tiles != tilesLogged)
         {
-            const Tile&       tile     = tiles[i];
+            tilesLogged = tiles;
+            Logger::debug(tiles);
+        }
+        if (!layout.compact)
+            list->AddRectFilled(topLeft(layout.sectionTiles[0]), bottomRight(layout.sectionTiles[count - 1]), ImGui::GetColorU32(palette.bar), ui::px(ui::Size::radius));
+        std::vector<Tile> shown = {{OverlaySection::Effects, "Effects", "Effects", Icon::Sliders, effectsLine, effectsInk, false, ""},
+                                   {OverlaySection::FrameGeneration, "Frame generation", "Frame generation", Icon::Frames, fgLine, fgInk, !fgTip.empty(), fgTip},
+                                   {OverlaySection::Gpus, "GPUs", gpuTotal == 1 ? "GPU" : "GPUs", Icon::Chip, gpuLine, palette.accent, false, ""}};
+        if (count == 4)
+            shown.insert(shown.begin() + 2, Tile{OverlaySection::Scaling, "Scaling", "Scaling", Icon::Scale, scalingLine, scalingInk, !scalingTip.empty(), scalingTip});
+        for (size_t i = 0; i < count; i++)
+        {
+            const Tile&       tile     = shown[i];
             const LayoutRect& rect     = layout.sectionTiles[i];
             const bool        selected = openSection == tile.section;
             if (layout.compact)
             {
-                const std::string note = tile.dim ? fgBlock : tile.line;
+                const std::string note = tile.dim ? tile.tip : tile.line;
                 if (compactTile(tile.label, tile.title.c_str(), rect, tile.icon, selected, tile.dim, note.c_str(), fonts.body, palette).clicked)
                     openSection = tile.section;
                 continue;
             }
             const TileState clicked = ui::tile(tile.label, rect, selected);
             if (tile.dim)
-                ImGui::SetItemTooltip("%s", fgBlock.c_str());
+                ImGui::SetItemTooltip("%s", tile.tip.c_str());
             const float centre = rect.x + rect.w * 0.5f;
-            centredText(list, fonts.heading, FontSize::tile * s, centre, rect.y + 16.0f * s, ImGui::GetColorU32(selected ? palette.bright : palette.text), tile.title.c_str());
+            const auto  fitted = [&](ImFont* font, float size, const std::string& text) {
+                const float wide = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text.c_str()).x;
+                const float room = rect.w - 16.0f * s;
+                return wide > room ? size * room / wide : size;
+            };
+            centredText(list, fonts.heading, fitted(fonts.heading, FontSize::tile * s, tile.title), centre, rect.y + 16.0f * s,
+                        ImGui::GetColorU32(selected ? palette.bright : palette.text), tile.title.c_str());
             const ImVec4 iconInk = tile.dim ? palette.disabled : (selected ? palette.accent : palette.secondary);
             drawIcon(list, tile.icon, ImVec2(centre - 32.0f * s, rect.y + (rect.h - 64.0f * s) * 0.5f), 64.0f * s, ImGui::GetColorU32(iconInk));
-            centredText(list, fonts.body, FontSize::label * s, centre, rect.bottom() - 18.0f * s - FontSize::label * s, ImGui::GetColorU32(tile.lineInk), tile.line.c_str());
+            centredText(list, fonts.body, fitted(fonts.body, FontSize::label * s, tile.line), centre, rect.bottom() - 18.0f * s - FontSize::label * s,
+                        ImGui::GetColorU32(tile.lineInk), tile.line.c_str());
             if (clicked.clicked)
                 openSection = tile.section;
         }
@@ -307,13 +363,13 @@ namespace vkBasalt
                 openSection = section;
         };
 
-        const FrameStats              stats      = frameStats(latency.lastSecondMs);
-        const std::optional<uint32_t> multiplier = frameGenerationMultiplierHere();
-        char                          fps[32]    = "";
-        if (stats.count > 0)
-            std::snprintf(fps, sizeof(fps), "%.0f FPS",
-                          frameRatesOf(stats.fps, multiplier, multiplier && effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace)).gameFps);
-        columnItem("Performance", layout.rightTiles[0], Icon::Chart, OverlaySection::Performance, fps);
+        const FrameStats                    stats      = frameStats(latency.lastSecondMs);
+        const std::optional<uint32_t>       multiplier = frameGenerationMultiplierHere();
+        const std::optional<AdaptiveTarget> adaptive   = frameGenerationAdaptiveHere();
+        const std::string                   fps        = stats.count > 0 ? rateLine(stats.fps, multiplier, adaptive,
+                                                                                    (multiplier || adaptive) && effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace))
+                                                                         : "";
+        columnItem("Performance", layout.rightTiles[0], Icon::Chart, OverlaySection::Performance, fps.c_str());
         columnItem("Shaders", layout.rightTiles[1], Icon::Layers, OverlaySection::Shaders, nullptr);
 
         struct IconTile

@@ -32,7 +32,7 @@ namespace vkBasalt
             {"Toggle effects", "Turns every effect on or off", settingsManager.getToggleKey(), [](const std::string& key) { settingsManager.setToggleKey(key); }, KeyBinding::Toggle},
             {"Apply", "Same as Apply on the Effects card", settingsManager.getReloadKey(),
              [](const std::string& key) { settingsManager.setReloadKey(key); }, KeyBinding::Reload},
-            {"Toggle frame generation", "Turns lsfg-vk's frame generation off, and back on at its multiplier, while the game runs", settingsManager.getFrameGenerationKey(),
+            {"Toggle frame generation", "Turns the profile's frame generation off, and back on, while the game runs", settingsManager.getFrameGenerationKey(),
              [](const std::string& key) { settingsManager.setFrameGenerationKey(key); }, KeyBinding::FrameGeneration},
             {"Hold to preview", isInputBlocked() ? "While held, the overlay hides and the game still gets no input" : "While held, the overlay hides", settingsManager.getPreviewKey(),
              [](const std::string& key) { settingsManager.setPreviewKey(key); }, KeyBinding::Preview}};
@@ -314,7 +314,7 @@ namespace vkBasalt
                     }
                 }
                 if (name.item == HudItem::Fps)
-                    ImGui::SetItemTooltip("The game's frames over the last second, and the shown frames while lsfg-vk generates");
+                    ImGui::SetItemTooltip("The game's frames over the last second, and the shown frames while frame generation runs");
                 if (name.item == HudItem::EffectsTime)
                     ImGui::SetItemTooltip("Needs Per-effect GPU timing on the Performance page");
             }

@@ -671,6 +671,55 @@ static void detection()
     unsetenv("MAKO_ENV");
 }
 
+static void overlayFacts(const fs::path& dir)
+{
+    MakoProfile plain;
+    plain.settings.targetFps   = 90;
+    const MakoProfile separate = makoProfileWithPowerSets(plain, true, MakoPowerSource::Docked);
+    expect(separate.power && separate.power->handheld == plain.settings && separate.power->docked == plain.settings && separate.settings == plain.settings,
+           "separate settings on battery start as two copies of the profile's own, as MAKO needs both tables");
+    MakoProfile tuned            = separate;
+    tuned.power->handheld.targetFps = 40;
+    tuned.power->docked.targetFps   = 144;
+    expect(makoProfileWithPowerSets(tuned, false, MakoPowerSource::Handheld).settings.targetFps == 40
+               && !makoProfileWithPowerSets(tuned, false, MakoPowerSource::Handheld).power
+               && makoProfileWithPowerSets(tuned, false, MakoPowerSource::Docked).settings.targetFps == 144
+               && makoProfileWithPowerSets(tuned, false, MakoPowerSource::Unknown).settings.targetFps == 90,
+           "folding the sets back keeps the set MAKO runs now, the profile's own when the power source is unknown");
+    expect(makoProfileWithPowerSets(tuned, true, MakoPowerSource::Docked) == tuned && makoProfileWithPowerSets(plain, false, MakoPowerSource::Docked) == plain,
+           "a profile already as asked is left as it is");
+
+    MakoGpu game{"AMD Radeon RX 9070 XT", 0x1002, 0x7550, PciAddress{0, 3, 0, 0}};
+    expect(!makoGpuNamesAnother("AMD Radeon RX 9070 XT", game) && !makoGpuNamesAnother("0x1002:0x7550", game) && !makoGpuNamesAnother("3:0.0", game),
+           "MAKO's gpu naming the game's GPU by name, by MAKO's vendor:device text or by its bus:device.function is the game's");
+    expect(makoGpuNamesAnother("NVIDIA GeForce GTX 1660 SUPER", game) && makoGpuNamesAnother("0x10DE:0x21C4", game) && makoGpuNamesAnother("4:0.0", game)
+               && makoGpuNamesAnother("0x1002:0x7551", game) && makoGpuNamesAnother("1002:7550", game),
+           "a name, an id pair or an address that is not the game's names another GPU, compared exactly as MAKO compares");
+    game.pci.reset();
+    expect(!makoGpuNamesAnother("4:0.0", game) && makoGpuNamesAnother("4:0.0x", game),
+           "an address cannot be told from the game's when the game's GPU reports none, so it is not called another GPU");
+
+    unsetenv("GAMESCOPE_WAYLAND_DISPLAY");
+    const bool outside = underGamescope();
+    setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0", 1);
+    expect(!outside && underGamescope(), "a game is under gamescope when gamescope names its Wayland display");
+    unsetenv("GAMESCOPE_WAYLAND_DISPLAY");
+
+#if defined(__x86_64__)
+    const fs::path host = dir / "mako-fg-host";
+    writeFile(host, "");
+    setenv("MAKO_FG_HOST", host.c_str(), 1);
+    const std::optional<std::string> present = makoFgMissing();
+    setenv("MAKO_FG_HOST", (dir / "no-host").c_str(), 1);
+    expect(!present && makoFgMissing() == "MAKO FG is not installed: mako-fg-host is missing",
+           "MAKO FG is there when the mako-fg-host MAKO would start exists, and missing with MAKO's own words when it does not");
+    unsetenv("MAKO_FG_HOST");
+#else
+    static_cast<void>(dir);
+    expect(makoFgMissing() == "MAKO FG is published for x86-64 only", "MAKO FG is missing on any machine but x86-64, for which alone it is published");
+#endif
+}
+
 int main(int argc, char** argv)
 {
     if (argc < 2)
@@ -691,6 +740,7 @@ int main(int argc, char** argv)
     powerSupplies(dir);
     detection();
     paths(dir);
+    overlayFacts(dir);
     if (failures)
         std::printf("%d MAKO file check(s) failed\n", failures);
     return failures ? 1 : 0;

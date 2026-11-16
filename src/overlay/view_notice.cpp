@@ -54,6 +54,8 @@ namespace vkBasalt
                 launchNoticeLine += std::to_string(effects.on) + (effects.on == 1 ? " effect on" : " effects on");
             if (const std::optional<uint32_t> multiplier = frameGenerationMultiplierHere())
                 launchNoticeLine += ", frame generation " + std::to_string(*multiplier) + "x";
+            else if (const std::optional<AdaptiveTarget> adaptive = frameGenerationAdaptiveHere())
+                launchNoticeLine += ", frame generation " + adaptiveWords(*adaptive);
             launchNoticeStart = now;
             Logger::info("launch notice shown: " + launchNoticeLine + (launchNoticeProblem ? ", an effect could not run" : ""));
         }
@@ -90,8 +92,7 @@ namespace vkBasalt
                                     float duration, std::chrono::steady_clock::time_point now)
     {
         ImGuiIO&          io     = ImGui::GetIO();
-        const FrameLayout layout = frameLayout(io.DisplaySize.x, io.DisplaySize.y, desktopScale().scale);
-        const float       s      = layout.scale;
+        const float       s      = frameScale(io.DisplaySize.x, io.DisplaySize.y, desktopScale().scale);
         applyFrameScale(s);
         ui::beginFrame(fonts);
         const OverlayPalette& palette = activePalette();

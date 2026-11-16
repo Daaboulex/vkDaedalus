@@ -166,6 +166,7 @@ namespace vkBasalt
             path("Effects", ConfigSerializer::getBaseConfigDir() + "/vkdaedalus.conf", "Your effects and their settings for every program; the overlay never rewrites it");
             path("Settings", ConfigSerializer::getBaseConfigDir() + "/settings.conf", "The overlay's own settings");
             path("lsfg-vk", lsfgConfigPath(), "lsfg-vk's own file, which the Frame generation card edits");
+            path("MAKO", makoConfigPath(), "MAKO's own file, which the Frame generation and Scaling cards edit");
             path("Log", named != nullptr && *named != '\0' ? std::string(named) : Logger::stateLogPath(), "Where this run's log goes; Export copies its end into the report");
             path("Compiled effects", folder.empty() ? std::string("in memory only, this build cannot be told apart from others") : folder,
                  "Compiled effects kept between runs; Clear compiled effects on the Shaders card empties it");
@@ -177,7 +178,7 @@ namespace vkBasalt
         if (debugWindowTab == 2)
         {
             ui::beginScrollArea("##debugframepath");
-            renderPipelineStrip();
+            renderPipelineStrip(profileFrameGenerationLayer());
             ui::divider();
             const float column = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
             const auto  fact   = [&](const char* name, const std::string& value, const char* tooltip) {
@@ -200,9 +201,10 @@ namespace vkBasalt
 
             ImGui::Dummy(ImVec2(0.0f, ui::px(ui::Size::groupGap)));
             ui::sectionLabel("Measured or estimated, in this run");
-            const std::optional<uint32_t> multiplier = frameGenerationMultiplierHere();
-            const bool                    after      = multiplier && effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace);
-            const FrameRates              rates      = frameRatesOf(0.0, multiplier, after);
+            const std::optional<uint32_t>       multiplier = frameGenerationMultiplierHere();
+            const std::optional<AdaptiveTarget> adaptive   = frameGenerationAdaptiveHere();
+            const bool                          after      = (multiplier || adaptive) && effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace);
+            const FrameRates                    rates      = frameRatesOf(0.0, multiplier, after);
             ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(ui::px(8.0f), ui::px(6.0f)));
             if (ImGui::BeginTable("##figures", 2, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingFixedFit))
             {
@@ -224,8 +226,10 @@ namespace vkBasalt
                                        : mark == ui::Mark::Sum       ? "worked out"
                                                                      : "not measured");
                 };
-                figure("FPS", rates.gameMeasured ? ui::Mark::Measured : ui::Mark::Estimated);
-                if (multiplier)
+                figure("FPS", adaptive && after ? ui::Mark::Absent : rates.gameMeasured ? ui::Mark::Measured : ui::Mark::Estimated);
+                if (adaptive)
+                    figure("FPS shown", after ? ui::Mark::Measured : ui::Mark::Absent);
+                else if (multiplier)
                     figure("FPS shown", rates.shownMeasured ? ui::Mark::Measured : ui::Mark::Estimated);
                 figure("Frame times", ui::Mark::Measured);
                 figure("Effects on GPU 1", ui::Mark::Measured);
@@ -239,7 +243,7 @@ namespace vkBasalt
                         figure("Effects after the return", ui::Mark::Absent);
                 }
                 if (multiplier)
-                    figure("lsfg-vk holds one frame", ui::Mark::Estimated);
+                    figure((std::string(loadedFrameGenerationLayerName()) + " holds one frame").c_str(), ui::Mark::Estimated);
                 figure("Input to screen", ui::Mark::Absent);
                 ImGui::EndTable();
             }

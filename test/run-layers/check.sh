@@ -50,9 +50,13 @@ value_of() {
   sed -n "s/^$1=//p" "$2"
 }
 
+names() {
+  awk -v name="$1" 'index($0, name "=") == 1 { c++ } END { print c + 0 }' "$2"
+}
+
 expect_run() {
-  local label=$1 key=$2 layers=$3 want_layer=$4 want_order=$5
-  shift 5
+  local label=$1 key=$2 layers=$3 want_layer=$4 want_order=$5 want_record=$6
+  shift 6
   cases=$((cases + 1))
   local home="$work/case-$cases"
   mkdir -p "$home/.config/vkdaedalus/profiles"
@@ -77,20 +81,29 @@ expect_run() {
     [ -z "$(value_of ENABLE_MAKO "$home/environment")" ] || fail "$label: ENABLE_MAKO is still set for a profile running lsfg-vk"
     [ -z "$(value_of VKDAEDALUS_AFTER_MAKO "$home/environment")" ] || fail "$label: VKDAEDALUS_AFTER_MAKO is set for a profile running lsfg-vk"
   fi
+  [ "$(value_of VKDAEDALUS_RUN_FRAME_GENERATION_LAYER "$home/environment")" = "$want_layer" ] ||
+    fail "$label: VKDAEDALUS_RUN_FRAME_GENERATION_LAYER is '$(value_of VKDAEDALUS_RUN_FRAME_GENERATION_LAYER "$home/environment")', so the overlay cannot tell a layer kept out for the other from one the launch options disable"
+  [ "$(names VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment")" = 1 ] && [ "$(value_of VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment")" = "$want_record" ] ||
+    fail "$label: VKDAEDALUS_RUN_CALLER_DISABLED is '$(value_of VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment")' ($(names VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment") set), want exactly '$want_record', so the overlay takes a DISABLE variable vkdaedalus-run set for one the launch options set, or the other way round"
   [ "$on" = "$want" ] || fail "$label: the order layers on are '${on//$'\n'/ | }', want exactly '$want'"
 }
 
-expect_run "MAKO, effects before" $'frameGenerationLayer = mako\n' none mako before
-expect_run "MAKO, effects after" $'frameGenerationLayer = mako\neffectsAfterFrameGeneration = true\n' none mako after
-expect_run "lsfg-vk, effects before" $'frameGenerationLayer = lsfg-vk\n' none lsfg-vk before
-expect_run "lsfg-vk, effects after" $'frameGenerationLayer = lsfg-vk\neffectsAfterFrameGeneration = true\n' none lsfg-vk after
-expect_run "lsfg-vk, started with MAKO's variables and both orders set" $'frameGenerationLayer = lsfg-vk\n' none lsfg-vk before \
+expect_run "MAKO, effects before" $'frameGenerationLayer = mako\n' none mako before ''
+expect_run "MAKO, effects after" $'frameGenerationLayer = mako\neffectsAfterFrameGeneration = true\n' none mako after ''
+expect_run "lsfg-vk, effects before" $'frameGenerationLayer = lsfg-vk\n' none lsfg-vk before ''
+expect_run "lsfg-vk, effects after" $'frameGenerationLayer = lsfg-vk\neffectsAfterFrameGeneration = true\n' none lsfg-vk after ''
+expect_run "lsfg-vk, started with MAKO's variables and both orders set" $'frameGenerationLayer = lsfg-vk\n' none lsfg-vk before '' \
   ENABLE_MAKO=1 VKDAEDALUS_AFTER_MAKO=1 VKDAEDALUS_AFTER_LSFGVK=1
-expect_run "MAKO, started with lsfg-vk's after order set" $'frameGenerationLayer = mako\n' none mako before VKDAEDALUS_AFTER_LSFGVK=1
-expect_run "no choice, nothing installed" '' none lsfg-vk before
-expect_run "no choice, lsfg-vk installed" '' lsfg-vk lsfg-vk before
-expect_run "no choice, MAKO installed" '' mako mako before
-expect_run "no choice, both installed" '' both lsfg-vk before
+expect_run "MAKO, started with lsfg-vk's after order set" $'frameGenerationLayer = mako\n' none mako before '' VKDAEDALUS_AFTER_LSFGVK=1 VKDAEDALUS_RUN_FRAME_GENERATION_LAYER=lsfg-vk
+expect_run "no choice, nothing installed" '' none lsfg-vk before ''
+expect_run "no choice, lsfg-vk installed" '' lsfg-vk lsfg-vk before ''
+expect_run "no choice, MAKO installed" '' mako mako before ''
+expect_run "no choice, both installed" '' both lsfg-vk before ''
+expect_run "lsfg-vk, the launch options keep MAKO out" $'frameGenerationLayer = lsfg-vk\n' both lsfg-vk before DISABLE_MAKO DISABLE_MAKO=1
+expect_run "MAKO, the launch options keep MAKO out" $'frameGenerationLayer = mako\n' both mako before DISABLE_MAKO DISABLE_MAKO=1
+expect_run "MAKO, the launch options keep lsfg-vk out" $'frameGenerationLayer = mako\neffectsAfterFrameGeneration = true\n' both mako after DISABLE_LSFGVK DISABLE_LSFGVK=
+expect_run "lsfg-vk, the launch options keep both out and name a record of their own" $'frameGenerationLayer = lsfg-vk\n' both lsfg-vk before 'DISABLE_LSFGVK DISABLE_MAKO' \
+  DISABLE_MAKO=1 DISABLE_LSFGVK=1 VKDAEDALUS_RUN_CALLER_DISABLED=DISABLE_LSFGVK
 
 made="$work/case-9/.config/mako-render/conf.toml"
 want=$'version = 2\n\n[global]\n\n[[profile]]\nname = "vkdaedalus default"\nactive_in = "/Game.exe"\nframe_generation_enabled = false\n'
@@ -101,6 +114,7 @@ for kept in 7 8 10; do
   [ ! -e "$work/case-$kept/.config/mako-render/conf.toml" ] || fail "case $kept wrote MAKO's file for a game whose profile runs lsfg-vk"
 done
 [ ! -e "$work/case-9/.config/lsfg-vk/conf.toml" ] || fail "a game whose profile runs MAKO wrote lsfg-vk's file"
+[ ! -e "$work/case-12/.config/mako-render/conf.toml" ] || fail "a game whose launch options keep MAKO out got MAKO's profile written for it"
 
 if [ "$failures" -gt 0 ]; then
   echo "$failures of the checks on vkdaedalus-run's frame generation layer failed"

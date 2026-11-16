@@ -73,10 +73,19 @@ namespace vkBasalt
 
     std::optional<uint32_t> ImGuiOverlay::frameGenerationMultiplierHere()
     {
+        if (!activeGameName.empty() && makoLayerLoaded())
+            return makoMultiplierHere();
         if (activeGameName.empty() || !frameGenerationLayerLoaded() || !readFrameGenerationOnce() || !frameGenerationLiveHere()
             || !generatesFrames(frameGenerationProfileInUse()))
             return std::nullopt;
         return frameGenerationProfileInUse()->multiplier;
+    }
+
+    std::optional<AdaptiveTarget> ImGuiOverlay::frameGenerationAdaptiveHere()
+    {
+        if (activeGameName.empty() || !makoLayerLoaded())
+            return std::nullopt;
+        return makoAdaptiveHere();
     }
 
     void ImGuiOverlay::renderLatencyView()
@@ -85,8 +94,10 @@ namespace vkBasalt
         const float                   scale      = ImGui::GetStyle().FontScaleMain;
         const FrameStats              second     = frameStats(latency.lastSecondMs);
         const FrameStats              frames     = frameStats(latency.lastTenSecondsMs);
-        const std::optional<uint32_t> multiplier = frameGenerationMultiplierHere();
-        const bool                    after      = multiplier && effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace);
+        const std::optional<uint32_t>       multiplier = frameGenerationMultiplierHere();
+        const std::optional<AdaptiveTarget> adaptive   = frameGenerationAdaptiveHere();
+        const bool                          after      = (multiplier || adaptive) && effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace);
+        const bool                          estimated  = multiplier || (adaptive && !after);
 
         ui::heading("Performance");
         ui::beginScrollArea("##performancebody");
@@ -105,14 +116,33 @@ namespace vkBasalt
             ui::note("Waiting for frames");
         else
         {
-            const FrameRates rates = frameRatesOf(second.count > 0 ? second.fps : frames.fps, multiplier, after);
+            const FrameStats& timed = second.count > 0 ? second : frames;
+            const FrameRates  rates = frameRatesOf(timed.fps, multiplier, after);
             ImGui::PushFont(fonts.bold, 26.0f);
-            ImGui::Text("%.0f FPS", rates.gameFps);
+            ImGui::TextUnformatted(rateLine(timed.fps, multiplier, adaptive, after).c_str());
             ImGui::PopFont();
-            ImGui::SetItemTooltip("The game's own frames, %s, over the last %.1f s (%zu frame%s)", rates.gameMeasured ? "measured at present" : "estimated",
-                                  (second.count > 0 ? second : frames).windowMs / 1000.0, (second.count > 0 ? second : frames).count,
-                                  (second.count > 0 ? second : frames).count == 1 ? "" : "s");
-            if (multiplier)
+            if (adaptive && after)
+                ImGui::SetItemTooltip("Every frame shown, measured at present over the last %.1f s (%zu frame%s): with the effects after frame generation vkDaedalus\n"
+                                      "times each one, and MAKO changes how many it shows per real frame, so the game's own rate is not worked out",
+                                      timed.windowMs / 1000.0, timed.count, timed.count == 1 ? "" : "s");
+            else
+                ImGui::SetItemTooltip("The game's own frames, %s, over the last %.1f s (%zu frame%s)", rates.gameMeasured ? "measured at present" : "estimated",
+                                      timed.windowMs / 1000.0, timed.count, timed.count == 1 ? "" : "s");
+            if (adaptive)
+            {
+                ImGui::SameLine();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextColored(palette.muted, "%s", adaptiveWords(*adaptive).c_str());
+                if (adaptive->refresh)
+                    ImGui::SetItemTooltip("MAKO aims at the display's refresh as gamescope reports it, or at %u FPS while it reports none,\n"
+                                          "and changes how many frames it shows per real frame to reach it, so no shown rate is worked out here.",
+                                          adaptive->fps);
+                else
+                    ImGui::SetItemTooltip("MAKO aims at %u FPS and changes how many frames it shows per real frame to reach it,\n"
+                                          "so no shown rate is worked out here.",
+                                          adaptive->fps);
+            }
+            else if (multiplier)
             {
                 ImGui::SameLine();
                 ImGui::AlignTextToFramePadding();
@@ -123,10 +153,10 @@ namespace vkBasalt
                 }
                 ImGui::TextColored(palette.muted, "%.0f shown", rates.shownFps);
                 ImGui::SetItemTooltip(after ? "Every frame shown passes through vkDaedalus, so it is timed, and the game's own\n"
-                                              "rate is it divided by lsfg-vk's multiplier, %ux. LATENCY.md has the formulas."
-                                            : "vkDaedalus sees only the game's own frames, and lsfg-vk shows %ux as many.\n"
+                                              "rate is it divided by %s's multiplier, %ux. LATENCY.md has the formulas."
+                                            : "vkDaedalus sees only the game's own frames, and %s shows %ux as many.\n"
                                               "LATENCY.md has the formulas.",
-                                      *multiplier);
+                                      std::string(loadedFrameGenerationLayerName()).c_str(), *multiplier);
             }
             ImGui::SameLine(0.0f, ui::px(ui::Size::groupGap));
             ImGui::AlignTextToFramePadding();
@@ -183,12 +213,14 @@ namespace vkBasalt
             };
             const FrameGenerationPlace place     = pLogicalDevice->frameGenerationPlace;
             const bool                 lsfgFirst = effectsRunAfterFrameGeneration(place);
+            const std::string          layer(loadedFrameGenerationLayerName());
+            const bool                 loaded = frameGenerationLayerLoaded() || makoLayerLoaded();
             fact("Image", std::to_string(currentWidth) + "x" + std::to_string(currentHeight) + ", " + formatName(currentFormat) + ", " + colourSpaceName(swapchainColorSpace),
                  nullptr);
-            fact("Present mode", presentModeName(swapchainPresentMode) + (lsfgFirst ? ", from lsfg-vk" : ", the game's"),
-                 lsfgFirst ? "What lsfg-vk asked for: it runs before vkDaedalus"
-                 : frameGenerationLayerLoaded() ? "What the game asked for; lsfg-vk, after the effects, may change it"
-                                                : "What the game asked for");
+            const std::string asked   = "What " + layer + " asked for: it runs before vkDaedalus";
+            const std::string changes = "What the game asked for; " + layer + ", after the effects, may change it";
+            fact("Present mode", presentModeName(swapchainPresentMode) + (lsfgFirst ? ", from " + layer : ", the game's"),
+                 lsfgFirst ? asked.c_str() : loaded ? changes.c_str() : "What the game asked for");
             fact("Images", std::to_string(currentImageCount) + ", the game asked for " + std::to_string(swapchainMinImages),
                  "The images the swapchain holds against the game's minImageCount; a layer below can add more");
             ScaleInputs outputs;
@@ -201,7 +233,7 @@ namespace vkBasalt
                 std::snprintf(hz, sizeof(hz), "%.2f Hz", *refresh);
                 fact("Refresh", hz, "The current mode of the display this swapchain fills, as the compositor reports it");
             }
-            fact("Order", place == FrameGenerationPlace::NotLoaded ? "lsfg-vk not loaded" : lsfgFirst ? "lsfg-vk, then effects" : "effects, then lsfg-vk",
+            fact("Order", place == FrameGenerationPlace::NotLoaded ? "no frame generation" : lsfgFirst ? layer + ", then effects" : "effects, then " + layer,
                  "Read from the Vulkan layers below vkDaedalus in this game, not from the profile");
         }
         ui::endPanel();
@@ -251,11 +283,12 @@ namespace vkBasalt
                                   ? "The measured parts added up; nothing estimated is in it.\nGPU 1's copies out and back and the effects after the return are not measured."
                                   : "The measured parts added up; nothing estimated is in it.\nGPU 1's copies out and back are not measured.");
         ui::endPanel();
-        if (frames.count > 0 && multiplier)
+        if (frames.count > 0 && estimated)
         {
             ImGui::Dummy(ImVec2(0.0f, ui::px(ui::Size::gap)));
             ui::beginPanel();
-            ui::factRow("lsfg-vk holds one frame", milliseconds(frameGenerationHoldMs(frames.averageMs, *multiplier, after)).c_str(), ui::Mark::Estimated);
+            ui::factRow((std::string(loadedFrameGenerationLayerName()) + " holds one frame").c_str(),
+                        milliseconds(multiplier ? frameGenerationHoldMs(frames.averageMs, *multiplier, after) : frames.averageMs).c_str(), ui::Mark::Estimated);
             ImGui::SetItemTooltip(after ? "About one real frame: the average times the multiplier.\nA wait, not GPU work, so it is in no total."
                                         : "About one real frame: the average frame.\nA wait, not GPU work, so it is in no total.");
             ui::endPanel();
@@ -282,7 +315,7 @@ namespace vkBasalt
         ui::endScrollArea();
 
         ui::footer();
-        if (multiplier)
+        if (estimated)
         {
             ImGui::AlignTextToFramePadding();
             ui::rightAlign(ImGui::CalcTextSize("~ estimate").x);

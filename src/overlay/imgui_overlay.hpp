@@ -24,6 +24,8 @@
 #include "config_serializer.hpp"
 #include "gpu_assignment.hpp"
 #include "frame_generation.hpp"
+#include "latency_stats.hpp"
+#include "mako_config.hpp"
 #include "settings_manager.hpp"
 #include "reshade_parser.hpp"
 #include "overlay/overlay_renderer.hpp"
@@ -89,6 +91,7 @@ namespace vkBasalt
     {
         Effects,
         FrameGeneration,
+        Scaling,
         Gpus,
         Performance,
         Shaders,
@@ -118,6 +121,7 @@ namespace vkBasalt
         void toggle();
         void toggleFrameGeneration();
         std::optional<uint32_t> frameGenerationMultiplierHere();
+        std::optional<AdaptiveTarget> frameGenerationAdaptiveHere();
         void setPreviewing(bool held) { previewingByKey = held; }
         bool isPreviewing() const { return previewingByKey || previewingByMouse; }
         void switchOff(const std::string& why);
@@ -209,9 +213,43 @@ namespace vkBasalt
         void renderMainView(const KeyboardState& keyboard);
         void buildFrame(const KeyboardState& keyboard);
         void renderGpusView();
-        void renderFrameGenerationView();
+        struct FrameGenerationState
+        {
+            FrameGenerationLayer layer = FrameGenerationLayer::LsfgVk;
+            std::string          blocker;
+            bool                 notInstalled = false;
+            bool                 on           = false;
+            bool                 live         = false;
+            std::string          unavailable;
+        };
+        FrameGenerationState frameGenerationState();
+        FrameGenerationLayer profileFrameGenerationLayer();
+        bool                 frameGenerationLayerInstalled(FrameGenerationLayer layer) const;
+        void                 renderFrameGenerationView();
+        void                 renderLayerChoice(FrameGenerationLayer layer);
+        void                 renderLsfgBody(bool flipped, bool on, bool live, const std::vector<std::string>& waiting);
+        void                 renderFrameOrderNote();
         void renderFrameGenerationGlobals();
-        void renderPipelineStrip();
+        void renderPipelineStrip(FrameGenerationLayer layer);
+        bool                 readMakoOnce();
+        void                 refreshMakoFile(bool now);
+        void                 saveMako(const std::optional<MakoGlobal>& global, const std::optional<MakoProfile>& profile);
+        const MakoProfile*   makoProfileInUse() const;
+        bool                 makoLiveHere() const;
+        MakoPowerSource      makoEditedSet(const MakoProfile& profile) const;
+        std::string          makoBlocker(bool& notInstalled);
+        std::string          makoModelMissing(const std::string& model);
+        const MakoSettings*  makoGeneratingHere();
+        std::optional<uint32_t> makoMultiplierHere();
+        std::optional<AdaptiveTarget> makoAdaptiveHere();
+        std::vector<std::string> makoWaiting(const MakoProfile* inUse);
+        MakoSettings             makoSettingsAtStart(const MakoProfile& inUse) const;
+        void                 switchMako(bool on);
+        void                 useGamesGpuInMako();
+        std::optional<std::string> makoGpuElsewhere();
+        void                 renderMakoBody(bool flipped, bool on, const std::vector<std::string>& waiting);
+        void                 renderMakoGlobals();
+        void                 renderScalingView();
         void exportReport();
         void renderGlobalDefinitionsView();
         void renderEffectRows(const std::string& effectName);
@@ -221,6 +259,7 @@ namespace vkBasalt
         void frameGenerationAssignmentsChanged(const std::string& renamedFrom);
         std::vector<std::string> frameGenerationGlobalsWaiting() const;
         std::string frameGenerationBlocker(bool& notInstalled);
+        std::string frameGenerationBlocker(FrameGenerationLayer layer, bool& notInstalled);
         const FrameGenerationProfile* frameGenerationProfileInUse() const;
         bool frameGenerationLiveHere() const;
         bool effectsAfterFrameGenerationSaved();
@@ -234,7 +273,7 @@ namespace vkBasalt
         void         renderProfileTile(const LayoutRect& rect, const OverlayPalette& palette);
         void         renderEffectsSwitchTile(const LayoutRect& rect, const OverlayPalette& palette);
         void         renderSafeAntiCheatTile(const LayoutRect& rect, const OverlayPalette& palette);
-        void         renderSectionTiles(const FrameLayout& layout, const OverlayPalette& palette);
+        void         renderSectionTiles(const FrameLayout& layout, const OverlayPalette& palette, const FrameGenerationState& fg);
         void         renderRightTiles(const FrameLayout& layout, const OverlayPalette& palette);
         void         renderKeysCard(const KeyboardState& keyboard);
         void         applyFrameScale(float scale);
@@ -414,6 +453,24 @@ namespace vkBasalt
         std::string chainCrossings;
         std::string                                        frameOrderProfilePath;
         bool                                               effectsAfterFrameGeneration = false;
+        std::optional<FrameGenerationLayer>                frameGenerationLayerChoice;
+        bool                                               makoRead = false;
+        std::optional<MakoFile>                            makoFile;
+        std::optional<std::filesystem::file_time_type>     makoFileTime;
+        std::chrono::steady_clock::time_point              makoCheckedAt{};
+        std::string                                        makoFileProblem;
+        std::optional<std::string>                         makoProfileHere;
+        std::string                                        makoProblem;
+        std::optional<MakoProfile>                         makoDraft;
+        std::optional<MakoProfile>                         makoAtStart;
+        std::optional<MakoGlobal>                          makoGlobalAtStart;
+        std::optional<DllStatus>                           makoDll;
+        PowerSupplies                                      powerSupplies;
+        std::chrono::steady_clock::time_point              powerReadAt{};
+        std::optional<MakoPowerSource>                     makoTab;
+        bool                                               makoFgChecked = false;
+        std::string                                        tilesLogged;
+        std::optional<std::string>                         makoFgGone;
         std::string activeProfileName;
         std::string activeProfilePath;
         bool profileDirty = false;

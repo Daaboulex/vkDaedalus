@@ -338,6 +338,19 @@ namespace vkBasalt
             text << file.rdbuf();
             return text.str();
         }
+
+        bool disabledByCaller(const std::string& variable)
+        {
+            const char* recorded = std::getenv("VKDAEDALUS_RUN_CALLER_DISABLED");
+            if (!startedWithVkdaedalusRun() || recorded == nullptr)
+                return true;
+            std::istringstream named(recorded);
+            std::string        word;
+            while (named >> word)
+                if (word == variable)
+                    return true;
+            return false;
+        }
     }
 
     std::optional<std::string> nonEmptyEnvironment(const char* name)
@@ -776,14 +789,19 @@ namespace vkBasalt
         return fileInSteamLibraries(lsfgDllUnderCommon);
     }
 
-    bool libraryMapped(std::string_view library)
+    std::optional<std::string> mappedLibraryPath(std::string_view library)
     {
         std::ifstream maps("/proc/self/maps");
         std::string   line;
         while (std::getline(maps, line))
             if (line.find(library) != std::string::npos)
-                return true;
-        return false;
+                return line.substr(std::min(line.find('/'), line.size()));
+        return std::nullopt;
+    }
+
+    bool libraryMapped(std::string_view library)
+    {
+        return mappedLibraryPath(library).has_value();
     }
 
     std::optional<bool> layerListedBy(PFN_vkEnumerateInstanceLayerProperties enumerate, std::string_view layer)
@@ -827,10 +845,30 @@ namespace vkBasalt
         return visible;
     }
 
+    std::optional<FrameGenerationLayer> frameGenerationLayerOfThisRun()
+    {
+        const std::optional<std::string> named = nonEmptyEnvironment("VKDAEDALUS_RUN_FRAME_GENERATION_LAYER");
+        return named ? frameGenerationLayerNamed(*named) : std::nullopt;
+    }
+
+    bool startedWithVkdaedalusRun()
+    {
+        return std::getenv("VKDAEDALUS_RUN") != nullptr;
+    }
+
+    std::optional<std::string> programNamedByVkdaedalusRun()
+    {
+        const char* named = std::getenv("VKDAEDALUS_RUN_PROGRAM");
+        return named != nullptr ? std::optional<std::string>(named) : std::nullopt;
+    }
+
     std::optional<std::string> frameGenerationLayerDisabledBy(FrameGenerationLayer layer)
     {
         const std::string variable = layer == FrameGenerationLayer::Mako ? "DISABLE_MAKO" : "DISABLE_LSFGVK";
         if (std::getenv(variable.c_str()) == nullptr)
+            return std::nullopt;
+        const std::optional<FrameGenerationLayer> run = frameGenerationLayerOfThisRun();
+        if (run && *run != layer && !disabledByCaller(variable))
             return std::nullopt;
         return variable;
     }

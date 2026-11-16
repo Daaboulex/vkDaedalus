@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <span>
@@ -546,6 +547,34 @@ namespace vkBasalt
         return supplies;
     }
 
+    MakoProfile makoProfileWithPowerSets(MakoProfile profile, bool separate, MakoPowerSource runningNow)
+    {
+        if (separate && !profile.power)
+            profile.power = MakoPowerSets{profile.settings, profile.settings};
+        else if (!separate && profile.power)
+        {
+            profile.settings = makoSettingsFor(profile, runningNow);
+            profile.power.reset();
+        }
+        return profile;
+    }
+
+    bool makoGpuNamesAnother(const std::string& gpu, const MakoGpu& game)
+    {
+        const auto idText = [](uint32_t id) {
+            char text[8];
+            std::snprintf(text, sizeof(text), "0x%04X", id & 0xFFFFu);
+            return std::string(text);
+        };
+        if (gpu == game.name || gpu == idText(game.vendorId) + ":" + idText(game.deviceId))
+            return false;
+        unsigned int bus = 0, device = 0, function = 0;
+        int          read = 0;
+        if (std::sscanf(gpu.c_str(), "%u:%u.%u%n", &bus, &device, &function, &read) == 3 && static_cast<size_t>(read) == gpu.size())
+            return game.pci && (game.pci->bus != bus || game.pci->device != device || game.pci->function != function);
+        return true;
+    }
+
     std::optional<std::string>
     makoTextWith(const std::string& text, const std::optional<MakoGlobal>& global, const std::optional<MakoProfile>& profile, std::string& problem)
     {
@@ -841,6 +870,32 @@ namespace vkBasalt
     bool makoSettingsFromEnvironment()
     {
         return std::getenv("MAKO_ENV") != nullptr;
+    }
+
+    bool underGamescope()
+    {
+        return nonEmptyEnvironment("GAMESCOPE_WAYLAND_DISPLAY").has_value();
+    }
+
+    std::optional<std::string> makoFgMissing()
+    {
+#if defined(__x86_64__)
+        const std::string missing = "MAKO FG is not installed: mako-fg-host is missing";
+        if (const std::optional<std::string> host = nonEmptyEnvironment("MAKO_FG_HOST"))
+            return isRegularFile(*host) ? std::nullopt : std::optional<std::string>(missing);
+        const std::optional<std::string> library = mappedLibraryPath(makoLayerLibrary);
+        if (!library)
+            return std::nullopt;
+        std::error_code unreadable;
+        const fs::path  folder = fs::canonical(*library, unreadable).parent_path();
+        for (const fs::path& host : {folder.parent_path() / "lib/mako-fg/mako-fg-host", folder.parent_path().parent_path() / "lib64/mako-fg/mako-fg-host",
+                                     folder / "mako-fg/mako-fg-host"})
+            if (isRegularFile(host))
+                return std::nullopt;
+        return missing;
+#else
+        return std::string("MAKO FG is published for x86-64 only");
+#endif
     }
 
     std::string_view loadedFrameGenerationLayerName()

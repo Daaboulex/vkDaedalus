@@ -6,8 +6,10 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace vkBasalt
@@ -77,6 +79,29 @@ namespace vkBasalt
         if (effectsAfterFrameGeneration)
             return {timedFps / *multiplier, timedFps, false, true};
         return {timedFps, timedFps * *multiplier, true, false};
+    }
+
+    struct AdaptiveTarget
+    {
+        uint32_t fps     = 0;
+        bool     refresh = false;
+
+        bool operator==(const AdaptiveTarget&) const = default;
+    };
+
+    inline std::string adaptiveWords(const AdaptiveTarget& target)
+    {
+        return target.refresh ? "adaptive to the refresh" : "adaptive to " + std::to_string(target.fps) + " FPS";
+    }
+
+    inline std::string rateLine(double timedFps, std::optional<uint32_t> multiplier, const std::optional<AdaptiveTarget>& adaptive, bool effectsAfterFrameGeneration)
+    {
+        char text[48];
+        if (adaptive && effectsAfterFrameGeneration)
+            std::snprintf(text, sizeof(text), "%.0f shown", timedFps);
+        else
+            std::snprintf(text, sizeof(text), "%.0f FPS", adaptive ? timedFps : frameRatesOf(timedFps, multiplier, effectsAfterFrameGeneration).gameFps);
+        return text;
     }
 
     inline double plotCeilingMs(double averageMs, double slowestAverageMs)

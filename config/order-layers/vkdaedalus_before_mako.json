@@ -11,7 +11,7 @@
       "VK_LAYER_MAKO_render"
     ],
     "enable_environment": {
-      "ENABLE_MAKO": "1"
+      "VKDAEDALUS_RUN_FRAME_GENERATION_LAYER": "mako"
     },
     "disable_environment": {
       "VKDAEDALUS_AFTER_MAKO": "1"

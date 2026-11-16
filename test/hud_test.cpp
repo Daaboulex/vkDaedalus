@@ -31,16 +31,22 @@ int main()
 
     const FrameStats second = frameStats(std::vector<double>(60, 1000.0 / 60.0));
     const FrameStats ten    = frameStats(std::vector<double>{16.0, 16.0, 50.0});
-    expect(hudLines({HudItem::Fps}, second, ten, std::nullopt, false, std::nullopt) == std::vector<std::string>{"60 FPS"},
+    expect(hudLines({HudItem::Fps}, second, ten, std::nullopt, std::nullopt, false, std::nullopt) == std::vector<std::string>{"60 FPS"},
            "FPS only shows one line, and no shown rate while lsfg-vk does not generate");
-    expect(hudLines({HudItem::Fps}, second, ten, 2u, false, std::nullopt) == std::vector<std::string>{"60 FPS", "120 shown"},
+    expect(hudLines({HudItem::Fps}, second, ten, 2u, std::nullopt, false, std::nullopt) == std::vector<std::string>{"60 FPS", "120 shown"},
            "while lsfg-vk generates at 2x before the effects, the game's rate and the shown rate both show");
-    expect(hudLines({HudItem::Fps}, second, ten, 2u, true, std::nullopt) == std::vector<std::string>{"30 FPS", "60 shown"},
+    expect(hudLines({HudItem::Fps}, second, ten, 2u, std::nullopt, true, std::nullopt) == std::vector<std::string>{"30 FPS", "60 shown"},
            "with the effects after frame generation the timed rate is the shown one and the game's is it divided by the multiplier");
-    expect(hudLines({HudItem::Fps, HudItem::FrameTime, HudItem::SlowestOnePercent, HudItem::EffectsTime}, second, ten, std::nullopt, false, 0.25) ==
+    expect(hudLines({HudItem::Fps}, second, ten, std::nullopt, AdaptiveTarget{90, false}, false, std::nullopt) == std::vector<std::string>{"60 FPS", "adaptive to 90 FPS"},
+           "with MAKO in Adaptive before the effects, the game's rate shows with Adaptive and its target, as the multiplier changes from frame to frame");
+    expect(hudLines({HudItem::Fps}, second, ten, std::nullopt, AdaptiveTarget{90, false}, true, std::nullopt) == std::vector<std::string>{"60 shown", "adaptive to 90 FPS"},
+           "with the effects after MAKO in Adaptive the timed rate is the frames shown, and the game's own is not worked out");
+    expect(hudLines({HudItem::Fps}, second, ten, std::nullopt, AdaptiveTarget{90, true}, false, std::nullopt) == std::vector<std::string>{"60 FPS", "adaptive to the refresh"},
+           "Adaptive aimed at the display's refresh says so in place of a number");
+    expect(hudLines({HudItem::Fps, HudItem::FrameTime, HudItem::SlowestOnePercent, HudItem::EffectsTime}, second, ten, std::nullopt, std::nullopt, false, 0.25) ==
                std::vector<std::string>{"60 FPS", "16.7 ms", "1% 50.0 ms", "effects 0.25 ms"},
            "the detailed lines follow the items' order");
-    expect(hudLines({HudItem::Fps, HudItem::EffectsTime}, FrameStats{}, ten, std::nullopt, false, std::nullopt).empty(),
+    expect(hudLines({HudItem::Fps, HudItem::EffectsTime}, FrameStats{}, ten, std::nullopt, std::nullopt, false, std::nullopt).empty(),
            "no frame in the last second and no effects time leave nothing to show rather than a zero");
     return failures ? 1 : 0;
 }

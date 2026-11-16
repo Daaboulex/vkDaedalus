@@ -12,6 +12,7 @@ namespace vkBasalt
     {
         Sliders,
         Frames,
+        Scale,
         Chip,
         Chart,
         Layers,

@@ -372,7 +372,10 @@ namespace vkBasalt
         ProfileSettings profileSettings;
         profileSettings.gpus          = pEffectRegistry->editedGpuList();
         if (frameOrderProfilePath == activeProfilePath)
+        {
             profileSettings.effectsAfterFrameGeneration = effectsAfterFrameGeneration;
+            profileSettings.frameGenerationLayer        = frameGenerationLayerChoice;
+        }
 
         if (ConfigSerializer::saveToPath(activeProfilePath, effects, disabledEffects, params, effectPaths, allDefs, profileSettings, liveParameterKeys))
         {

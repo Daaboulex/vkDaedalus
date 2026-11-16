@@ -261,10 +261,10 @@ namespace vkBasalt::ui
         return rowButton(label);
     }
 
-    bool tab(const char* label, bool selected)
+    bool tab(const char* label, bool selected, float width)
     {
         const ImVec2 at = ImGui::GetCursorScreenPos();
-        const float  w  = buttonWidth(label, Kind::Quiet);
+        const float  w  = width > 0.0f ? width : buttonWidth(label, Kind::Quiet);
         if (selected)
             ImGui::GetWindowDrawList()->AddRectFilled(at, ImVec2(at.x + w, at.y + px(Size::control)), u32(palette().tint), px(Size::radius));
         const bool pressed = kitButton(label, Kind::Quiet, w, Size::control, 14.0f, nullptr);

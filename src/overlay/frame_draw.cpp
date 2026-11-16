@@ -76,6 +76,10 @@ namespace vkBasalt
                 pen.arc(18.5f, 6.5f, 1.5f, -90.0f, 0.0f);
                 pen.line(20, 6.5f, 20, 15);
                 break;
+            case Icon::Scale:
+                pen.rect(3, 3, 18, 18, 2), pen.rect(3, 12, 9, 9, 1.5f);
+                pen.line(12, 12, 18, 6), pen.lines({{14, 6}, {18, 6}, {18, 10}});
+                break;
             case Icon::Chip:
                 pen.rect(6, 6, 12, 12, 2), pen.rect(9.5f, 9.5f, 5, 5, 0);
                 for (float v : {9.0f, 15.0f})
