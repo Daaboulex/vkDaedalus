@@ -36,11 +36,12 @@ group is the layer's own and the same for every game.
 | Layer | Changes live | Changes when the game rebuilds its swapchain | Changes at the next launch |
 |---|---|---|---|
 | lsfg-vk | multiplier, flow scale, performance mode, colour space, transfer function | | vsync, the swapchain image count, half precision, the DLL path, a profile switch |
-| MAKO | On, the multiplier, Adaptive and its target, flow scale, MAKO FG mode, performance mode, the pacing group, HDR quality, gamescope VRR, the scaling method and sharpness | the scaling factor, supersampling | Ready at start, the model, Ultra performance, Scaling on, Keep swapchain image count, Mailbox compatibility, half precision, `Lossless.dll`, a profile switch |
+| MAKO | On, the multiplier, Adaptive and its target, flow scale, MAKO FG mode, performance mode, the pacing group, HDR quality, gamescope VRR, the scaling method and sharpness, a profile switch | the scaling factor, supersampling | Ready at start, the model, Ultra performance, Scaling on, Keep swapchain image count, Mailbox compatibility, half precision, `Lossless.dll` |
 
 lsfg-vk reads a live change and has the game rebuild its swapchain. Off sets the multiplier to 1, which passes frames
-through, so switching on again needs no new launch. MAKO looks at its file four times a second and applies a live
-change in place. Off sets its frame generation off; On works again in the same run only when Ready at start was on
+through, so switching on again needs no new launch. MAKO looks at its file four times a second, applies a live
+change in place and picks the game's profile again, so a profile switch or rename takes the new profile's live settings at
+once and keeps the next-launch ones it started with. Off sets its frame generation off; On works again in the same run only when Ready at start was on
 when the game started, since MAKO sets up frame generation only then. The `Insert` key does the same as the switch.
 
 lsfg-vk joins a game, and MAKO sets up frame generation in it, only if the layer's file holds a profile for the game

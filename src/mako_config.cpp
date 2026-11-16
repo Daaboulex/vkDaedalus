@@ -684,6 +684,14 @@ namespace vkBasalt
         return std::nullopt;
     }
 
+    std::optional<std::string> makoProfileAfterRead(const std::optional<MakoFile>& read, const MakoProcess& process, const std::optional<std::string>& running)
+    {
+        if (!read)
+            return running;
+        const std::optional<size_t> found = makoProfileFor(*read, process);
+        return found ? std::optional<std::string>(read->profiles[*found].name) : std::nullopt;
+    }
+
     MakoProcess thisMakoProcess()
     {
         MakoProcess     process;

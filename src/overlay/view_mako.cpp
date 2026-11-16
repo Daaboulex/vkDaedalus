@@ -64,18 +64,14 @@ namespace vkBasalt
         makoRead              = true;
         const std::string path = makoConfigPath();
         const MakoRead    read = readMakoFile(path);
-        makoFile               = read.file;
-        makoFileProblem        = read.problem;
-        makoFileTime           = writeTimeOf(path);
-        makoCheckedAt          = std::chrono::steady_clock::now();
+        useMakoFile(read.file);
+        makoFileProblem = read.problem;
+        makoFileTime    = writeTimeOf(path);
+        makoCheckedAt   = std::chrono::steady_clock::now();
         if (read.file)
-        {
             makoGlobalAtStart = read.file->global;
-            if (const std::optional<size_t> here = makoProfileFor(*read.file, thisMakoProcess()))
-                makoProfileHere = read.file->profiles[*here].name;
-        }
-        if (const MakoProfile* atStart = makoProfileInUse())
-            makoAtStart = *atStart;
+        if (makoProfileHere)
+            makoAtStart = *makoProfileNamed(*makoFile, *makoProfileHere);
         return makoFile.has_value();
     }
 
@@ -101,12 +97,18 @@ namespace vkBasalt
         if (!now && written == makoFileTime)
             return;
         const MakoRead read = readMakoFile(path);
-        makoFile            = read.file;
-        makoFileProblem     = read.problem;
-        makoFileTime        = written;
+        useMakoFile(read.file);
+        makoFileProblem = read.problem;
+        makoFileTime    = written;
         makoDraft.reset();
         makoDll.reset();
         Logger::debug("read MAKO's file " + path + " again" + (now ? "" : ", since it changed"));
+    }
+
+    void ImGuiOverlay::useMakoFile(const std::optional<MakoFile>& file)
+    {
+        makoFile        = file;
+        makoProfileHere = makoProfileAfterRead(file, thisMakoProcess(), makoProfileHere);
     }
 
     void ImGuiOverlay::saveMako(const std::optional<MakoGlobal>& global, const std::optional<MakoProfile>& profile)
@@ -116,7 +118,7 @@ namespace vkBasalt
         MakoFile          written;
         if (saveMakoFile(path, global, profile, written, problem))
         {
-            makoFile     = written;
+            useMakoFile(written);
             makoFileTime = writeTimeOf(path);
             makoProblem.clear();
             if (global)
@@ -220,11 +222,9 @@ namespace vkBasalt
         return AdaptiveTarget{now->targetFps, now->adaptiveTargetRefreshRate && underGamescope()};
     }
 
-    MakoSettings ImGuiOverlay::makoSettingsAtStart(const MakoProfile& inUse) const
+    MakoSettings ImGuiOverlay::makoSettingsAtStart() const
     {
-        if (makoAtStart && makoAtStart->name == inUse.name)
-            return makoSettingsFor(*makoAtStart, powerSupplies.source);
-        return MakoSettings{};
+        return makoAtStart ? makoSettingsFor(*makoAtStart, powerSupplies.source) : MakoSettings{};
     }
 
     std::vector<std::string> ImGuiOverlay::makoWaiting(const MakoProfile* inUse)
@@ -233,7 +233,7 @@ namespace vkBasalt
         if (inUse)
         {
             const MakoSettings& now  = makoSettingsFor(*inUse, powerSupplies.source);
-            const MakoSettings  then = makoSettingsAtStart(*inUse);
+            const MakoSettings  then = makoSettingsAtStart();
             if (now.frameGenerationModel != then.frameGenerationModel)
                 waiting.push_back("Model");
             if (now.frameGenerationProvisioned != then.frameGenerationProvisioned)
@@ -680,7 +680,7 @@ namespace vkBasalt
         MakoSettings&         set       = settingsOf(tuned, edited);
         bool                  on        = inUse && set.scalingEnabled;
         const bool            startedOn = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).scalingEnabled;
-        const bool            pending   = inUse && makoSettingsFor(*inUse, powerSupplies.source).scalingEnabled != makoSettingsAtStart(*inUse).scalingEnabled;
+        const bool            pending   = inUse && makoSettingsFor(*inUse, powerSupplies.source).scalingEnabled != makoSettingsAtStart().scalingEnabled;
         const std::string     amount    = shownChoice(makoScalingMethods, set.scalingMethod) + " " + factorText(set.scalingFactor);
 
         ui::heading("Scaling");

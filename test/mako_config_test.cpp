@@ -436,6 +436,14 @@ static void matching()
     const MakoFile anything = *parseMakoFile("version = 2\n[[profile]]\nname = \"all\"\nactive_in = \"\"\n", problem);
     expect(makoProfileFor(anything, native) == 0u, "an empty entry matches every program, as MAKO's suffix match does");
 
+    const std::optional<MakoFile> switched =
+        parseMakoFile("version = 2\n[[profile]]\nname = \"vkdaedalus a\"\n[[profile]]\nname = \"vkdaedalus b\"\nactive_in = \"/bin/game\"\n", problem);
+    const std::optional<MakoFile> renamed = parseMakoFile("version = 2\n[[profile]]\nname = \"vkdaedalus c\"\nactive_in = \"/bin/game\"\n", problem);
+    expect(makoProfileAfterRead(switched, native, "vkdaedalus a") == "vkdaedalus b" && makoProfileAfterRead(renamed, native, "vkdaedalus b") == "vkdaedalus c",
+           "MAKO picks its profile again from every file it reads, so a profile switch or rename made while the game runs is the profile it runs");
+    expect(!makoProfileAfterRead(switched, fallback, "vkdaedalus b"), "a file that matches the game no more leaves MAKO with no profile");
+    expect(makoProfileAfterRead(std::nullopt, native, "vkdaedalus b") == "vkdaedalus b", "a file MAKO refuses leaves it on the profile it ran");
+
     unsetenv("MAKO_PROFILE");
     unsetenv("MAKO_PROFILE_FALLBACK");
     unsetenv("MAKO_FOLLOW_CURRENT_PROFILE");

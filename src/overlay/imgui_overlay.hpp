@@ -233,6 +233,7 @@ namespace vkBasalt
         void renderPipelineStrip(FrameGenerationLayer layer);
         bool                 readMakoOnce();
         void                 refreshMakoFile(bool now);
+        void                 useMakoFile(const std::optional<MakoFile>& file);
         void                 saveMako(const std::optional<MakoGlobal>& global, const std::optional<MakoProfile>& profile);
         const MakoProfile*   makoProfileInUse() const;
         bool                 makoLiveHere() const;
@@ -243,7 +244,7 @@ namespace vkBasalt
         std::optional<uint32_t> makoMultiplierHere();
         std::optional<AdaptiveTarget> makoAdaptiveHere();
         std::vector<std::string> makoWaiting(const MakoProfile* inUse);
-        MakoSettings             makoSettingsAtStart(const MakoProfile& inUse) const;
+        MakoSettings             makoSettingsAtStart() const;
         void                 switchMako(bool on);
         void                 useGamesGpuInMako();
         std::optional<std::string> makoGpuElsewhere();

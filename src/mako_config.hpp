@@ -180,7 +180,9 @@ namespace vkBasalt
 
     const MakoProfile*    makoProfileNamed(const MakoFile& file, const std::string& name);
     std::optional<size_t> makoProfileFor(const MakoFile& file, const MakoProcess& process);
-    MakoProcess           thisMakoProcess();
+    std::optional<std::string>
+                makoProfileAfterRead(const std::optional<MakoFile>& read, const MakoProcess& process, const std::optional<std::string>& running);
+    MakoProcess thisMakoProcess();
     MakoProcess           makoProcessOf(const std::vector<std::string>& command, const std::string& program);
 
     std::vector<std::string> makoActiveIn(const std::vector<std::string>& games);
