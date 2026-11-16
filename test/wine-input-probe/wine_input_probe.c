@@ -14,9 +14,11 @@
 
 enum
 {
-    SLOTS  = 2,
-    WIDTH  = 640,
-    HEIGHT = 480
+    SLOTS      = 2,
+    WIDTH      = 640,
+    HEIGHT     = 480,
+    CENTRED_MS = 300,
+    STILL_MS   = 500
 };
 
 #define INSTANCE_FUNCTIONS(X)                     \
@@ -172,6 +174,11 @@ static POINT clientCentre(HWND window)
     POINT centre = {WIDTH / 2, HEIGHT / 2};
     ClientToScreen(window, &centre);
     return centre;
+}
+
+static BOOL cursorInClient(HWND window, POINT* at)
+{
+    return GetCursorPos(at) && ScreenToClient(window, at);
 }
 
 static int clipToClient(HWND window)
@@ -337,8 +344,9 @@ int main(int argc, char** argv)
         if (vkCreateSemaphore(device, &semaphoreInfo, NULL, &acquired[s]) != VK_SUCCESS || vkCreateFence(device, &fenceInfo, NULL, &inFlight[s]) != VK_SUCCESS)
             return fail("vkCreateSemaphore or vkCreateFence failed");
 
-    int  foreground = 0, clipped = 0, down[3] = {0, 0, 0};
-    LONG seenX = LONG_MIN, seenY = LONG_MIN;
+    int       foreground = 0, clipped = 0, released = 0, ready = 0, down[3] = {0, 0, 0};
+    ULONGLONG centredSince = 0, stillSince = 0;
+    LONG      seenX = LONG_MIN, seenY = LONG_MIN;
     for (unsigned long frame = 0; frame < frames; frame++)
     {
         for (MSG message; PeekMessageA(&message, NULL, 0, 0, PM_REMOVE);)
@@ -348,29 +356,50 @@ int main(int argc, char** argv)
             foreground = 1;
             fprintf(stderr, "wine-input-probe: foreground\n");
         }
-        if (recenter && foreground && !clipped && clipToClient(window))
-        {
-            clipped = 1;
-            fprintf(stderr, "wine-input-probe: clips the pointer\n");
-        }
         reportAsyncKeys(down);
         POINT at = {0, 0};
-        if (GetCursorPos(&at) && (at.x != seenX || at.y != seenY))
+        if (cursorInClient(window, &at) && (at.x != seenX || at.y != seenY))
         {
             fprintf(stderr, seenX != LONG_MIN ? "wine-input-probe: pointer moved %ld %ld\n" : "wine-input-probe: pointer at %ld %ld\n", at.x, at.y);
-            seenX = at.x;
-            seenY = at.y;
+            seenX      = at.x;
+            seenY      = at.y;
+            stillSince = GetTickCount64();
         }
+        if (foreground && !clipped && !released && clipToClient(window))
+            clipped = 1;
         if (clipped)
         {
             const POINT centre = clientCentre(window);
             SetCursorPos(centre.x, centre.y);
             POINT warped = {0, 0};
-            if (GetCursorPos(&warped))
+            if (cursorInClient(window, &warped))
             {
                 seenX = warped.x;
                 seenY = warped.y;
             }
+        }
+        const ULONGLONG now = GetTickCount64();
+        if (seenX != WIDTH / 2 || seenY != HEIGHT / 2)
+            centredSince = 0;
+        else if (centredSince == 0)
+            centredSince = now;
+        const int centredLongEnough = centredSince != 0 && now - centredSince >= CENTRED_MS;
+        if (clipped && !recenter && centredLongEnough)
+        {
+            ClipCursor(NULL);
+            clipped    = 0;
+            released   = 1;
+            stillSince = now;
+        }
+        else if (!ready && recenter && clipped && centredLongEnough)
+        {
+            ready = 1;
+            fprintf(stderr, "wine-input-probe: holds the pointer at its centre\n");
+        }
+        else if (!ready && released && now - stillSince >= STILL_MS)
+        {
+            ready = 1;
+            fprintf(stderr, "wine-input-probe: pointer still at %ld %ld after placing it\n", seenX, seenY);
         }
         const uint32_t slot = (uint32_t)(frame % SLOTS);
         if (vkWaitForFences(device, 1, &inFlight[slot], VK_TRUE, UINT64_MAX) != VK_SUCCESS || vkResetFences(device, 1, &inFlight[slot]) != VK_SUCCESS)

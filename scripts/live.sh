@@ -3745,7 +3745,7 @@ wine_stop_failure() {
 }
 
 drive_wine_hook() {
-    local log="$1" map="$2" ready="$3" settled="$4" window="" tries=0
+    local log="$1" map="$2" ready="$3" window="" tries=0
     wait_for_line 'wine-input-probe: window shown' 1 "$log" || return 0
     until [ -n "$window" ] || [ "$tries" -ge 50 ]; do
         window=$(DISPLAY="$PRIVATE_DISPLAY" xdotool search --onlyvisible --name '^wine-input-probe$' | tail -1) || true
@@ -3753,30 +3753,26 @@ drive_wine_hook() {
         [ -n "$window" ] || sleep 0.1
     done
     ui_take_window "$window"
-    if [ -n "$window" ]; then DISPLAY="$PRIVATE_DISPLAY" xdotool mousemove --window "$window" 320 240 || true; fi
     wait_for_line "$ready" 1 "$log" || return 0
-    wait_for_line "$settled" 1 "$log" || return 0
     drive_held_input "$log" "$map"
 }
 
 wine_hook_case() {
     local icd="$1" dir="$2" mode="$3" control="$2/wine-control.log" prefix="$2/wine-prefix"
     local name="the input hook holds a Wine game's input, $mode" log="$2/wine-$mode.log" home="$2/wine-$mode-home" map="$2/wine-$mode.map"
-    local driver why ready settled own_warp="" held
+    local driver why ready own_warp="" held
     local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved" "async key")
     if [ "$mode" = recenter ]; then
-        ready='wine-input-probe: clips the pointer'
-        settled="$ready"
+        ready='wine-input-probe: holds the pointer at its centre'
         own_warp='wine-input-probe: motion 320 240'
         held="clipping the cursor to its window and re-centring it with SetCursorPos every frame, which Wine sends as XWarpPointer under its clip grab"
     else
-        ready='wine-input-probe: foreground'
-        settled='wine-input-probe: pointer (at|moved) 320 240$'
-        held="polling GetCursorPos every frame and never warping, which Wine answers with XQueryPointer once the cursor is still for 100 ms"
+        ready='wine-input-probe: pointer still at [0-9-]+ [0-9-]+ after placing it'
+        held="placing the cursor at its centre once, then polling GetCursorPos every frame and never warping, which Wine answers with XQueryPointer once the cursor is still for 100 ms"
     fi
     fresh_home "$home" cas
     printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
-    background drive_wine_hook "$log" "$map" "$ready" "$settled"
+    background drive_wine_hook "$log" "$map" "$ready"
     driver=$!
     run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" WINEPREFIX="$prefix" "${wine_quiet[@]}" \
         "$VKB_LAYER/bin/vkdaedalus-run" "$VKB_WINE/bin/wine" "$VKB_WINE_PROBE" 900 "$mode"
