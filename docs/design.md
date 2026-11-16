@@ -197,7 +197,8 @@ check's message or a test already says is not repeated here.
 - `mako-launch` is not used: it replaces `VK_IMPLICIT_LAYER_PATH`, which drops vkDaedalus.
   `vkdaedalus-run` sets the one variable of it MAKO needs, `ENABLE_MAKO=1`.
 - MAKO generates frames only on the game's GPU, so the card offers no GPU and never writes MAKO's
-  `gpu` key; it offers to clear one that names another GPU.
+  `gpu` key; it offers to clear one that names another GPU. The card names the GPU in a row of its
+  own: read from a tooltip alone, the card looked as if it lacked a GPU choice.
 - MAKO's power sets are read by MAKO's own rule from `/sys/class/power_supply`, the same check
   comparing it with MAKO's code, and the card names them by what MAKO switches on, plugged in or on
   battery, not docked or handheld.

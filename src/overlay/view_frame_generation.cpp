@@ -435,15 +435,41 @@ namespace vkBasalt
             else if (step.what == "Display" && refresh)
                 ImGui::SetItemTooltip("The current mode of the display this swapchain fills, as the compositor reports it");
         }
-        if (elsewhere)
+    }
+
+    void ImGuiOverlay::renderFrameGenerationGpuRow(FrameGenerationLayer layer)
+    {
+        const OverlayPalette& palette = activePalette();
+        const bool            mako    = layer == FrameGenerationLayer::Mako;
+        const std::string     shown   = "GPU " + std::to_string(gameGpu) + ", " + frameGenerationGpuName;
+        const std::string     why     = mako ? "MAKO generates frames only on the GPU the game renders on: it supports no frame generation on another GPU.\n"
+                                               "Effects can still run on another GPU, chosen on the GPUs card."
+                                             : "lsfg-vk 2 generates frames only on the GPU the game renders on: it hands each frame to its pipeline as memory\n"
+                                               "only that GPU and its driver can open, and it has no setting for another GPU.\n"
+                                               "Effects can still run on another GPU, chosen on the GPUs card.";
+        const float           column  = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
+        ui::label("GPU");
+        ImGui::SetItemTooltip("%s", why.c_str());
+        ui::atColumn(column);
+        ImGui::AlignTextToFramePadding();
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImGui::TextColored(palette.secondary, "%s", shown.c_str());
+        UiMap::nameNextItem(shown.c_str());
+        ImGui::ItemAdd(ImRect(at, ImVec2(at.x + ImGui::GetItemRectSize().x, at.y + ImGui::GetFrameHeight())), ImGui::GetID("##frameGenerationGpu"));
+        ImGui::SetItemTooltip("%s", why.c_str());
+        if (const std::optional<std::string> elsewhere = mako ? makoGpuElsewhere() : std::nullopt)
         {
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(palette.warn, "%s", elsewhere->c_str());
-            ImGui::SameLine(0.0f, ui::px(ui::Size::groupGap));
+            ImGui::SetCursorPosX(column);
             UiMap::nameNextItem("Use the game's GPU");
             if (ui::lineButton("Use the game's GPU"))
                 useGamesGpuInMako();
+            ImGui::SetItemTooltip("Removes the GPU from MAKO's profile, so MAKO generates frames on the GPU the game renders on");
+            ImGui::SameLine(0.0f, ui::px(ui::Size::groupGap));
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(palette.warn, "%s", elsewhere->c_str());
+            ImGui::SetItemTooltip("%s", why.c_str());
         }
+        ImGui::Dummy(ImVec2(0.0f, ui::px(ui::Size::gap) * 0.5f));
     }
 
     void ImGuiOverlay::renderFrameGenerationView()
@@ -572,6 +598,7 @@ namespace vkBasalt
             frameGenerationGpuName = properties.deviceName;
         }
         ui::beginScrollArea("##framegenerationbody");
+        renderFrameGenerationGpuRow(fg.layer);
         renderPipelineStrip(fg.layer);
         if (mako)
             renderMakoBody(flipped, on, waiting);

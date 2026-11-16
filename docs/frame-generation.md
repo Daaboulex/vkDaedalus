@@ -92,8 +92,8 @@ launch. [How it works](how-it-works.md#the-order-around-frame-generation) explai
 
 ## Which GPU
 
-Frame generation runs on the GPU the game renders on, and the card offers no other. lsfg-vk 2 has no GPU setting: it
-hands each frame to its own device as memory only the same GPU can import. MAKO supports no frame generation on another
-GPU than the game's; its file can name a GPU, which the card never writes, and when it names another than the game's
-the card says so and offers to clear it. Effects can still run on another GPU, as [a second GPU](second-gpu.md)
-describes.
+Frame generation runs on the GPU the game renders on. The card's GPU row names that GPU and offers no other. lsfg-vk 2
+has no GPU setting: it hands each frame to its own device as memory only the same GPU can import. MAKO supports no frame
+generation on another GPU than the game's; its file can name a GPU, which the card never writes, and when it names
+another than the game's the GPU row says so and offers to clear it. Effects can still run on another GPU, as
+[a second GPU](second-gpu.md) describes.

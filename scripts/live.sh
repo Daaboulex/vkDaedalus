@@ -863,6 +863,7 @@ seconds_since() {
 drive_mako_live() {
     local log="$1" map="$2" reloads window start
     : >"$log.steps"
+    : >"$log.gpu"
     if ! wait_for_line '^MAKO Renderer: spatial scaling active: ' 1 "$log"; then return 0; fi
     start=$EPOCHREALTIME
     if ! wait_for_line 'present cycle' 60 "$log"; then return 0; fi
@@ -873,6 +874,7 @@ drive_mako_live() {
     ui_click "$map" "Frame generation" 1 "$log" || true
     tile_says "$log" '^Frame generation tile: ' || true
     tile_line "$log" >"$log.tile"
+    ui_label_starting "$map" "GPU 1, " "$log" >"$log.gpu" || true
     ui_click "$map" "Scaling" 1 "$log" || true
     reloads=$(count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$log")
     ui_set_value "$map" "##Sharpness" 0.5 "$log" || true
@@ -955,6 +957,7 @@ mako_live_case() {
     elif [ "$(count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$log")" -lt 1 ] || [ -z "$live" ]; then
         wrong+=("after the overlay wrote Sharpness 0.5 MAKO said: $(awk '/^MAKO Renderer: (updated configuration|spatial scaling model changed)/' "$log" | tr '\n' ' ')")
     fi
+    if [ "$(wc -c <"$log.gpu")" -le 8 ]; then wrong+=("MAKO's body drew no GPU row naming GPU 1 and the game's GPU"); fi
     if absent=$(mako_fg_absent); then
         if [[ "$(cat "$log.tile")" != 'Frame generation tile: MAKO, needs a model ('* ]]; then wrong+=("without MAKO FG the tiles say: $(cat "$log.tile"), want MAKO, needs a model"); fi
         if [ "$(count '^MAKO Renderer: frame-generation backend initialization failed; independent spatial scaling retained:' "$log")" -lt 1 ] ||
@@ -966,7 +969,7 @@ mako_live_case() {
     if [ "${#wrong[@]}" -gt 0 ]; then
         record FAIL "$name" "$(printf '%s; ' "${wrong[@]}")"
     else
-        record PASS "$name" "the game drew at $game and MAKO Scaler presented it at $presented; the Sharpness the overlay set while it ran was read in place and MAKO said: ${live#MAKO Renderer: }${absent:+; $absent, so the tiles say $(cat "$log.tile") and MAKO said: $(grep -m1 -A1 '^MAKO Renderer: frame-generation backend initialization failed' "$log" | tr '\n' ' ' | sed 's/MAKO Renderer: //')}; validation clean against MAKO alone taking the same steps"
+        record PASS "$name" "the game drew at $game and MAKO Scaler presented it at $presented under the GPU row $(cat "$log.gpu"); the Sharpness the overlay set while it ran was read in place and MAKO said: ${live#MAKO Renderer: }${absent:+; $absent, so the tiles say $(cat "$log.tile") and MAKO said: $(grep -m1 -A1 '^MAKO Renderer: frame-generation backend initialization failed' "$log" | tr '\n' ' ' | sed 's/MAKO Renderer: //')}; validation clean against MAKO alone taking the same steps"
     fi
 }
 
@@ -3444,7 +3447,7 @@ greyed_says() {
 }
 
 drive_mako() {
-    local log="$1" map="$2" config="$3" home="$4" ui_log="$1.ui" window library want
+    local log="$1" map="$2" config="$3" home="$4" ui_log="$1.ui" window library want gpu_row
     : >"$ui_log"
     if ! wait_for_line 'present cycle' 30 "$log"; then
         ui_result "$ui_log" FAIL "MAKO: the card" "the game never reached 30 presents"
@@ -3473,6 +3476,11 @@ drive_mako() {
         ui_result "$ui_log" PASS "MAKO: On" "it wrote MAKO's profile vkdaedalus default listing vkcube, frame generation on, and the tiles say: $(tile_line "$log")"
     else
         ui_result "$ui_log" FAIL "MAKO: On" "the tiles say: $(tile_line "$log"), want $want"
+    fi
+    if gpu_row=$(ui_label_starting "$map" "GPU 1, " "$log") && [ "${#gpu_row}" -gt 7 ]; then
+        ui_result "$ui_log" PASS "MAKO: the GPU row" "MAKO's body starts with the GPU it generates frames on: $gpu_row"
+    else
+        ui_result "$ui_log" FAIL "MAKO: the GPU row" "MAKO's body has no row naming GPU 1 and the game's GPU: ${gpu_row:-none}"
     fi
     ui_hover "$map" "Lossless Scaling##Model" "$log" || true
     ui_state "$map" mako-02-on "$ui_log" "MAKO switched on: its profile written; MAKO is not loaded in this game, which vkdaedalus-run did not start, so the card says MAKO needs it"
@@ -3605,7 +3613,7 @@ drive_mako() {
     sed -i 's/^name = "vkdaedalus default"$/&\ngpu = "Another GPU"/' "$config"
     if ui_wait "$map" "Use the game's GPU" "" "" "$log"; then
         ui_hover "$map" "Use the game's GPU" "$log" || true
-        ui_state "$map" mako-09-other-gpu "$ui_log" "MAKO's file names another GPU: the strip says so, with one action"
+        ui_state "$map" mako-09-other-gpu "$ui_log" "MAKO's file names another GPU: the GPU row says so, with one action"
         ui_click "$map" "Use the game's GPU" 1 "$log" || true
         if mako_lacks "$config" '^gpu = '; then
             ui_result "$ui_log" PASS "MAKO: a file naming another GPU" "the card named it with Use the game's GPU, which cleared the key"
@@ -3707,7 +3715,7 @@ drive_mako() {
 }
 
 drive_layer_state() {
-    local log="$1" map="$2" state="$3" home="$4" ui_log="$1.ui" window profile="$4/.config/vkdaedalus/profiles/default.conf"
+    local log="$1" map="$2" state="$3" home="$4" ui_log="$1.ui" window gpu_row profile="$4/.config/vkdaedalus/profiles/default.conf"
     : >"$ui_log"
     if ! wait_for_line 'present cycle' 30 "$log"; then
         ui_result "$ui_log" FAIL "frame generation, $state" "the game never reached 30 presents"
@@ -3742,6 +3750,11 @@ drive_layer_state() {
                 ui_result "$ui_log" PASS "frame generation, both installed" "a profile with no choice runs lsfg-vk, MAKO can be chosen, no Scaling tile"
             else
                 ui_result "$ui_log" FAIL "frame generation, both installed" "lsfg-vk chosen $(ui_field "$map" "lsfg-vk##Layer" 8), MAKO greyed $(ui_field "$map" "MAKO##Layer" 7), the tiles say: $(tile_line "$log")"
+            fi
+            if gpu_row=$(ui_label_starting "$map" "GPU 1, " "$log") && [ "${#gpu_row}" -gt 7 ]; then
+                ui_result "$ui_log" PASS "lsfg-vk: the GPU row" "lsfg-vk's body starts with the GPU it generates frames on: $gpu_row"
+            else
+                ui_result "$ui_log" FAIL "lsfg-vk: the GPU row" "lsfg-vk's body has no row naming GPU 1 and the game's GPU: ${gpu_row:-none}"
             fi
             ui_state "$map" fgl-03-both-lsfg-vk "$ui_log" "both installed: a new profile runs lsfg-vk, MAKO a click away"
             ui_click "$map" "MAKO##Layer" 1 "$log" || true

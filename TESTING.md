@@ -106,7 +106,8 @@ would load in its place), run the MAKO profile vkdaedalus-run made before the
 start and get the profile's order in the loader's chain, also when started with
 `VK_IMPLICIT_LAYER_PATH` set, which makes the loader ignore `VK_ADD_IMPLICIT_LAYER_PATH`; with MAKO Scaler at
 1.5x the game must draw at its 1280x720 window divided by the factor while
-MAKO says it presents at the window's size, a Sharpness set on the Scaling card
+MAKO says it presents at the window's size with the GPU row on the card, a
+Sharpness set on the Scaling card
 while it runs must reach MAKO's file and be rebuilt in place by MAKO, and
 DISABLE_MAKO in the launch options must keep MAKO out though its order layer is
 on. Where MAKO has no MAKO FG, the tiles must say MAKO needs a model while
@@ -133,7 +134,8 @@ running: MAKO alone, where its card's every control is driven and read back
 from MAKO's file, with the Gamescope VRR row drawn only with
 GAMESCOPE_WAYLAND_DISPLAY set, both, lsfg-vk alone, neither, MAKO picked in a
 run vkdaedalus-run started for lsfg-vk, and DISABLE_MAKO in the launch options
-of a game whose profile runs MAKO, and the tile row with three and with four
+of a game whose profile runs MAKO, with the GPU row at the top of each layer's
+body, and the tile row with three and with four
 tiles on 16:9, 16:10, 4:3, 21:9, 32:9, portrait and 800x600 displays. MAKO and
 the card both read the power source from `/sys/class/power_supply` and neither
 can be pointed at another folder, so which power set runs is proven by the MAKO

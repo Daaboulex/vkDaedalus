@@ -305,7 +305,7 @@ namespace vkBasalt
             sets.insert(sets.end(), {&inUse->power->handheld, &inUse->power->docked});
         for (const MakoSettings* set : sets)
             if (set->gpu && makoGpuNamesAnother(*set->gpu, game))
-                return "MAKO's file names " + *set->gpu + ", this game draws on " + game.name;
+                return "MAKO's file names " + *set->gpu;
         return std::nullopt;
     }
 
