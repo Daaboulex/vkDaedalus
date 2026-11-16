@@ -167,6 +167,7 @@ int main()
         resetFailures();
         const Run run = handOffWith({2, 1});
         expect(run.handOff.handedOver && run.handOff.failure.empty(), "a chain to GPU 2 and back is handed over");
+        expect(!run.handOff.fallbackDrains, "a chain handed over asks no fallback to drain the game's queue");
         expect(submits.size() == 3, "three submits: the head, GPU 2, the hand-back");
         expect(submits.size() == 3 && submits[0].queue == gameQueue && submits[0].wait == fake<VkSemaphore>(0x40)
                    && submits[0].signal == run.chain.headDone[0] && submits[0].fence == VK_NULL_HANDLE,
@@ -200,6 +201,7 @@ int main()
         failSubmitAt  = 0;
         const Run run = handOffWith({2, 1});
         expect(!run.handOff.handedOver && !run.handOff.headRan && exported.empty(), "a failed head submit exports nothing");
+        expect(!run.handOff.fallbackDrains, "a head that never ran leaves the fallback the game's own waits");
     }
     {
         resetFailures();
@@ -207,6 +209,7 @@ int main()
         const Run run = handOffWith({2, 1});
         expect(!run.handOff.handedOver && run.handOff.headRan && run.handOff.fallbackWait == run.chain.headDone[0],
                "a failed export of the head's hand-off makes the fallback wait it");
+        expect(!run.handOff.fallbackDrains, "a fallback that can wait the head does not drain the game's queue");
     }
     for (VkDevice importer : {deviceB, gameDevice})
     {
@@ -216,6 +219,8 @@ int main()
         expect(!run.handOff.handedOver && run.handOff.fallbackWait == VK_NULL_HANDLE && !run.handOff.failure.empty(),
                std::string("a failed import on ") + (importer == deviceB ? "GPU 2" : "the game's GPU") + " ends the hand-off with a reason");
         expect(!exported.empty() && closed(exported.back()), "the fd a failed import did not take is closed");
+        expect(run.handOff.headRan && run.handOff.fallbackDrains,
+               std::string("a failed import on ") + (importer == deviceB ? "GPU 2" : "the game's GPU") + " leaves no semaphore of the head, so the fallback drains the game's queue");
     }
     {
         resetFailures();
@@ -223,12 +228,14 @@ int main()
         const Run run = handOffWith({2, 1});
         expect(!run.handOff.handedOver && fenceRecreatedSignalled, "a failed submit on GPU 2 puts its reset fence back signalled");
         expect(run.handOff.failure.find("GPU 2") != std::string::npos, "the reason names GPU 2");
+        expect(run.handOff.fallbackDrains, "a failed submit on GPU 2 makes the fallback drain the game's queue, as the head's hand-off went to GPU 2");
     }
     {
         resetFailures();
         failSubmitAt  = 2;
         const Run run = handOffWith({2, 1});
         expect(!run.handOff.handedOver && run.handOff.headRan && !fenceRecreatedSignalled, "a failed hand-back submit is reported, the frame left to the fallback");
+        expect(run.handOff.fallbackDrains, "a failed hand-back submit makes the fallback drain the game's queue");
     }
 
     if (failures)

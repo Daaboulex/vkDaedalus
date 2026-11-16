@@ -2683,6 +2683,8 @@ namespace vkBasalt
                     passThrough.pCommandBuffers             = &pLogicalSwapchain->commandBuffersNoEffect[index];
                     if (handOff.headRan)
                     {
+                        if (handOff.fallbackDrains && pLogicalDevice->vkd.QueueWaitIdle(submitQueue) != VK_SUCCESS)
+                            Logger::err("draining the game's queue after the failed hand-off failed, so the frame without effects may read the game's image early");
                         passThrough.waitSemaphoreCount = fallbackWait != VK_NULL_HANDLE ? 1 : 0;
                         passThrough.pWaitSemaphores    = fallbackWait != VK_NULL_HANDLE ? &fallbackWait : nullptr;
                         passThrough.pWaitDstStageMask  = fallbackWait != VK_NULL_HANDLE ? &allCommands : nullptr;

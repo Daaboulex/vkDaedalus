@@ -123,9 +123,10 @@ namespace vkBasalt
 
     struct HandOff
     {
-        bool        handedOver   = false;
-        bool        headRan      = false;
-        VkSemaphore fallbackWait = VK_NULL_HANDLE;
+        bool        handedOver     = false;
+        bool        headRan        = false;
+        VkSemaphore fallbackWait   = VK_NULL_HANDLE;
+        bool        fallbackDrains = false;
         std::string failure;
     };
 

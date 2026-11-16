@@ -27,6 +27,12 @@ namespace vkBasalt
         {
             return gpu > 1 ? "GPU " + std::to_string(gpu) : "the game's GPU";
         }
+
+        HandOff endedEarly(HandOff handOff)
+        {
+            handOff.fallbackDrains = handOff.fallbackWait == VK_NULL_HANDLE;
+            return handOff;
+        }
     }
 
     HandOff submitThroughChain(HandOffSide                     game,
@@ -68,10 +74,10 @@ namespace vkBasalt
                 if (k == 0)
                     handOff.fallbackWait = chain.headDone[index];
                 handOff.failure = "exporting the hand-off from " + where(previousGpu) + " returned " + std::to_string(vr);
-                return handOff;
+                return endedEarly(handOff);
             }
             if (!importSyncFd(side, segment.start[index], fd, handOff, "importing the hand-off on " + where(segment.gpu)))
-                return handOff;
+                return endedEarly(handOff);
 
             const bool fenced = !segment.fences.empty();
             if (fenced)
@@ -80,7 +86,7 @@ namespace vkBasalt
                 if (vr != VK_SUCCESS)
                 {
                     handOff.failure = "resetting " + where(segment.gpu) + "'s fence returned " + std::to_string(vr);
-                    return handOff;
+                    return endedEarly(handOff);
                 }
             }
             const VkPipelineStageFlags anyStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -107,7 +113,7 @@ namespace vkBasalt
                         segment.fences[index] = VK_NULL_HANDLE;
                 }
                 handOff.failure = "the submit on " + where(segment.gpu) + " returned " + std::to_string(vr);
-                return handOff;
+                return endedEarly(handOff);
             }
             previous     = side;
             previousDone = segment.done[index];

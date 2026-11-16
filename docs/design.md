@@ -159,6 +159,8 @@ check's message or a test already says is not repeated here.
 
 - Every shared buffer ends in padding and every copy is rounded up to a whole block: RADV's compute
   copy (Mesa at a51a418) reads past the end of its source, which faulted the GPU.
+- When a hand-off fails after the head handed the game's frame on, no semaphore of the head is left
+  for the frame without effects to wait, so it waits for the game's queue to drain first.
 
 ## Frame generation
 
