@@ -1136,7 +1136,7 @@ mako_frames_case() {
 }
 
 lane_framegen() {
-    local icd="$1" dir="$2" why order layers want log presents frames ratio anomalies hooked nested
+    local icd="$1" dir="$2" why order layers want log presents frames ratio anomalies hooked nested mismatch
     local control="$dir/framegen-control.log"
     run "$control" "$dir/framegen-control-home" "$icd" "$MOCK:$VALIDATION" 0 1 -- vkcube --c "$FRAMES" --wsi "$native_wsi"
     if ! why=$(exited_cleanly "$control"); then
@@ -1196,12 +1196,17 @@ lane_framegen() {
         log="$dir/lsfg-frames-$order.log"
         fresh_home "$dir/lsfg-frames-$order-home" cas
         run "$log" "$dir/lsfg-frames-$order-home" "$icd" "$layers" 1 1 -- vkcube --c "$FRAMES" --wsi "$native_wsi"
+        mismatch=$(count 'vkDaedalus warn: +the profile asks for effects before frame generation, but lsfg-vk runs above the layer' "$log")
         if ! why=$(lsfg_frames_verdict "$log" "$lsfgControl" "$FRAMES" "$want"); then
             record FAIL "lsfg-vk frames, effects $order" "$why"
+        elif [ "$order" = before ] && [ "$mismatch" -ne 0 ]; then
+            record FAIL "lsfg-vk frames, effects $order" "the layer warned of an order the profile does not ask for: $(grep -m1 'the profile asks for effects' "$log")"
+        elif [ "$order" = after ] && [ "$mismatch" -lt 1 ]; then
+            record FAIL "lsfg-vk frames, effects $order" "lsfg-vk ran above the layer for a profile asking effects before, and the layer never warned of it"
         elif [ "$order" = before ]; then
             record PASS "lsfg-vk frames, effects $order" "cas on all $why frames the game drew, lsfg-vk below it made its device, swapchain and 2x pipeline with no warning, validation clean against lsfg-vk alone"
         else
-            record PASS "lsfg-vk frames, effects $order" "cas on $why frames for the $FRAMES the game drew, so every frame lsfg-vk made at 2x went through the layer, validation clean against lsfg-vk alone"
+            record PASS "lsfg-vk frames, effects $order" "cas on $why frames for the $FRAMES the game drew, so every frame lsfg-vk made at 2x went through the layer, and the layer warned that this profile asks for effects before, validation clean against lsfg-vk alone"
         fi
     done
     if [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then

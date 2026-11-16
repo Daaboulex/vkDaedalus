@@ -1175,7 +1175,12 @@ namespace vkBasalt
         const std::optional<FrameGenerationLayer> loaded = loadedFrameGenerationLayer();
         const FrameGenerationPlace                place  = frameGenerationPlace(librariesBelow, loaded.has_value(), loaded == FrameGenerationLayer::Mako ? makoLayerLibrary : lsfgLayerLibrary);
         if (place != FrameGenerationPlace::NotLoaded && hooked)
+        {
             Logger::info(frameGenerationPlaceWords(place, loadedFrameGenerationLayerName()));
+            const bool profileWantsAfter = ConfigSerializer::profileSettingsFor(detectedGameName).effectsAfterFrameGeneration.value_or(false);
+            if (const std::optional<std::string> mismatch = orderMismatchWords(place, profileWantsAfter, loadedFrameGenerationLayerName()))
+                Logger::warn(*mismatch);
+        }
 
         InstanceDispatch dispatchTable;
         fillDispatchTableInstance(*pInstance, gpa, &dispatchTable);

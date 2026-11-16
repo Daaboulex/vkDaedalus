@@ -36,7 +36,8 @@ which the loader reads before every other implicit layer folder. When `VK_IMPLIC
 reads only that and ignores `VK_ADD_IMPLICIT_LAYER_PATH`, so the folder goes first in `VK_IMPLICIT_LAYER_PATH`
 instead. It holds four order layers, two for each frame
 generation layer. Each is a meta layer that names vkDaedalus and that layer in one order, and the loader keeps the
-first placement it reads:
+first placement it reads. When the order the game got differs from the one its profile asks for, the layer logs a
+warning naming both:
 
 | Order layer | Nearest the game | Active |
 |---|---|---|
