@@ -4678,9 +4678,9 @@ held_input_verdict() {
 clip_held_again() {
     local log="$1" closed moved
     closed=$(grep -n -m1 'overlay closed' "$log" | cut -d: -f1)
-    moved=$(awk -v b="$closed" 'NR > b && index($0, "wine-input-probe: pointer moved ") == 1 { print; exit }' "$log")
+    moved=$(awk -v b="$closed" 'NR > b && index($0, "wine-input-probe: pointer moved ") == 1 && $0 != "wine-input-probe: pointer moved 320 240" { print; exit }' "$log")
     if [ -n "$moved" ]; then
-        echo "after the overlay closed the game's one-pixel clip no longer held the pointer: $moved"
+        echo "after the overlay closed the game's one-pixel clip let the pointer leave its centre: $moved"
         return 1
     fi
 }
