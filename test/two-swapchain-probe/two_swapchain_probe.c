@@ -14,7 +14,10 @@ enum
     SLOTS         = 2
 };
 
-static const double RETIRED_KEPT_SECONDS = 0.8;
+static const double   RETIRED_KEPT_SECONDS = 0.8;
+static const uint32_t SAME_SIZE_PRESENTS   = 60;
+static const uint32_t RESIZED_WIDTH        = 300;
+static const uint32_t RESIZED_HEIGHT       = 200;
 
 struct chain
 {
@@ -361,9 +364,31 @@ static double secondsNow(void)
     return (double)now.tv_sec + (double)now.tv_nsec / 1e9;
 }
 
-static int retireFirst(VkPhysicalDevice physical, VkDevice device, VkQueue queue, VkCommandPool pool, struct chain* chains, unsigned long* frame)
+static int recreateSecond(VkPhysicalDevice physical, VkDevice device, VkQueue queue, VkCommandPool pool, struct chain* chains, unsigned long* frame)
 {
-    struct chain retired = chains[0];
+    if (vkDeviceWaitIdle(device) != VK_SUCCESS)
+        return fail("vkDeviceWaitIdle failed");
+    struct chain old   = chains[1];
+    struct chain fresh = {.window = old.window, .surface = old.surface, .format = old.format};
+    fprintf(stderr, "two-swapchain-probe: recreating the second swapchain at the same size\n");
+    if (makeChain(physical, device, pool, &fresh, 0.25f, old.swapchain) != 0)
+        return 1;
+    destroySwapchainOf(device, &old);
+    chains[1] = fresh;
+    for (const unsigned long until = *frame + SAME_SIZE_PRESENTS; *frame < until; (*frame)++)
+        if (presentOnce(device, queue, &chains[*frame % CHAINS]) != 0)
+            return 1;
+    fprintf(stderr, "two-swapchain-probe: presented on the recreated swapchain\n");
+    return 0;
+}
+
+static int retireFirst(xcb_connection_t* connection, VkPhysicalDevice physical, VkDevice device, VkQueue queue, VkCommandPool pool, struct chain* chains,
+                       unsigned long* frame)
+{
+    struct chain   retired = chains[0];
+    const uint32_t size[2] = {RESIZED_WIDTH, RESIZED_HEIGHT};
+    xcb_configure_window(connection, retired.window, XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, size);
+    free(xcb_get_geometry_reply(connection, xcb_get_geometry(connection, retired.window), NULL));
     struct chain fresh   = {.window = retired.window, .surface = retired.surface, .format = retired.format};
     if (makeChain(physical, device, pool, &fresh, 0.75f, retired.swapchain) != 0)
         return 1;
@@ -526,8 +551,8 @@ int main(int argc, char** argv)
     else if (retire)
     {
         unsigned long frame = frames / 2;
-        if (presentRange(device, queue, chains, 0, frame) != 0 || retireFirst(physical, device, queue, pool, chains, &frame) != 0
-            || presentRange(device, queue, chains, frame, frame + frames / 2) != 0)
+        if (presentRange(device, queue, chains, 0, frame) != 0 || recreateSecond(physical, device, queue, pool, chains, &frame) != 0
+            || retireFirst(connection, physical, device, queue, pool, chains, &frame) != 0 || presentRange(device, queue, chains, frame, frame + frames / 2) != 0)
             return 1;
         presents = frame + frames / 2;
     }
@@ -543,6 +568,8 @@ int main(int argc, char** argv)
     vkDestroyInstance(instance, NULL);
     xcb_disconnect(connection);
     printf("two-swapchain-probe: %lu presents alternating a format %d and a format %d swapchain on one device%s\n", presents, unorm, srgb,
-           depth ? ", two depth images bound and destroyed between them" : retire ? ", the first one retired by a new swapchain and kept alive across a resize" : "");
+           depth ? ", two depth images bound and destroyed between them"
+           : retire ? ", the second one recreated at the same size, then the first one resized and retired by a new swapchain and kept alive"
+                    : "");
     return 0;
 }

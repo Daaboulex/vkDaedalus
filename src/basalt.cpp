@@ -1680,7 +1680,12 @@ namespace vkBasalt
         pLogicalSwapchain->appImageUsage       = pCreateInfo->imageUsage;
         pLogicalSwapchain->keepCreateInfo(*pCreateInfo);
         if (const LogicalSwapchain* old = findSwapchain(pCreateInfo->oldSwapchain))
+        {
             pLogicalSwapchain->presentClock.continueFrom(old->presentClock);
+            pLogicalSwapchain->replacesSameSize = old->imageExtent.width == modifiedCreateInfo.imageExtent.width
+                                                  && old->imageExtent.height == modifiedCreateInfo.imageExtent.height
+                                                  && old->format == modifiedCreateInfo.imageFormat;
+        }
         pLogicalSwapchain->imageExtent         = modifiedCreateInfo.imageExtent;
         pLogicalSwapchain->format              = modifiedCreateInfo.imageFormat;
         pLogicalSwapchain->imageCount          = 0;
@@ -2009,7 +2014,7 @@ namespace vkBasalt
         };
 
         std::vector<std::string> timingEffectNames;
-        if (!isFirstRun && !activeEffects.empty())
+        if (!isFirstRun && !activeEffects.empty() && !pLogicalSwapchain->replacesSameSize)
         {
             Logger::debug("using pass-through during resize, will restore effects after debounce");
             std::vector<VkImage> firstImages(pLogicalSwapchain->fakeImages.begin(),

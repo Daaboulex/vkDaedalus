@@ -60,6 +60,7 @@ namespace vkBasalt
         bool                                timingReadErrorLogged = false;
         bool                                retired               = false;
         bool                                awaitsRebuild         = false;
+        bool                                replacesSameSize      = false;
 
         bool rebuildable() const
         {

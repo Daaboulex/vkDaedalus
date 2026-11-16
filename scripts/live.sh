@@ -5324,17 +5324,20 @@ lane_config() {
         fresh_home "$home" cas
         run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- two-swapchain-probe "$CONFIG_FRAMES" retire
         rebuilds=$(awk '/debounced resize reload/ { if (on) print n; on = 1; n = 0; next } on && /reloading [0-9]+ effects/ { n++ } on && /present cycle/ { print n; on = 0 } END { if (on) print n }' "$log" | paste -sd ' ' -)
+        same_size=$(awk '/two-swapchain-probe: recreating the second swapchain at the same size/ { on = 1 } on && /using pass-through during resize/ { through++ } on && /creating effect [0-9]+: cas$/ { built++ } on && /two-swapchain-probe: presented on the recreated swapchain/ { print through + 0, built + 0; exit }' "$log")
         rebuilt_while_retired=$(awk '/two-swapchain-probe: retired the first swapchain and keeps it/ { on = 1 } on && /debounced resize reload/ { found = 1 } /two-swapchain-probe: destroying the retired swapchain/ { on = 0 } END { print found + 0 }' "$log")
         if ! why=$(plain_verdict "$log" "$probe_control"); then
             record FAIL "a resize rebuilds only the swapchain that waits" "$why"
-        elif [ "$(count 'kept alive across a resize$' "$log.stdout")" -ne 1 ]; then
+        elif [ "$(count 'and kept alive$' "$log.stdout")" -ne 1 ]; then
             record FAIL "a resize rebuilds only the swapchain that waits" "the probe did not finish: $(tail -1 "$log.stdout")"
+        elif [ "$same_size" != "0 1" ]; then
+            record FAIL "a resize rebuilds only the swapchain that waits" "a swapchain replaced at the same size ran the plain copy ${same_size%% *} time(s) and built cas ${same_size##* } time(s) before its next presents, want 0 and 1: its effects at once"
         elif [ "$rebuilt_while_retired" != 1 ]; then
             record FAIL "a resize rebuilds only the swapchain that waits" "no debounced rebuild ran while the retired swapchain was kept, so the case proves nothing"
         elif ! awk '{ for (i = 1; i <= NF; i++) { seen++; if ($i != 1) bad = 1 } } END { exit (seen == 0 || bad) }' <<<"$rebuilds"; then
             record FAIL "a resize rebuilds only the swapchain that waits" "the debounced rebuilds rebuilt ${rebuilds:-no} swapchain(s) each, want 1 each: only the one made last, never the other or the retired one"
         else
-            record PASS "a resize rebuilds only the swapchain that waits" "two swapchains on one device, the first then retired by a new one and kept alive for 0.8 s: each debounced rebuild rebuilt only the swapchain made last, never the other or the retired one, validation clean"
+            record PASS "a resize rebuilds only the swapchain that waits" "two swapchains on one device: the second replaced at the same size got its effects at once with no plain copy, then the first resized and retired by a new one kept alive for 0.8 s, and each debounced rebuild rebuilt only the swapchain made last, never the other or the retired one, validation clean"
         fi
     fi
 
