@@ -22,7 +22,8 @@ mkdir -p "$out/bin" "$out/lib" "$out/share/vulkan/implicit_layer.d" "$out/share/
 "$cc" -shared -fPIC -O2 -Wall -Werror -o "$out/lib/libvkdaedalus-test-needs-absent.so" "$test/preload/needs_absent.c" \
     -L"$out/lib" -Wl,--no-as-needed -lvkdaedalus-test-absent
 rm "$out/lib/libvkdaedalus-test-absent.so"
-"$cc" -shared -fPIC -O2 -Wall -Werror -o "$out/lib/libvkdaedalus-test-grab-interposer.so" "$test/preload/grab_interposer.c" -ldl -lX11
+"$cc" -shared -fPIC -O2 -Wall -Werror -o "$out/lib/libvkdaedalus-test-overlay-interposer.so" "$test/preload/overlay_interposer.c" -ldl -lX11
+"$cc" -shared -fPIC -O2 -Wall -Werror -o "$out/lib/libvkdaedalus-test-dlsym-table.so" "$test/preload/dlsym_table.c" -ldl -Wl,--no-as-needed -lX11
 
 test_layer() {
     local library=$1 folder=$2 manifests=$3 name=$4 description=$5 extra=$6

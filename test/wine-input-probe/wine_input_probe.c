@@ -8,6 +8,7 @@
 #include <io.h>
 
 #include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,15 +64,28 @@ static PFN_vkCreateInstance      vkCreateInstance;
 INSTANCE_FUNCTIONS(DECLARE)
 DEVICE_FUNCTIONS(DECLARE)
 
+typedef int(__cdecl* UnixStderrWriter)(const char*);
+static UnixStderrWriter writeUnixStderr;
+
+__attribute__((format(printf, 1, 2))) static void say(const char* format, ...)
+{
+    char    line[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    writeUnixStderr(line);
+}
+
 static int fail(const char* why)
 {
-    fprintf(stderr, "wine-input-probe: %s\n", why);
+    say("wine-input-probe: %s\n", why);
     return 1;
 }
 
 static int missing(const char* name)
 {
-    fprintf(stderr, "wine-input-probe: vulkan-1.dll gives no %s\n", name);
+    say("wine-input-probe: vulkan-1.dll gives no %s\n", name);
     return 1;
 }
 
@@ -130,27 +144,27 @@ static void reportRawInput(HRAWINPUT handle)
     {
         const USHORT buttons = raw.data.mouse.usButtonFlags;
         if (raw.data.mouse.lLastX != 0 || raw.data.mouse.lLastY != 0)
-            fprintf(stderr, "wine-input-probe: raw motion\n");
+            say("wine-input-probe: raw motion\n");
         if (buttons & RI_MOUSE_LEFT_BUTTON_DOWN)
-            fprintf(stderr, "wine-input-probe: raw button press 1\n");
+            say("wine-input-probe: raw button press 1\n");
         if (buttons & RI_MOUSE_MIDDLE_BUTTON_DOWN)
-            fprintf(stderr, "wine-input-probe: raw button press 2\n");
+            say("wine-input-probe: raw button press 2\n");
         if (buttons & RI_MOUSE_RIGHT_BUTTON_DOWN)
-            fprintf(stderr, "wine-input-probe: raw button press 3\n");
+            say("wine-input-probe: raw button press 3\n");
     }
     else if (raw.header.dwType == RIM_TYPEKEYBOARD && !(raw.data.keyboard.Flags & RI_KEY_BREAK))
-        fprintf(stderr, "wine-input-probe: raw key press %u\n", raw.data.keyboard.VKey);
+        say("wine-input-probe: raw key press %u\n", raw.data.keyboard.VKey);
 }
 
 static LRESULT CALLBACK windowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
     {
-        case WM_KEYDOWN: fprintf(stderr, "wine-input-probe: key press %u\n", (unsigned)wParam); return 0;
-        case WM_LBUTTONDOWN: fprintf(stderr, "wine-input-probe: button press 1\n"); return 0;
-        case WM_MBUTTONDOWN: fprintf(stderr, "wine-input-probe: button press 2\n"); return 0;
-        case WM_RBUTTONDOWN: fprintf(stderr, "wine-input-probe: button press 3\n"); return 0;
-        case WM_MOUSEMOVE: fprintf(stderr, "wine-input-probe: motion %d %d\n", GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); return 0;
+        case WM_KEYDOWN: say("wine-input-probe: key press %u\n", (unsigned)wParam); return 0;
+        case WM_LBUTTONDOWN: say("wine-input-probe: button press 1\n"); return 0;
+        case WM_MBUTTONDOWN: say("wine-input-probe: button press 2\n"); return 0;
+        case WM_RBUTTONDOWN: say("wine-input-probe: button press 3\n"); return 0;
+        case WM_MOUSEMOVE: say("wine-input-probe: motion %d %d\n", GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); return 0;
         case WM_INPUT: reportRawInput((HRAWINPUT)lParam); break;
         case WM_CLOSE: return 0;
     }
@@ -164,7 +178,7 @@ static void reportAsyncKeys(int down[3])
     {
         const int now = (GetAsyncKeyState(keys[k]) & 0x8001) != 0;
         if (now && !down[k])
-            fprintf(stderr, "wine-input-probe: async key %d\n", keys[k]);
+            say("wine-input-probe: async key %d\n", keys[k]);
         down[k] = now;
     }
 }
@@ -198,7 +212,13 @@ static int clipCursor(HWND window, int toCentre)
 
 int main(int argc, char** argv)
 {
-    _setmode(_fileno(stderr), _O_BINARY);
+    writeUnixStderr = (UnixStderrWriter)(void (*)(void))GetProcAddress(GetModuleHandleA("ntdll.dll"), "__wine_dbg_output");
+    if (!writeUnixStderr)
+    {
+        _setmode(_fileno(stderr), _O_BINARY);
+        fprintf(stderr, "wine-input-probe: ntdll.dll gives no __wine_dbg_output, which runs only under Wine\n");
+        return 1;
+    }
     char*               end      = NULL;
     const unsigned long frames   = argc == 3 ? strtoul(argv[1], &end, 10) : 0;
     const int           lock     = argc == 3 && strcmp(argv[2], "lock") == 0;
@@ -221,7 +241,7 @@ int main(int argc, char** argv)
     const RAWINPUTDEVICE devices[2] = {{0x01, 0x02, 0, window}, {0x01, 0x06, 0, window}};
     if (!RegisterRawInputDevices(devices, 2, sizeof(devices[0])))
         return fail("RegisterRawInputDevices failed");
-    fprintf(stderr, "wine-input-probe: window shown\n");
+    say("wine-input-probe: window shown\n");
 
     HMODULE vulkan = LoadLibraryA("vulkan-1.dll");
     if (!vulkan)
@@ -355,13 +375,13 @@ int main(int argc, char** argv)
         if (!foreground && GetForegroundWindow() == window)
         {
             foreground = 1;
-            fprintf(stderr, "wine-input-probe: foreground\n");
+            say("wine-input-probe: foreground\n");
         }
         reportAsyncKeys(down);
         POINT at = {0, 0};
         if (cursorInClient(window, &at) && (at.x != seenX || at.y != seenY))
         {
-            fprintf(stderr, seenX != LONG_MIN ? "wine-input-probe: pointer moved %ld %ld\n" : "wine-input-probe: pointer at %ld %ld\n", at.x, at.y);
+            say(seenX != LONG_MIN ? "wine-input-probe: pointer moved %ld %ld\n" : "wine-input-probe: pointer at %ld %ld\n", at.x, at.y);
             seenX      = at.x;
             seenY      = at.y;
             stillSince = GetTickCount64();
@@ -395,12 +415,12 @@ int main(int argc, char** argv)
         else if (!ready && recenter && clipped && centredLongEnough)
         {
             ready = 1;
-            fprintf(stderr, "wine-input-probe: holds the pointer at its centre\n");
+            say("wine-input-probe: holds the pointer at its centre\n");
         }
         else if (!ready && released && now - stillSince >= STILL_MS)
         {
             ready = 1;
-            fprintf(stderr, "wine-input-probe: pointer still at %ld %ld after placing it\n", seenX, seenY);
+            say("wine-input-probe: pointer still at %ld %ld after placing it\n", seenX, seenY);
         }
         const uint32_t slot = (uint32_t)(frame % SLOTS);
         if (vkWaitForFences(device, 1, &inFlight[slot], VK_TRUE, UINT64_MAX) != VK_SUCCESS || vkResetFences(device, 1, &inFlight[slot]) != VK_SUCCESS)
@@ -436,7 +456,7 @@ int main(int argc, char** argv)
     }
     vkDeviceWaitIdle(device);
     ClipCursor(NULL);
-    fprintf(stderr, "wine-input-probe: done after %lu presents%s\n", frames, foreground ? "" : ", never in the foreground");
+    say("wine-input-probe: done after %lu presents%s\n", frames, foreground ? "" : ", never in the foreground");
     for (int s = 0; s < SLOTS; s++)
     {
         vkDestroySemaphore(device, acquired[s], NULL);

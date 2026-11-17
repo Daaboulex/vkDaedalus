@@ -1828,7 +1828,7 @@
                   src = ./test/wine-input-probe;
                   dontConfigure = true;
                   buildPhase = ''
-                    $CC -O2 -Wall -Werror -static -I${pkgs.vulkan-headers}/include -o wine-input-probe.exe wine_input_probe.c
+                    $CC -O2 -Wall -Werror -static -mwindows -I${pkgs.vulkan-headers}/include -o wine-input-probe.exe wine_input_probe.c
                   '';
                   installPhase = ''
                     install -Dm644 wine-input-probe.exe "$out/bin/wine-input-probe.exe"

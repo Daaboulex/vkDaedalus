@@ -126,8 +126,11 @@ check's message or a test already says is not repeated here.
   loader's order, so another library that hooks the same function before it, as Steam's overlay
   does with `XGrabPointer`, is passed on rather than called again. Only when no later definition
   exists, as when Wine loads libwayland-client or libX11 in a local scope, does it call the one
-  inside that library's own file. A lookup through the library's handle found Steam's overlay in
-  its container, which called the hook back and locked it.
+  inside that library's own file. Steam's overlay takes over `dlsym` and answers a lookup of a
+  function it hooks (`XGrabPointer`, `XUngrabPointer`, `XCloseDisplay`) with its own, through
+  libX11's handle too; only `RTLD_NEXT` gets the next definition. A lookup through the library's
+  handle found the overlay, which called the hook back and locked it. The overlay needs libGL, which
+  loads libX11 in the global scope, so `RTLD_NEXT` finds libX11 wherever the overlay runs.
 - The layer finds the hook through one exported table. The hook never calls into the layer, which
   may unload.
 - Wine's `SetCursorPos` warps the pointer while Wine holds a pointer grab, which no event filter

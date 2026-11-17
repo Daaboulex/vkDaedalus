@@ -3,6 +3,7 @@ if [ -z "${VKB_CLEAN:-}" ]; then
     for name in TMPDIR XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME "${!VKB_@}"; do
         if [ -n "${!name+set}" ]; then kept+=("$name=${!name}"); fi
     done
+    if [ -n "${XDG_RUNTIME_DIR:-}" ]; then kept+=(SESSION_RUNTIME="$XDG_RUNTIME_DIR"); fi
     echo "the runs start from an empty environment: $(($(env | grep -c '^[A-Za-z_][A-Za-z0-9_]*=') - ${#kept[@]} + 1)) variables of this session are left out"
     exec env -i "${kept[@]}" "$BASH" -euo pipefail "$0" "$@"
 fi
@@ -50,10 +51,28 @@ gallery=""
 lsfg_manifest=""
 lsfg_dll=""
 mako_manifest=""
+proton_tool=""
+steam_root=""
 extra_layers=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --keep-logs) keep_logs=1 ;;
+        --proton)
+            if [ "$#" -lt 2 ] || [ ! -f "$2/proton" ] || [ ! -f "$2/toolmanifest.vdf" ]; then
+                echo "--proton needs a Proton tool folder, the one holding proton and toolmanifest.vdf" >&2
+                exit 2
+            fi
+            proton_tool=$(realpath -- "$2")
+            shift
+            ;;
+        --steam)
+            if [ "$#" -lt 2 ] || [ ! -f "$2/steamapps/libraryfolders.vdf" ]; then
+                echo "--steam needs Steam's own folder, the one holding steamapps/libraryfolders.vdf" >&2
+                exit 2
+            fi
+            steam_root=$(realpath -- "$2")
+            shift
+            ;;
         --parallel) parallel=1 ;;
         --gallery)
             if [ "$#" -lt 2 ] || [ -z "$2" ]; then
@@ -96,13 +115,15 @@ while [ "$#" -gt 0 ]; do
             shift
             ;;
         --*)
-            echo "unknown option $1: the options are --keep-logs, --parallel, --gallery <folder>, --lsfg-vk <manifest>, --lsfg-dll <dll>, --mako <manifest> and --layer <manifest>, then any driver manifests" >&2
+            echo "unknown option $1: the options are --keep-logs, --parallel, --gallery <folder>, --lsfg-vk <manifest>, --lsfg-dll <dll>, --mako <manifest>, --layer <manifest>, --proton <tool folder> and --steam <Steam's folder>, then any driver manifests" >&2
             exit 2
             ;;
         *) break ;;
     esac
     shift
 done
+steam_run=""
+if command -v steam-run >/dev/null; then steam_run=$(command -v steam-run); fi
 GALLERY_PARTIAL=""
 GALLERY_LAST=""
 GALLERY_SEEN=0
@@ -161,7 +182,7 @@ fi
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/vkdaedalus-live.XXXXXX")
 mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}"
-RUNNABLE=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/vkdaedalus-live-runnable.XXXXXX")
+HOME_WORK=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/vkdaedalus-live-home-work.XXXXXX")
 keep_work=$keep_logs
 KEEP_FLAG="$WORK/keep"
 compositor_pids=()
@@ -226,7 +247,7 @@ cleanup() {
         wait "$pid" || true
     done
     stop_session
-    rm -rf "${RUNNABLE:?}"
+    rm -rf "${HOME_WORK:?}"
     if ! chmod -R u+rwx "$WORK"; then echo "could not make every folder in $WORK writable again" >&2; fi
     if [ "$keep_work" -eq 0 ] && [ ! -e "$KEEP_FLAG" ]; then
         if ! rm -rf "$WORK"; then echo "could not remove $WORK" >&2; fi
@@ -755,7 +776,7 @@ mako_beside_lsfg() {
         cp "$lsfg_manifest" "$dir/"
         return 0
     fi
-    library=$(mktemp -d "$RUNNABLE/lsfg-vk-stand-in.XXXXXX")/liblsfg-vk-layer.so
+    library=$(mktemp -d "$HOME_WORK/lsfg-vk-stand-in.XXXXXX")/liblsfg-vk-layer.so
     cp "$VKB_FAULT/lib/libfault_inject.so" "$library"
     printf '{ "file_format_version": "1.1.0", "layer": { "name": "%s", "description": "a pass-through layer the loader loads as lsfg-vk unless DISABLE_LSFGVK keeps it out", "implementation_version": "2", "library_path": "%s", "type": "GLOBAL", "api_version": "1.4.0", "disable_environment": { "DISABLE_LSFGVK": "1" } } }\n' \
         "$LSFG" "$library" >"$dir/VkLayer_LSFGVK_frame_generation.json"
@@ -4614,7 +4635,8 @@ lane_focus() {
         record PASS "focus loss releases input" "the open overlay held the pointer; focus moved to the root window, the layer closed the overlay and the pointer came free"
     fi
     x11_hook_case "$icd" "$dir" "$control"
-    x11_hook_case "$icd" "$dir" "$control" "$VKB_MOCK/lib/libvkdaedalus-test-grab-interposer.so"
+    overlay_stand_in_case "$dir"
+    x11_hook_case "$icd" "$dir" "$control" "$VKB_MOCK/lib/libvkdaedalus-test-overlay-interposer.so"
     wine_hook_cases "$icd" "$dir"
 }
 
@@ -4698,14 +4720,50 @@ drive_x11_hook() {
     drive_held_input "$log" "$map"
 }
 
+dlsym_table_of() {
+    local preloaded="$1" out="$2"
+    shift 2
+    if ! "$@" env LD_PRELOAD="$preloaded:$VKB_MOCK/lib/libvkdaedalus-test-dlsym-table.so" true >"$out" 2>"$out.stderr"; then
+        echo "the table run with ${preloaded##*/} preloaded failed: $(tail -1 "$out.stderr")"
+        return 1
+    fi
+    sed -n "s/^dlsym-table: //p" "$out" | sed "s/ ${preloaded##*/}\$/ preloaded/" >"$out.table"
+    if [ "$(wc -l <"$out.table")" -ne 12 ]; then
+        echo "the table run with ${preloaded##*/} preloaded printed $(wc -l <"$out.table") of its 12 lookups"
+        return 1
+    fi
+}
+
+overlay_stand_in_case() {
+    local dir="$1" name="the stand-in for Steam's overlay answers dlsym as Steam's overlay does" why
+    local -a in_steam=()
+    if [ -z "$steam_root" ]; then
+        record SKIP "$name" "no Steam named: --steam <Steam's folder> runs it"
+        return 0
+    elif [ ! -f "$steam_root/ubuntu12_64/gameoverlayrenderer.so" ]; then
+        record FAIL "$name" "$steam_root holds no ubuntu12_64/gameoverlayrenderer.so, the overlay library Steam preloads into its games"
+        return 0
+    fi
+    if [ -n "$steam_run" ]; then in_steam=("$steam_run"); fi
+    if ! why=$(dlsym_table_of "$steam_root/ubuntu12_64/gameoverlayrenderer.so" "$dir/dlsym-table-steam" "${in_steam[@]}"); then
+        record FAIL "$name" "$why"
+    elif ! why=$(dlsym_table_of "$VKB_MOCK/lib/libvkdaedalus-test-overlay-interposer.so" "$dir/dlsym-table-stand-in"); then
+        record FAIL "$name" "$why"
+    elif ! why=$(diff "$dir/dlsym-table-steam.table" "$dir/dlsym-table-stand-in.table"); then
+        record FAIL "$name" "a library preloaded after each finds other definitions of XGrabPointer, XUngrabPointer, XCloseDisplay or XQueryPointer through RTLD_NEXT, libX11's handle or RTLD_DEFAULT: $(tr '\n' ' ' <<<"$why")"
+    else
+        record PASS "$name" "a library preloaded after each finds the same definitions of XGrabPointer, XUngrabPointer, XCloseDisplay and XQueryPointer through RTLD_NEXT, libX11's handle and RTLD_DEFAULT, Steam's overlay library in its own container"
+    fi
+}
+
 x11_hook_case() {
     local icd="$1" dir="$2" control="$3" beside="${4:-}" name="the input hook holds an X11 game's input" log="$2/x11-hook.log" home="$2/x11-hook-home" map="$2/x11-hook.map"
     local driver why where=""
     local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved") preload=()
     if [ -n "$beside" ]; then
-        name+=", another library hooking XGrabPointer before it" log="$2/x11-hook-beside.log" home="$2/x11-hook-beside-home" map="$2/x11-hook-beside.map"
+        name+=", a library hooking X11 and dlsym before it as Steam's overlay does" log="$2/x11-hook-beside.log" home="$2/x11-hook-beside-home" map="$2/x11-hook-beside.map"
         preload=(LD_PRELOAD="$beside")
-        where=", with another library that hooks XGrabPointer and XUngrabPointer and passes them on, as Steam's overlay does, preloaded before the hook"
+        where=", with a library preloaded before the hook that, as Steam's overlay does, hooks XGrabPointer, XUngrabPointer and XCloseDisplay, passes each on to the next definition, and answers dlsym for them with its own, through libX11's handle too, and with the next one only for RTLD_NEXT"
     fi
     if [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then
         record SKIP "$name" "this build has no vkdaedalus-run (a plain meson build installs none)"
@@ -4719,8 +4777,10 @@ x11_hook_case() {
     driver_finished "drive_x11_hook"
     if ! why=$(plain_verdict "$log" "$control"); then
         record FAIL "$name" "$why"
-    elif [ -n "$beside" ] && [ "$(count '^grab-interposer: XGrabPointer passed on$' "$log")" -lt 1 ]; then
+    elif [ -n "$beside" ] && [ "$(count '^overlay-interposer: XGrabPointer passed on$' "$log")" -lt 1 ]; then
         record FAIL "$name" "the other library never saw the probe's XGrabPointer, so the case proves nothing"
+    elif [ -n "$beside" ] && [ "$(count '^overlay-interposer: XCloseDisplay passed on$' "$log")" -lt 1 ]; then
+        record FAIL "$name" "the other library never saw the probe's XCloseDisplay, so the case proves nothing"
     elif ! file_says "$log" 'x11-input-probe: holds the pointer'; then
         record FAIL "$name" "the probe never held its own pointer grab, as Wine does, so the case proves nothing"
     elif ! why=$(held_input_verdict "$log" x11-input-probe 'x11-input-probe: motion 320 240' "${kinds[@]}"); then
@@ -4791,8 +4851,8 @@ drive_wine_hook() {
 }
 
 wine_hook_case() {
-    local icd="$1" dir="$2" wine="$3" slug="$4" label="$5" reader="$6" mode="$7" control="$2/wine-$4-control.log" prefix="$2/wine-$4-prefix"
-    local name="the input hook holds a Wine game's input, $label, $mode" log="$2/wine-$4-$mode.log" home="$2/wine-$4-$mode-home" map="$2/wine-$4-$mode.map"
+    local icd="$1" dir="$2" wine="$3" slug="$4" label="$5" reader="$6" mode="$7" control="$2/wine-$4-control.log" prefix="$9"
+    local name="the input hook holds a Wine game's input, $label, $mode" log="$2/wine-$4-$mode.log" home="$8/wine-$4-$mode-home" map="$8/wine-$4-$mode.map"
     local driver why ready own_warp="" held attempt stopped
     local -a kinds=("key press" "button press" "motion" "raw motion" "raw button press" "raw key press" "pointer moved" "async key")
     case "$mode" in
@@ -4817,11 +4877,11 @@ wine_hook_case() {
         printf 'overlayKey = %s\n' "$OVERLAY_KEY" >"$home/.config/vkdaedalus/settings.conf"
         background drive_wine_hook "$log" "$map" "$ready"
         driver=$!
-        run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" WINEPREFIX="$prefix" "${wine_quiet[@]}" \
-            "$VKB_LAYER/bin/vkdaedalus-run" "$wine/bin/wine" "$VKB_WINE_PROBE" 900 "$mode"
+        probe_command "$wine" "$prefix" "$VKB_LAYER/bin/vkdaedalus-run" 900 "$mode"
+        run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" "${probe_env[@]}" "${probe[@]}"
         driver_finished "drive_wine_hook"
         stopped=0
-        wine_stopped "$wine" "$prefix" || stopped=1
+        probe_stopped "$wine" "$prefix" || stopped=1
         if [ "$stopped" = 1 ] || [ "$attempt" = "$wine_starts_allowed" ] || [ "$(count '^wine-input-probe: window shown' "$log")" -gt 0 ]; then break; fi
         echo "the probe: $(tail -1 "$log")" >>"$log.failed-starts"
     done
@@ -4840,10 +4900,52 @@ wine_hook_case() {
     fi
 }
 
+steam_runtime_of() {
+    local tool="$1" appid library installdir
+    appid=$(sed -n 's/.*"require_tool_appid"[[:space:]]*"\([0-9]*\)".*/\1/p' "$tool/toolmanifest.vdf")
+    [ -n "$appid" ] || return 1
+    while IFS= read -r library; do
+        if [ -f "$library/steamapps/appmanifest_$appid.acf" ]; then
+            installdir=$(sed -n 's/.*"installdir"[[:space:]]*"\(.*\)".*/\1/p' "$library/steamapps/appmanifest_$appid.acf")
+            echo "$library/steamapps/common/$installdir"
+            return 0
+        fi
+    done < <(sed -n 's/.*"path"[[:space:]]*"\(.*\)".*/\1/p' "$steam_root/steamapps/libraryfolders.vdf")
+    return 1
+}
+
+probe_command() {
+    local wine="$1" prefix="$2" launcher="$3"
+    shift 3
+    probe=()
+    if [ "$wine" = proton ]; then
+        if [ -n "$steam_run" ]; then probe=("$steam_run"); fi
+        probe+=(env LD_PRELOAD="$steam_root/ubuntu12_64/gameoverlayrenderer.so")
+        if [ -n "$launcher" ]; then probe+=("$launcher"); fi
+        probe+=("$proton_runtime/_v2-entry-point" --verb=waitforexitandrun -- "$proton_tool/proton" waitforexitandrun "$VKB_WINE_PROBE" "$@")
+        probe_env=(STEAM_COMPAT_DATA_PATH="$prefix" STEAM_COMPAT_CLIENT_INSTALL_PATH="$steam_root" XDG_RUNTIME_DIR="$SESSION_RUNTIME")
+    else
+        if [ -n "$launcher" ]; then probe=("$launcher"); fi
+        probe+=("$wine/bin/wine" "$VKB_WINE_PROBE" "$@")
+        probe_env=(WINEPREFIX="$prefix" "${wine_quiet[@]}")
+    fi
+}
+
+probe_stopped() {
+    local wine="$1" prefix="$2"
+    if [ "$wine" = proton ]; then return 0; fi
+    wine_stopped "$wine" "$prefix"
+}
+
 wine_hook_cases_of() {
-    local icd="$1" dir="$2" wine="$3" slug="$4" label="$5" reader="$6" control="$2/wine-$4-control.log" prefix="$2/wine-$4-prefix"
+    local icd="$1" dir="$2" wine="$3" slug="$4" label="$5" reader="$6" modes="${7:-poll recenter lock}" control="$2/wine-$4-control.log" game_seen="$2" prefix="$2/wine-$4-prefix"
     local name="the input hook holds a Wine game's input, $5" why mode attempt stopped
-    if [ ! -x "$wine/bin/wine" ] || [ ! -f "${VKB_WINE_PROBE:-}" ]; then
+    local -a probe probe_env
+    if [ "$wine" = proton ]; then
+        game_seen=$(mktemp -d "$HOME_WORK/proton.XXXXXX")
+        prefix="$game_seen/compatdata/0"
+        mkdir -p "$prefix"
+    elif [ ! -x "$wine/bin/wine" ] || [ ! -f "${VKB_WINE_PROBE:-}" ]; then
         record FAIL "$name" "the live command names $label at $wine and the probe ${VKB_WINE_PROBE:-(unset)}, and one of them is missing"
         return 0
     elif ! wine_prefix "$wine" "$prefix" "$prefix.log"; then
@@ -4851,9 +4953,10 @@ wine_hook_cases_of() {
         return 0
     fi
     for attempt in $(seq "$wine_starts_allowed"); do
-        run "$control" "$dir/wine-$slug-control-home" "$icd" "$VALIDATION" 0 1 -- env WINEPREFIX="$prefix" "${wine_quiet[@]}" "$wine/bin/wine" "$VKB_WINE_PROBE" 120 poll
+        probe_command "$wine" "$prefix" "" 120 poll
+        run "$control" "$game_seen/wine-$slug-control-home" "$icd" "$VALIDATION" 0 1 -- env "${probe_env[@]}" "${probe[@]}"
         stopped=0
-        wine_stopped "$wine" "$prefix" || stopped=1
+        probe_stopped "$wine" "$prefix" || stopped=1
         if [ "$stopped" = 1 ] || [ "$attempt" = "$wine_starts_allowed" ] || [ "$(count '^wine-input-probe: window shown' "$control")" -gt 0 ]; then break; fi
         echo "the control probe: $(tail -1 "$control")" >>"$control.failed-starts"
     done
@@ -4864,7 +4967,7 @@ wine_hook_cases_of() {
         record FAIL "$name" "the probe did not run under $label without the layer: $why"
         return 0
     fi
-    for mode in poll recenter lock; do wine_hook_case "$icd" "$dir" "$wine" "$slug" "$label" "$reader" "$mode"; done
+    for mode in $modes; do wine_hook_case "$icd" "$dir" "$wine" "$slug" "$label" "$reader" "$mode" "$game_seen" "$prefix"; done
 }
 
 wine_hook_cases() {
@@ -4878,6 +4981,18 @@ wine_hook_cases() {
     fi
     wine_hook_cases_of "$icd" "$dir" "$VKB_WINE" upstream "upstream Wine" "the game's own process reads raw input while it clips the cursor"
     wine_hook_cases_of "$icd" "$dir" "$VKB_WINE_CACHYOS" cachyos "wine-cachyos" "explorer.exe reads the raw input of the whole prefix, as in Proton"
+    local proton_runtime
+    if [ -z "$proton_tool" ] || [ -z "$steam_root" ]; then
+        record SKIP "$name, Proton in Steam's runtime" "no Proton and Steam named: --proton <tool folder> --steam <Steam's folder> run it"
+    elif ! proton_runtime=$(steam_runtime_of "$proton_tool"); then
+        record FAIL "$name, Proton in Steam's runtime" "the Steam runtime $proton_tool/toolmanifest.vdf asks for is in none of the libraries $steam_root/steamapps/libraryfolders.vdf lists"
+    elif [ ! -f "$steam_root/ubuntu12_64/gameoverlayrenderer.so" ]; then
+        record FAIL "$name, Proton in Steam's runtime" "$steam_root holds no ubuntu12_64/gameoverlayrenderer.so, the overlay library Steam preloads into its games"
+    elif [ ! -d "${SESSION_RUNTIME:-}" ]; then
+        record FAIL "$name, Proton in Steam's runtime" "the session that started the run has no XDG_RUNTIME_DIR folder ('${SESSION_RUNTIME:-}'), and Steam's runtime makes the game's own only from that session's sockets"
+    else
+        wine_hook_cases_of "$icd" "$dir" proton proton "Proton in Steam's runtime beside Steam's overlay" "explorer.exe reads the raw input of the whole prefix" lock
+    fi
 }
 
 drive_controls() {
@@ -5219,7 +5334,7 @@ lane_config() {
 
     log="$dir/config-shipped.log" home="$dir/config-shipped-home" fx="$dir/config-shipped-home-fx"
     local shipped
-    shipped=$(mktemp -d "$RUNNABLE/shipped-game.XXXXXX")
+    shipped=$(mktemp -d "$HOME_WORK/shipped-game.XXXXXX")
     mkdir -p "$shipped/EasyAntiCheat"
     : >"$shipped/EasyAntiCheat/EasyAntiCheat_x64.dll"
     cp "$(command -v vkcube)" "$shipped/vkcube"
