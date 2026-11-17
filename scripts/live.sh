@@ -5908,6 +5908,41 @@ offload_chain_case() {
     fi
 }
 
+offload_cost_case() {
+    local dir="$1" every="$2" gpus="$3" name="per-frame cost of a frame that crosses to GPU 2 and back" size=3840x2160 mode n value where home
+    local crossed="$dir/perf-xcb-1-1-$PERF_FRAMES-offload-crossing.log"
+    local -a onOne=() twoGpus=()
+    local LOG_LEVEL=info
+    if ! mode=$(present_mode_of "$every" "$dir"); then
+        record FAIL "$name" "vulkaninfo failed: $(tail -1 "$dir/vulkaninfo.err")"
+        return
+    fi
+    for where in alone crossing; do
+        home="$dir/offload-cost-$where-home"
+        fresh_home "$home" solid_fill:invert_input:invert_again
+        cp "$VKB_FIXTURES/effects/solid_fill.fx" "$VKB_FIXTURES/effects/invert_input.fx" "$home-fx/"
+        printf 'solid_fill = %s\ninvert_input = %s\ninvert_again = %s\n' "$home-fx/solid_fill.fx" "$home-fx/invert_input.fx" "$home-fx/invert_input.fx" \
+            >>"$home/.config/vkdaedalus/vkdaedalus.conf"
+        if [ "$where" = crossing ]; then
+            printf 'gpus = %s\ninvert_input.gpu = 2\ninvert_again.gpu = 1\n' "$gpus" >>"$home/.config/vkdaedalus/vkdaedalus.conf"
+        fi
+    done
+    for n in 1 2 3 4 5; do
+        for where in alone crossing; do
+            if ! value=$(frame_cost "$every" "$dir" "$mode" 1 "$n" xcb "$dir/offload-cost-$where-home" never "-offload-$where" "$size"); then
+                record FAIL "$name" "a run with the rows $where: $value"
+                return
+            fi
+            if [ "$where" = alone ]; then onOne+=("$value"); else twoGpus+=("$value"); fi
+        done
+    done
+    if [ "$(count 'vkDaedalus info: +rows from invert_input run on GPU 2 \(' "$crossed")" -lt 1 ]; then
+        record FAIL "$name" "the timed runs never moved invert_input to GPU 2: $(grep -m1 -E 'stay on the game|move to the game|run on GPU' "$crossed" || echo nothing)"
+        return
+    fi
+    record MEAS "$name" "$(printf '%s\n' "${onOne[@]}" | spread) ms/frame with solid_fill, invert_input and invert_input again on GPU 1, $(printf '%s\n' "${twoGpus[@]}" | spread) with the middle row on GPU 2 and the last back on GPU 1, $size, median of 5 at 1800 minus 600 frames (present mode $mode)"
+}
+
 lane_offload() {
     local icd="$1" dir="$2" every without="$2/offload-choice-without.log" with="$2/offload-choice-with.log"
     local assigned="$2/offload-choice-assigned.log" helper="$2/offload-choice-helper.log" why mode listed other made absent
@@ -6160,6 +6195,7 @@ lane_offload() {
     DEVICE_SELECT=("${pinned[@]}")
     offload_chain_case "$dir" "$every" "$control" "the chain returns to GPU 1 mid-chain" "$other" 'invert_input.gpu = 2\ninvert_again.gpu = 1' \
         'rows from invert_input run on GPU 2 \(' chain-back
+    offload_cost_case "$dir" "$every" "$other"
     if [ -n "$third" ]; then
         offload_chain_case "$dir" "$every" "$control" "the chain crosses GPU 2 then GPU 3" "$other,$third" 'invert_input.gpu = 2\ninvert_again.gpu = 3' \
             "$(printf '%s\n%s' 'rows from invert_input run on GPU 2 \(' 'rows from invert_again run on GPU 3 \(')" chain-three
@@ -6277,11 +6313,13 @@ layer_frame_clock() {
 }
 
 frame_cost() {
-    local icd="$1" dir="$2" mode="$3" enable="$4" n="$5" wsi="$6" home="${7:-$2/perf-home}" notice="${8:-never}" tag="${9:-}" frames start end why log short=0 long=0
+    local icd="$1" dir="$2" mode="$3" enable="$4" n="$5" wsi="$6" home="${7:-$2/perf-home}" notice="${8:-never}" tag="${9:-}" size="${10:-}" frames start end why log short=0 long=0
+    local -a extent=()
+    if [ -n "$size" ]; then extent=(--width "${size%x*}" --height "${size#*x}"); fi
     for frames in "$PERF_FRAMES" "$((PERF_FRAMES * 3))"; do
         log="$dir/perf-$wsi-$enable-$n-$frames$tag.log"
         start=$(date +%s%N)
-        run "$log" "$home" "$icd" "" "$enable" 0 -- env VKDAEDALUS_LAUNCH_NOTICE="$notice" vkcube --c "$frames" --present_mode "$mode" --wsi "$wsi"
+        run "$log" "$home" "$icd" "" "$enable" 0 -- env VKDAEDALUS_LAUNCH_NOTICE="$notice" vkcube --c "$frames" --present_mode "$mode" --wsi "$wsi" "${extent[@]}"
         end=$(date +%s%N)
         if ! why=$(exited_cleanly "$log"); then
             echo "$why"
