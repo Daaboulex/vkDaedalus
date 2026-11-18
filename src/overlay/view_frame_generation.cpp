@@ -213,6 +213,8 @@ namespace vkBasalt
             fg.on                   = set.frameGenerationEnabled;
             fg.live                 = makoLiveHere() && makoAtStart && makoSettingsFor(*makoAtStart, powerSupplies.source).frameGenerationProvisioned;
             fg.unavailable          = makoModelMissing(set.frameGenerationModel);
+            if (fg.on && fg.live)
+                fg.paused = makoGenerationPaused(makoStatus.ofSwapchain).value_or("");
             return fg;
         }
         fg.on   = generatesFrames(frameGenerationProfileInUse());
@@ -542,6 +544,11 @@ namespace vkBasalt
         {
             ImGui::TextColored(palette.warn, "%s, needs a model", amount.c_str());
             ImGui::SetItemTooltip("%s", fg.unavailable.c_str());
+        }
+        else if (!fg.paused.empty())
+        {
+            ImGui::TextColored(palette.warn, "%s, paused", amount.c_str());
+            ImGui::SetItemTooltip("%s", fg.paused.c_str());
         }
         else if (fg.live)
             ImGui::TextColored(palette.ok, "%s, on", amount.c_str());

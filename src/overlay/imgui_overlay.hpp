@@ -223,6 +223,7 @@ namespace vkBasalt
             bool                 live         = false;
             bool                 loadsNextLaunch = true;
             std::string          unavailable;
+            std::string          paused;
         };
         FrameGenerationState frameGenerationState();
         FrameGenerationLayer profileFrameGenerationLayer();

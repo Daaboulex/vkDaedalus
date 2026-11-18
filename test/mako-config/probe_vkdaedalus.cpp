@@ -315,8 +315,10 @@ int main(int argc, char** argv)
         if (read.ofSwapchain.size() != 1)
             std::printf("%zu status files of this swapchain\n", read.ofSwapchain.size());
         for (const MakoStatus& status : read.ofSwapchain)
-            std::printf("role %s\ncontext %llu\napplied_model %s\napplied_scaling %s\nactive %s\ninactive_reason %s\nsource %ux%u\npresentation %ux%u\nmethod %s\n",
-                        status.role.c_str(), static_cast<unsigned long long>(status.context), status.appliedModel.c_str(), yesNo(status.appliedScalingEnabled),
+            std::printf("role %s\ncontext %llu\napplied_model %s\ngeneration_active %s\ngeneration_unavailable %s\napplied_scaling %s\nactive %s\n"
+                        "inactive_reason %s\nsource %ux%u\npresentation %ux%u\nmethod %s\n",
+                        status.role.c_str(), static_cast<unsigned long long>(status.context), status.appliedModel.c_str(), yesNo(status.generationActive),
+                        status.generationUnavailableReason ? status.generationUnavailableReason->c_str() : "-", yesNo(status.appliedScalingEnabled),
                         yesNo(status.scalingActive), status.scalingInactiveReason ? status.scalingInactiveReason->c_str() : "-", status.sourceWidth,
                         status.sourceHeight, status.presentationWidth, status.presentationHeight, status.scalingMethod.c_str());
         return 0;

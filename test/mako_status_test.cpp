@@ -46,6 +46,12 @@ static std::string sizesText(int sourceWidth, int sourceHeight, int presentation
            + std::to_string(presentationWidth) + ",\"presentation_height\":" + std::to_string(presentationHeight);
 }
 
+static std::string swapped(std::string text, const std::string& from, const std::string& to)
+{
+    const size_t at = text.find(from);
+    return at == std::string::npos ? std::string() : text.replace(at, from.size(), to);
+}
+
 static void write(const fs::path& path, const std::string& text)
 {
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
@@ -75,7 +81,14 @@ int main(int argc, char** argv)
         expect(scaling->sourceWidth == 853 && scaling->sourceHeight == 480 && scaling->presentationWidth == 1280 && scaling->presentationHeight == 720,
                "the source and presentation sizes are read");
         expect(makoScalingSizes(*scaling) == "853x480 to 1280x720", "the sizes are shown as source to presentation");
+        expect(!scaling->generationActive && scaling->generationUnavailableReason == "offscreen-x11-window",
+               "whether frame generation runs for the swapchain and MAKO's reason it cannot are read");
     }
+    const std::string generatingText =
+        swapped(swapped(scalingText, "\"frame_generation_active\":false", "\"frame_generation_active\":true"), "{\"reason\":\"offscreen-x11-window\"}", "null");
+    const std::optional<MakoStatus> generating = parseMakoStatus(generatingText, problem);
+    expect(generating && generating->generationActive && !generating->generationUnavailableReason,
+           "frame generation reported active, with null for its unavailable reason, is read as running with no reason");
     const std::string nativeText =
         statusText("frame-generation", 2, "lossless-scaling", true, false, "application-extent-mismatch", sizesText(1280, 720, 1280, 720), "native");
     const std::optional<MakoStatus> native = parseMakoStatus(nativeText, problem);
@@ -84,7 +97,10 @@ int main(int argc, char** argv)
     for (const std::string& broken : {std::string(), std::string("[]"), std::string("{\"role\":\"frame-generation\""), scalingText + "x",
                                       statusText("frame-generation", 1, "mako-fg", true, true, "", "\"source_width\":853", "mako"),
                                       statusText("frame-generation", -1, "mako-fg", true, true, "", sizesText(853, 480, 1280, 720), "mako"),
-                                      statusText("frame-generation", 1, "mako-fg", true, true, "", sizesText(853, 480, 1280, -720), "mako")})
+                                      statusText("frame-generation", 1, "mako-fg", true, true, "", sizesText(853, 480, 1280, -720), "mako"),
+                                      swapped(scalingText, "\"frame_generation_active\":false,", ""),
+                                      swapped(scalingText, "\"frame_generation_unavailable\":{\"reason\":\"offscreen-x11-window\"}", "\"frame_generation_unavailable\":3"),
+                                      swapped(scalingText, "{\"reason\":\"offscreen-x11-window\"}", "{\"reason\":3}")})
     {
         problem.clear();
         expect(!parseMakoStatus(broken, problem) && !problem.empty(), "a file that is no whole status is refused with a reason: " + broken.substr(0, 40));
@@ -129,6 +145,24 @@ int main(int argc, char** argv)
         expect(!makoFellBackToMakoFg("lossless-scaling", {*native}) && !makoFellBackToMakoFg("mako-fg", {*scaling}) && !makoFellBackToMakoFg("lossless-scaling", {})
                    && !makoFellBackToMakoFg("lossless-scaling", {lowerRole}),
                "running the model it started for, started for MAKO FG, with no status, or with only the scaling role's status, it did not");
+
+        if (generating)
+        {
+            MakoStatus inactive                 = *generating;
+            inactive.generationActive           = false;
+            MakoStatus unnamed                  = *scaling;
+            unnamed.generationUnavailableReason = "a-reason-this-card-has-no-words-for";
+            const MakoStatus scalerOnly         = lowerRole;
+            expect(!makoGenerationPaused({}) && !makoGenerationPaused({*generating}),
+                   "with no status file, or frame generation reported active, nothing is called paused");
+            expect(makoGenerationPaused({inactive}) == "MAKO's status file says frame generation is not active for this swapchain",
+                   "reported inactive with no reason, it says what MAKO wrote and claims no cause");
+            expect(makoGenerationPaused({*scaling}) == "MAKO generates no frames: the game draws offscreen, where generated frames cannot reach the screen"
+                       && makoGenerationPaused({unnamed}) == "MAKO generates no frames, and names the reason a-reason-this-card-has-no-words-for",
+                   "reported unavailable, it gives MAKO's reason in words, or names one it has no words for as MAKO names it");
+            expect(!makoGenerationPaused({scalerOnly, *generating}),
+                   "with MAKO split in two roles the state comes from the role that generates, not the one that scales");
+        }
 
         const MakoStatusRead none;
         const MakoStatusRead unreadable{{}, "MAKO's status file is not a JSON object"};

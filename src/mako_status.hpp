@@ -16,6 +16,8 @@ namespace vkBasalt
         std::string                role;
         uint64_t                   context = 0;
         std::string                appliedModel;
+        bool                       generationActive = false;
+        std::optional<std::string> generationUnavailableReason;
         bool                       appliedScalingEnabled = false;
         bool                       scalingActive         = false;
         std::optional<std::string> scalingInactiveReason;
@@ -62,6 +64,7 @@ namespace vkBasalt
     const MakoStatus* makoScalingStatus(const std::vector<MakoStatus>& ofSwapchain);
     const MakoStatus* makoGenerationStatus(const std::vector<MakoStatus>& ofSwapchain);
     bool              makoFellBackToMakoFg(std::string_view modelAtStart, const std::vector<MakoStatus>& ofSwapchain);
+    std::optional<std::string> makoGenerationPaused(const std::vector<MakoStatus>& ofSwapchain);
     std::string       makoScalingSizes(const MakoStatus& status);
     std::string       makoScalingInactiveWords(std::string_view reason);
     MakoScalingShown  makoScalingShown(bool onInFile, bool makoRunsTheProfile, const MakoStatusRead& read);

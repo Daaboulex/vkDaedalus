@@ -240,6 +240,12 @@ namespace vkBasalt
             fgTip  = fg.unavailable;
             fgInk  = palette.warn;
         }
+        else if (!fg.paused.empty())
+        {
+            fgLine = layerName + ", paused";
+            fgTip  = fg.paused;
+            fgInk  = palette.warn;
+        }
         else if (fg.on && fg.live)
         {
             fgLine = layerName + " " + (makoSet ? (makoSet->adaptive ? std::string("adaptive") : std::to_string(makoSet->multiplier) + "x")

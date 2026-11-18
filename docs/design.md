@@ -208,6 +208,10 @@ check's message or a test already says is not repeated here.
   size. The file is named by the process and holds no swapchain handle, so the game's own is the one
   whose source or presentation size the swapchain has. MAKO writes no file for a swapchain it does
   nothing on, so no file is a state the card names and never reads as off.
+- MAKO's status file says per swapchain whether frame generation is active, and names a reason only
+  when it cannot run at all, which MAKO writes for a game drawing to an offscreen X11 window alone. So
+  the card calls frame generation paused when the file says it is not active, and gives a cause only
+  when MAKO wrote one.
 - MAKO's status file has no field for its fall back from Lossless Scaling's model to MAKO FG. MAKO
   changes its model only at the start, so the card reads the fall back from the model the status
   file says is applied against the one MAKO's file named at the start.

@@ -278,6 +278,7 @@ namespace vkBasalt
         MakoStatus status;
         if (!words(root, {"role"}, status.role, problem) || !whole(root, {"context"}, status.context, problem)
             || !words(root, {"applied", "frame_generation_model"}, status.appliedModel, problem)
+            || !truth(root, {"frame_generation_active"}, status.generationActive, problem)
             || !truth(root, {"applied", "scaling_enabled"}, status.appliedScalingEnabled, problem)
             || !truth(root, {"spatial_scaling", "active"}, status.scalingActive, problem)
             || !words(root, {"spatial_scaling", "active_method"}, status.scalingMethod, problem)
@@ -286,6 +287,19 @@ namespace vkBasalt
             || !whole(root, {"spatial_scaling", "presentation_width"}, status.presentationWidth, problem)
             || !whole(root, {"spatial_scaling", "presentation_height"}, status.presentationHeight, problem))
             return std::nullopt;
+        const Json* unavailable = found(root, {"frame_generation_unavailable"});
+        if (unavailable == nullptr || (unavailable->kind != JsonKind::Null && unavailable->kind != JsonKind::Object))
+        {
+            problem = "MAKO's status file holds neither an object nor null at frame_generation_unavailable";
+            return std::nullopt;
+        }
+        if (unavailable->kind == JsonKind::Object)
+        {
+            std::string why;
+            if (!words(root, {"frame_generation_unavailable", "reason"}, why, problem))
+                return std::nullopt;
+            status.generationUnavailableReason = why;
+        }
         const Json* reason = found(root, {"spatial_scaling", "inactive_reason"});
         if (reason == nullptr || (reason->kind != JsonKind::Null && reason->kind != JsonKind::String))
         {
@@ -381,6 +395,20 @@ namespace vkBasalt
     {
         const MakoStatus* generation = makoGenerationStatus(ofSwapchain);
         return generation != nullptr && modelAtStart == "lossless-scaling" && generation->appliedModel == "mako-fg";
+    }
+
+    std::optional<std::string> makoGenerationPaused(const std::vector<MakoStatus>& ofSwapchain)
+    {
+        const MakoStatus* generation = makoGenerationStatus(ofSwapchain);
+        if (generation == nullptr)
+            return std::nullopt;
+        if (generation->generationUnavailableReason == "offscreen-x11-window")
+            return "MAKO generates no frames: the game draws offscreen, where generated frames cannot reach the screen";
+        if (generation->generationUnavailableReason)
+            return "MAKO generates no frames, and names the reason " + *generation->generationUnavailableReason;
+        if (!generation->generationActive)
+            return "MAKO's status file says frame generation is not active for this swapchain";
+        return std::nullopt;
     }
 
     std::string makoScalingSizes(const MakoStatus& status)

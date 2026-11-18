@@ -118,16 +118,18 @@ namespace
         uint64_t context                               = 1;
         if (which == "scaling")
         {
-            context                     = 3;
-            record.spatialScalingActive = true;
+            context                      = 3;
+            record.frameGenerationActive = true;
+            record.spatialScalingActive  = true;
             record.spatialSourceWidth   = 853;
             record.spatialSourceHeight  = 480;
             record.spatialActiveMethod  = ScalingMethod::Mako;
         }
         else if (which == "native")
         {
-            context                             = 18446744073709551615ull;
-            record.spatialScalingInactiveReason = "application-extent-mismatch";
+            context                                 = 18446744073709551615ull;
+            record.spatialScalingInactiveReason     = "application-extent-mismatch";
+            record.frameGenerationUnavailableReason = "offscreen-x11-window";
         }
         else if (which == "fallback")
         {
@@ -143,8 +145,11 @@ namespace
             std::fprintf(stderr, "MAKO published no status file\n");
             return 1;
         }
-        std::printf("role frame-generation\ncontext %llu\napplied_model %s\napplied_scaling %s\nactive %s\ninactive_reason %s\nsource %ux%u\npresentation %ux%u\nmethod %s\n",
+        std::printf("role frame-generation\ncontext %llu\napplied_model %s\ngeneration_active %s\ngeneration_unavailable %s\napplied_scaling %s\nactive %s\n"
+                    "inactive_reason %s\nsource %ux%u\npresentation %ux%u\nmethod %s\n",
                     static_cast<unsigned long long>(context), frameGenerationModelName(record.appliedProfile.frame_generation_model),
+                    yesNo(record.frameGenerationActive),
+                    record.frameGenerationUnavailableReason ? std::string(*record.frameGenerationUnavailableReason).c_str() : "-",
                     yesNo(record.appliedProfile.scaling_enabled), yesNo(record.spatialScalingActive && record.appliedProfile.scaling_enabled),
                     record.spatialScalingInactiveReason ? record.spatialScalingInactiveReason->c_str() : "-", record.spatialSourceWidth, record.spatialSourceHeight,
                     record.spatialPresentationWidth, record.spatialPresentationHeight, std::string(scalingMethodName(record.spatialActiveMethod)).c_str());
