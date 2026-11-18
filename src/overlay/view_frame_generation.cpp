@@ -762,11 +762,14 @@ namespace vkBasalt
             const FrameStats frames = frameStats(latency.lastSecondMs);
             if (frames.count > 0)
             {
-                const FrameRates  rates    = frameRatesOf(frames.fps, inUse->multiplier, thisRunAfter);
-                char              game[48] = "";
-                char              shown[48] = "";
+                const FrameRates                 rates   = frameRatesOf(frames.fps, inUse->multiplier, thisRunAfter);
+                const FrameStats                 counted = latency.shownLastSecondMs ? frameStats(*latency.shownLastSecondMs) : FrameStats{};
+                const std::optional<ShownFigure> figure  = shownFigure(frames.fps, inUse->multiplier, std::nullopt, thisRunAfter,
+                                                                       counted.count > 0 ? std::optional<double>(counted.fps) : std::nullopt);
+                char                             game[48]  = "";
+                char                             shown[48] = "";
                 std::snprintf(game, sizeof(game), "%.0f FPS", rates.gameFps);
-                std::snprintf(shown, sizeof(shown), "%.0f FPS", rates.shownFps);
+                std::snprintf(shown, sizeof(shown), "%.0f FPS", figure ? figure->fps : rates.shownFps);
                 const float gap    = ImGui::GetStyle().ItemSpacing.x;
                 const float tilde  = ImGui::CalcTextSize("~").x;
                 const float labels = std::max(ImGui::CalcTextSize("Rendered").x, ImGui::CalcTextSize("Shown").x);
@@ -786,12 +789,15 @@ namespace vkBasalt
                 ImGui::BeginGroup();
                 ImGui::Dummy(ImVec2(0.0f, std::max(0.0f, (ui::px(ui::Size::row) - 2.0f * ImGui::GetTextLineHeight()) * 0.5f)));
                 rate("Rendered", game, rates.gameMeasured);
-                rate("Shown", shown, rates.shownMeasured);
+                rate("Shown", shown, figure ? figure->measured : rates.shownMeasured);
                 ImGui::EndGroup();
                 ImGui::PopStyleVar();
-                ImGui::SetItemTooltip(thisRunAfter ? "Every frame shown passes vkDaedalus, so shown is timed and rendered is it divided by %ux"
-                                                   : "vkDaedalus sees only the game's own frames, so shown is rendered times %ux",
-                                      inUse->multiplier);
+                if (thisRunAfter)
+                    ImGui::SetItemTooltip("Every frame shown passes vkDaedalus, so shown is timed and rendered is it divided by %ux", inUse->multiplier);
+                else if (figure && figure->measured)
+                    ImGui::SetItemTooltip("vkDaedalus's present counter times every frame lsfg-vk presents, below it, so shown is measured");
+                else
+                    ImGui::SetItemTooltip("vkDaedalus sees only the game's own frames, so shown is rendered times %ux", inUse->multiplier);
             }
         }
 

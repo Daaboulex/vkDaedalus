@@ -46,6 +46,13 @@ warning naming both:
 | `VK_LAYER_DAABOULEX_vkdaedalus_before_mako` | vkDaedalus: effects run on the game's own frames, and MAKO builds the frames between from them | with `VKDAEDALUS_RUN_FRAME_GENERATION_LAYER=mako`, unless `VKDAEDALUS_AFTER_MAKO=1` |
 | `VK_LAYER_DAABOULEX_mako_before_vkdaedalus` | MAKO: effects run on every frame shown | with `VKDAEDALUS_AFTER_MAKO=1` |
 
+The two order layers that put vkDaedalus nearest the game name a third layer, `VK_LAYER_VKDAEDALUS_present_counter`,
+below the frame generation layer. It lives in vkDaedalus's own library and only times the frames frame generation
+presents, which the layer above cannot see. It is an explicit layer, so nothing loads it but those order layers.
+`vkdaedalus-run` puts its folder, `share/vkdaedalus/counter-layer`, first in `VK_ADD_LAYER_PATH`, or in
+`VK_LAYER_PATH` when that is set. The loader drops a meta layer when it cannot find every layer the meta layer names,
+so the counter's folder travels with the order layers' folder; Steam's runtime imports both.
+
 Before the game starts, `vkdaedalus-run` clears the order variables it inherited, reads the game's profile, names
 the profile's layer in `VKDAEDALUS_RUN_FRAME_GENERATION_LAYER` and sets that layer's after variable when the profile
 asks for effects after frame generation, so exactly one order layer is on. It keeps the other layer out with its

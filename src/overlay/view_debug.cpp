@@ -227,10 +227,11 @@ namespace vkBasalt
                                                                      : "not measured");
                 };
                 figure("FPS", adaptive && after ? ui::Mark::Absent : rates.gameMeasured ? ui::Mark::Measured : ui::Mark::Estimated);
+                const bool counted = latency.shownLastSecondMs && !latency.shownLastSecondMs->empty();
                 if (adaptive)
-                    figure("FPS shown", after ? ui::Mark::Measured : adaptive->refresh ? ui::Mark::Absent : ui::Mark::Estimated);
+                    figure("FPS shown", after || counted ? ui::Mark::Measured : adaptive->refresh ? ui::Mark::Absent : ui::Mark::Estimated);
                 else if (multiplier)
-                    figure("FPS shown", rates.shownMeasured ? ui::Mark::Measured : ui::Mark::Estimated);
+                    figure("FPS shown", rates.shownMeasured || counted ? ui::Mark::Measured : ui::Mark::Estimated);
                 figure("Frame times", ui::Mark::Measured);
                 figure("Effects on GPU 1", ui::Mark::Measured);
                 if (latency.handsOff)

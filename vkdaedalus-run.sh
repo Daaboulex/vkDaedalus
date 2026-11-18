@@ -48,6 +48,11 @@ if [ -n "${VK_IMPLICIT_LAYER_PATH+set}" ]; then
 else
   export VK_ADD_IMPLICIT_LAYER_PATH="@order_layers@${VK_ADD_IMPLICIT_LAYER_PATH:+:$VK_ADD_IMPLICIT_LAYER_PATH}"
 fi
+if [ -n "${VK_LAYER_PATH+set}" ]; then
+  export VK_LAYER_PATH="@counter_layer@${VK_LAYER_PATH:+:$VK_LAYER_PATH}"
+else
+  export VK_ADD_LAYER_PATH="@counter_layer@${VK_ADD_LAYER_PATH:+:$VK_ADD_LAYER_PATH}"
+fi
 export VKDAEDALUS_RUN=1
 caller_disabled=""
 if [ -n "${DISABLE_LSFGVK+set}" ]; then

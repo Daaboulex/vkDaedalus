@@ -26,6 +26,7 @@ CONFIG_FRAMES=120
 LAYER_FRAMES=150
 FAULT=VK_LAYER_VKBASALT_TEST_fault_inject
 SCREENSHOT=VK_LAYER_LUNARG_screenshot
+COUNTER=VK_LAYER_VKDAEDALUS_present_counter
 FAULT_FRAMES=90
 FAULT_CALLS=(vkCreateImage vkCreateImageView vkCreateBuffer vkAllocateMemory vkCreateSampler vkCreateDescriptorPool
     vkCreateDescriptorSetLayout vkCreatePipelineLayout vkCreateShaderModule vkCreateRenderPass vkCreateFramebuffer
@@ -466,6 +467,10 @@ instance_chain_with() {
         END { if (!found) finish() }' "$1"
 }
 
+counter_below() {
+    awk -v above="$2" -v counter="$COUNTER" '{ for (i = 1; i < NF; i++) if ($i == above && $(i + 1) == counter) found = 1 } END { exit !found }' <<<"$1"
+}
+
 native_wsi=wayland
 
 vkcube_of_run() {
@@ -847,6 +852,8 @@ mako_loads_case() {
     chain=$(instance_chain_with "$log" "$BASALT")
     top=$(grep -oE "$BASALT|$MAKO" <<<"$chain" | head -1)
     if [ "$top" != "$want" ]; then wrong+=("the loader's chain was: $chain, want $want nearer the game"); fi
+    if [ "$order" = before ] && ! counter_below "$chain" "$MAKO"; then wrong+=("the present counter was not right below MAKO in the loader's chain: $chain"); fi
+    if [ "$order" = after ] && [[ " $chain " == *" $COUNTER "* ]]; then wrong+=("the present counter loaded though the layer sits below MAKO and times every frame itself: $chain"); fi
     if [ "$(count "creating effect [0-9]+: cas\$" "$log")" -lt 1 ]; then wrong+=("the layer never made cas"); fi
     if ! why=$(validation_verdict "$log" "$control"); then wrong+=("validation: $why"); fi
     if [ "${#wrong[@]}" -gt 0 ]; then
@@ -1332,10 +1339,25 @@ lane_framegen() {
             record FAIL "the order layers put lsfg-vk where the profile asks, effects $order" "with the profile asking for before, the loader's chain was: $chain"
         elif [ "$order" = after ] && [ "$top" != "$LSFG" ]; then
             record FAIL "the order layers put lsfg-vk where the profile asks, effects $order" "with the profile asking for after, the loader's chain was: $chain"
+        elif [ "$order" = before ] && ! counter_below "$chain" "$LSFG"; then
+            record FAIL "the order layers put lsfg-vk where the profile asks, effects $order" "the present counter was not right below lsfg-vk in the loader's chain: $chain"
+        elif [ "$order" = after ] && [[ " $chain " == *" $COUNTER "* ]]; then
+            record FAIL "the order layers put lsfg-vk where the profile asks, effects $order" "the present counter loaded though the layer sits below lsfg-vk and times every frame itself: $chain"
         else
             record PASS "the order layers put lsfg-vk where the profile asks, effects $order" "started with vkdaedalus-run and both layers implicit, the loader's chain was $chain"
         fi
     done
+    local life game shown
+    life=$(grep -m1 -F "frame rates over the swapchain's life" "$dir/lsfg-order-layers-before.log" | sed -E 's/^vkDaedalus info: +//')
+    game=$(sed -n 's/.*: game \([0-9.]*\) FPS measured, shown [0-9.]* FPS measured;.*/\1/p' <<<"$life")
+    shown=$(sed -n 's/.*: game [0-9.]* FPS measured, shown \([0-9.]*\) FPS measured;.*/\1/p' <<<"$life")
+    if [ -z "$game" ] || [ -z "$shown" ]; then
+        record FAIL "vkDaedalus measures the frames lsfg-vk shows" "started with vkdaedalus-run, effects before, it did not report both rates measured: ${life:-no frame rates line}"
+    elif ! awk -v g="$game" -v s="$shown" 'BEGIN { exit !(g > 0 && s / g >= 1.7 && s / g <= 2.3) }'; then
+        record FAIL "vkDaedalus measures the frames lsfg-vk shows" "lsfg-vk ran at 2x, yet the layer measured $shown FPS shown for $game FPS drawn: $life"
+    else
+        record PASS "vkDaedalus measures the frames lsfg-vk shows" "started with vkdaedalus-run, effects before, its present counter below lsfg-vk timed $shown FPS shown for the $game FPS the game drew at 2x: $life"
+    fi
     for order in before after; do
         lsfg_live_case "$icd" "$dir" "$order"
     done

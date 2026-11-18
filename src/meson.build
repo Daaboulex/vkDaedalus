@@ -33,6 +33,7 @@ overlay_src = [
 
 vkBasalt_src = [
     'basalt.cpp',
+    'present_counter.cpp',
     'anticheat_files.cpp',
     'buffer.cpp',
     'command_buffer.cpp',
@@ -239,6 +240,7 @@ configure_file(input : '../vkdaedalus-run.sh',
         'input_hook' : join_paths(get_option('prefix'), lib_dir, 'libvkdaedalus-input-hook.so'),
         'frame_order' : join_paths(get_option('prefix'), get_option('bindir'), 'vkdaedalus-frame-order'),
         'order_layers' : join_paths(get_option('prefix'), get_option('datadir'), 'vkdaedalus', 'order-layers'),
+        'counter_layer' : join_paths(get_option('prefix'), get_option('datadir'), 'vkdaedalus', 'counter-layer'),
     },
     install_dir : get_option('bindir'),
     install_mode : 'rwxr-xr-x')

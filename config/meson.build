@@ -14,6 +14,18 @@ configure_file(
     install_dir : vulkan_layer_dir,
 )
 
+configure_file(
+    input : 'vkdaedalus_present_counter.json.in',
+    output : 'vkdaedalus_present_counter.json',
+    configuration : {
+        'ld_lib_dir_vkdaedalus' : ld_lib_dir_vkdaedalus,
+        'library_arch' : library_arch,
+        'api_version' : layer_api_version,
+    },
+    install : true,
+    install_dir : join_paths(data_dir, 'vkdaedalus', 'counter-layer'),
+)
+
 install_data('vkdaedalus.conf', install_dir : join_paths(data_dir, 'vkdaedalus'))
 install_data('order-layers/vkdaedalus_before_lsfgvk.json', 'order-layers/lsfgvk_before_vkdaedalus.json',
     'order-layers/vkdaedalus_before_mako.json', 'order-layers/mako_before_vkdaedalus.json',

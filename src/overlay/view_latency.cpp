@@ -133,51 +133,53 @@ namespace vkBasalt
             else
                 ImGui::SetItemTooltip("The game's own frames, %s, over the last %.1f s (%zu frame%s)", rates.gameMeasured ? "measured at present" : "estimated",
                                       timed.windowMs / 1000.0, timed.count, timed.count == 1 ? "" : "s");
-            if (adaptive)
+            const FrameStats                 counted = latency.shownLastSecondMs ? frameStats(*latency.shownLastSecondMs) : FrameStats{};
+            const std::optional<ShownFigure> shown   = adaptive && after ? std::nullopt
+                                                                         : shownFigure(timed.fps, multiplier, adaptive, after,
+                                                                                       counted.count > 0 ? std::optional<double>(counted.fps) : std::nullopt);
+            if (shown)
             {
-                const std::optional<double> shown = after ? std::nullopt : adaptiveShownFps(timed.fps, *adaptive);
-                if (shown)
+                ImGui::SameLine();
+                ImGui::AlignTextToFramePadding();
+                if (!shown->measured)
                 {
-                    ImGui::SameLine();
-                    ImGui::AlignTextToFramePadding();
                     ImGui::TextColored(palette.warn, "~");
                     ImGui::SameLine(0.0f, 0.0f);
-                    ImGui::TextColored(palette.muted, "%.0f shown", *shown);
+                }
+                ImGui::TextColored(palette.muted, "%.0f shown", shown->fps);
+                const std::string layer(loadedFrameGenerationLayerName());
+                if (after)
+                    ImGui::SetItemTooltip("Every frame shown passes through vkDaedalus, so it is timed, and the game's own\n"
+                                          "rate is it divided by %s's multiplier, %ux. LATENCY.md has the formulas.",
+                                          layer.c_str(), multiplier.value_or(1));
+                else if (shown->measured)
+                    ImGui::SetItemTooltip("Every frame %s presented, timed below it by vkDaedalus's present counter\n"
+                                          "over the last %.1f s (%zu frame%s). LATENCY.md has the formulas.",
+                                          layer.c_str(), counted.windowMs / 1000.0, counted.count, counted.count == 1 ? "" : "s");
+                else if (adaptive)
                     ImGui::SetItemTooltip("vkDaedalus sees only the game's own frames. The frames shown are estimated as MAKO's target, %u FPS,\n"
                                           "or the game's rate times Max multiplier, %ux, when that is lower, and never below the game's own rate.\n"
-                                          "LATENCY.md has the formulas.",
+                                          "A game started with vkdaedalus-run has them counted instead. LATENCY.md has the formulas.",
                                           adaptive->fps, adaptive->maxMultiplier);
-                }
+                else
+                    ImGui::SetItemTooltip("vkDaedalus sees only the game's own frames, and %s shows %ux as many.\n"
+                                          "A game started with vkdaedalus-run has them counted instead. LATENCY.md has the formulas.",
+                                          layer.c_str(), multiplier.value_or(1));
+            }
+            if (adaptive)
+            {
                 ImGui::SameLine();
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextColored(palette.muted, "%s", adaptiveWords(*adaptive).c_str());
                 if (adaptive->refresh)
-                    ImGui::SetItemTooltip("MAKO aims at the display's refresh as gamescope reports it, or at %u FPS while it reports none,\n"
-                                          "and changes how many frames it shows per real frame to reach it, so no shown rate is worked out here.",
+                    ImGui::SetItemTooltip(shown ? "MAKO aims at the display's refresh as gamescope reports it, or at %u FPS while it reports none,\n"
+                                                  "and changes how many frames it shows per real frame to reach it."
+                                                : "MAKO aims at the display's refresh as gamescope reports it, or at %u FPS while it reports none,\n"
+                                                  "and changes how many frames it shows per real frame to reach it, so no shown rate is worked out here.",
                                           adaptive->fps);
-                else if (shown)
+                else
                     ImGui::SetItemTooltip("MAKO aims at %u FPS and changes how many frames it shows per real frame, up to %ux, to reach it.", adaptive->fps,
                                           adaptive->maxMultiplier);
-                else
-                    ImGui::SetItemTooltip("MAKO aims at %u FPS and changes how many frames it shows per real frame to reach it,\n"
-                                          "so no shown rate is worked out here.",
-                                          adaptive->fps);
-            }
-            else if (multiplier)
-            {
-                ImGui::SameLine();
-                ImGui::AlignTextToFramePadding();
-                if (!rates.shownMeasured)
-                {
-                    ImGui::TextColored(palette.warn, "~");
-                    ImGui::SameLine(0.0f, 0.0f);
-                }
-                ImGui::TextColored(palette.muted, "%.0f shown", rates.shownFps);
-                ImGui::SetItemTooltip(after ? "Every frame shown passes through vkDaedalus, so it is timed, and the game's own\n"
-                                              "rate is it divided by %s's multiplier, %ux. LATENCY.md has the formulas."
-                                            : "vkDaedalus sees only the game's own frames, and %s shows %ux as many.\n"
-                                              "LATENCY.md has the formulas.",
-                                      std::string(loadedFrameGenerationLayerName()).c_str(), *multiplier);
             }
             ImGui::SameLine(0.0f, ui::px(ui::Size::groupGap));
             ImGui::AlignTextToFramePadding();
@@ -330,6 +332,26 @@ namespace vkBasalt
             ImGui::SetItemTooltip("%s", window);
             ui::factRow("Slowest 1%", milliseconds(frames.slowestAverageMs).c_str());
             ImGui::SetItemTooltip("%s", window);
+            ui::endPanel();
+        }
+        if (const FrameStats shownFrames = latency.shownLastTenSecondsMs ? frameStats(*latency.shownLastTenSecondsMs) : FrameStats{}; shownFrames.count > 0)
+        {
+            char gaps[320];
+            std::snprintf(gaps, sizeof(gaps),
+                          "The gaps between the frames %s presented, timed below it by vkDaedalus's present counter over the last %.1f s (%zu frame%s).\n"
+                          "A shortest gap far below the average means frames reached the driver in bursts,\n"
+                          "which a counter that turns a single gap into FPS reads as a spike.",
+                          std::string(loadedFrameGenerationLayerName()).c_str(), shownFrames.windowMs / 1000.0, shownFrames.count, shownFrames.count == 1 ? "" : "s");
+            ImGui::Dummy(ImVec2(0.0f, ui::px(ui::Size::groupGap)));
+            ui::sectionLabel("Shown frame times, last 10 s");
+            ImGui::Dummy(ImVec2(0.0f, ui::px(ui::Size::gap) * 0.5f));
+            ui::beginPanel();
+            ui::factRow("Average", milliseconds(shownFrames.averageMs).c_str());
+            ImGui::SetItemTooltip("%s", gaps);
+            ui::factRow("Shortest", milliseconds(shownFrames.minMs).c_str());
+            ImGui::SetItemTooltip("%s", gaps);
+            ui::factRow("Longest", milliseconds(shownFrames.maxMs).c_str());
+            ImGui::SetItemTooltip("%s", gaps);
             ui::endPanel();
         }
         ImGui::EndTable();

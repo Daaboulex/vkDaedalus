@@ -117,13 +117,48 @@ namespace vkBasalt
         return std::max(gameFps, std::min(static_cast<double>(target.fps), adaptiveReachFps(gameFps, target)));
     }
 
+    struct ShownFigure
+    {
+        double fps      = 0.0;
+        bool   measured = false;
+    };
+
+    inline std::optional<ShownFigure> shownFigure(double timedFps, std::optional<uint32_t> multiplier, const std::optional<AdaptiveTarget>& adaptive,
+                                                  bool effectsAfterFrameGeneration, std::optional<double> countedBelowFps)
+    {
+        if (!adaptive && (!multiplier || *multiplier < 2))
+            return std::nullopt;
+        if (effectsAfterFrameGeneration)
+            return ShownFigure{timedFps, true};
+        if (countedBelowFps)
+            return ShownFigure{*countedBelowFps, true};
+        if (adaptive)
+        {
+            const std::optional<double> estimate = adaptiveShownFps(timedFps, *adaptive);
+            return estimate ? std::optional<ShownFigure>(ShownFigure{*estimate, false}) : std::nullopt;
+        }
+        return ShownFigure{timedFps * *multiplier, false};
+    }
+
+    inline std::string shownWords(const ShownFigure& shown)
+    {
+        char text[32];
+        std::snprintf(text, sizeof(text), "%s%.0f shown", shown.measured ? "" : "~", shown.fps);
+        return text;
+    }
+
     inline std::string rateLine(double timedFps, std::optional<uint32_t> multiplier, const std::optional<AdaptiveTarget>& adaptive, bool effectsAfterFrameGeneration)
     {
         char text[48];
         if (adaptive && effectsAfterFrameGeneration)
             std::snprintf(text, sizeof(text), "%.0f shown", timedFps);
+        else if (adaptive)
+            std::snprintf(text, sizeof(text), "%.0f FPS", timedFps);
         else
-            std::snprintf(text, sizeof(text), "%.0f FPS", adaptive ? timedFps : frameRatesOf(timedFps, multiplier, effectsAfterFrameGeneration).gameFps);
+        {
+            const FrameRates rates = frameRatesOf(timedFps, multiplier, effectsAfterFrameGeneration);
+            std::snprintf(text, sizeof(text), "%s%.0f FPS", rates.gameMeasured ? "" : "~", rates.gameFps);
+        }
         return text;
     }
 

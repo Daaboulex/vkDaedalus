@@ -56,6 +56,12 @@ are estimated as the target, or the game's rate times Max multiplier when that i
 below the game's own rate, since MAKO lets native frames above its target through. While MAKO
 follows gamescope's refresh, which the layer does not read, no shown rate is given.
 
+A game started with `vkdaedalus-run` with its effects before frame generation also loads the present
+counter, a layer of vkDaedalus's own library that the order layers place directly below lsfg-vk or
+MAKO. It times every frame frame generation presents, on the clock the layer uses, so there the
+frames shown are measured, at a fixed multiplier and in Adaptive alike, and the Performance card
+adds their gaps over the last 10 s. The estimates above apply only where the counter is not loaded.
+
 ```example
 rates: 60.00 FPS timed, multiplier 3, effects before
 game: 60 FPS, measured

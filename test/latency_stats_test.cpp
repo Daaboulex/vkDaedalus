@@ -210,6 +210,27 @@ int main(int argc, char** argv)
     check(argc == 2, "usage: latency-stats-test <LATENCY.md>");
     checkStatistics();
     checkIntervals();
+    {
+        using vkBasalt::AdaptiveTarget;
+        using vkBasalt::shownFigure;
+        const auto counted = shownFigure(62.0, std::nullopt, AdaptiveTarget{238, false, 4}, false, 248.0);
+        check(counted && counted->fps == 248.0 && counted->measured,
+              "with the presents counted below frame generation, Adaptive's shown rate is that count, measured, and not the estimate");
+        const auto fixedCounted = shownFigure(60.0, 3u, std::nullopt, false, 171.0);
+        check(fixedCounted && fixedCounted->fps == 171.0 && fixedCounted->measured,
+              "a fixed multiplier takes the count below too, so frame generation falling short of its multiplier reads true");
+        const auto fixedEstimate = shownFigure(60.0, 3u, std::nullopt, false, std::nullopt);
+        check(fixedEstimate && fixedEstimate->fps == 180.0 && !fixedEstimate->measured, "with nothing counted below, a fixed multiplier is the game's rate times it, estimated");
+        const auto adaptiveEstimate = shownFigure(62.0, std::nullopt, AdaptiveTarget{238, false, 4}, false, std::nullopt);
+        check(adaptiveEstimate && adaptiveEstimate->fps == 238.0 && !adaptiveEstimate->measured, "with nothing counted below, Adaptive is its estimate");
+        check(!shownFigure(62.0, std::nullopt, AdaptiveTarget{0, true, 4}, false, std::nullopt),
+              "Adaptive following a refresh the layer does not know, with nothing counted below, gives no figure");
+        const auto after = shownFigure(240.0, 4u, std::nullopt, true, std::nullopt);
+        check(after && after->fps == 240.0 && after->measured, "with the effects after frame generation, the layer's own rate is the shown one, measured");
+        check(!shownFigure(60.0, std::nullopt, std::nullopt, false, 60.0), "without frame generation there is no shown figure beside the game's");
+        check(fixedEstimate && counted && vkBasalt::shownWords(*fixedEstimate) == "~180 shown" && vkBasalt::shownWords(*counted) == "248 shown",
+              "an estimate carries ~, a measured figure none");
+    }
     check(vkBasalt::frameGenerationHoldMs(8.0, 2, true) == 16.0 && vkBasalt::frameGenerationHoldMs(6.0, 3, true) == 18.0,
           "with effects after frame generation, the layer sees every generated frame, so one real frame is the average times the multiplier");
     check(vkBasalt::effectsSpanState(false, true, true, true) == vkBasalt::EffectsSpanState::EffectsOff,

@@ -2518,7 +2518,14 @@ namespace vkBasalt
 
     static constexpr double frameRatesReportMs = 60000.0;
 
-    static void logFrameRates(LogicalDevice& device, const std::string& over, uint64_t intervals, double milliseconds)
+    static std::optional<PresentTotals> countedSince(const std::optional<PresentTotals>& now, const std::optional<PresentTotals>& then)
+    {
+        if (!now || !then || now->intervals < then->intervals)
+            return std::nullopt;
+        return PresentTotals{now->intervals - then->intervals, now->milliseconds - then->milliseconds};
+    }
+
+    static void logFrameRates(LogicalDevice& device, const std::string& over, uint64_t intervals, double milliseconds, const std::optional<PresentTotals>& counted)
     {
         if (intervals == 0 || milliseconds <= 0.0 || (Logger::logLevel() > LogLevel::Info && !Logger::isHistoryEnabled()))
             return;
@@ -2528,17 +2535,21 @@ namespace vkBasalt
         const bool                          after      = effectsRunAfterFrameGeneration(device.frameGenerationPlace);
         const FrameRates                    rates      = frameRatesOf(timed, multiplier, after);
         const std::string                   place      = frameGenerationPlaceWords(device.frameGenerationPlace, loadedFrameGenerationLayerName());
-        const std::optional<double>         shown      = adaptive && !after ? adaptiveShownFps(timed, *adaptive) : std::nullopt;
+        const std::optional<double>         countedFps = counted && counted->intervals > 0 && counted->milliseconds > 0.0
+                                                             ? std::optional<double>(static_cast<double>(counted->intervals) * 1000.0 / counted->milliseconds)
+                                                             : std::nullopt;
+        const std::optional<ShownFigure>    shown      = shownFigure(timed, multiplier, adaptive, after, countedFps);
         char                                line[320];
-        if (shown)
-            std::snprintf(line, sizeof(line), "frame rates %s: game %.1f FPS measured, shown %.1f FPS estimated; %s, %s", over.c_str(), timed, *shown, place.c_str(),
-                          adaptiveWords(*adaptive).c_str());
+        if (adaptive && !after && shown)
+            std::snprintf(line, sizeof(line), "frame rates %s: game %.1f FPS measured, shown %.1f FPS %s; %s, %s", over.c_str(), timed, shown->fps,
+                          shown->measured ? "measured" : "estimated", place.c_str(), adaptiveWords(*adaptive).c_str());
         else if (adaptive)
             std::snprintf(line, sizeof(line), "frame rates %s: %s %.1f FPS measured; %s, %s", over.c_str(), after ? "shown" : "game", timed, place.c_str(),
                           adaptiveWords(*adaptive).c_str());
         else
             std::snprintf(line, sizeof(line), "frame rates %s: game %.1f FPS %s, shown %.1f FPS %s; %s%s", over.c_str(), rates.gameFps,
-                          rates.gameMeasured ? "measured" : "estimated", rates.shownFps, rates.shownMeasured ? "measured" : "estimated", place.c_str(),
+                          rates.gameMeasured ? "measured" : "estimated", shown ? shown->fps : rates.shownFps,
+                          (shown ? shown->measured : rates.shownMeasured) ? "measured" : "estimated", place.c_str(),
                           multiplier ? (", " + std::to_string(*multiplier) + "x").c_str() : "");
         Logger::info(line);
     }
@@ -2578,12 +2589,20 @@ namespace vkBasalt
             if (pLogicalSwapchain)
             {
                 PresentIntervals& seen = pLogicalSwapchain->presentIntervals;
+                if (!pLogicalSwapchain->shownBaselineTaken)
+                {
+                    pLogicalSwapchain->shownBaselineTaken = true;
+                    pLogicalSwapchain->shownAtStart       = presentTotalsBelowFrameGeneration(pLogicalDevice->device);
+                    pLogicalSwapchain->shownReported      = pLogicalSwapchain->shownAtStart;
+                }
                 seen.record(presentedAt);
                 const double window = seen.intervalSumMs() - pLogicalSwapchain->ratesReportedMs;
                 if (window >= frameRatesReportMs)
                 {
+                    const std::optional<PresentTotals> counted = presentTotalsBelowFrameGeneration(pLogicalDevice->device);
                     logFrameRates(*pLogicalDevice, "over the last " + std::to_string(static_cast<int>(window / 1000.0)) + " s",
-                                  seen.intervalCount() - pLogicalSwapchain->ratesReportedIntervals, window);
+                                  seen.intervalCount() - pLogicalSwapchain->ratesReportedIntervals, window, countedSince(counted, pLogicalSwapchain->shownReported));
+                    pLogicalSwapchain->shownReported = counted;
                     pLogicalSwapchain->ratesReportedIntervals = seen.intervalCount();
                     pLogicalSwapchain->ratesReportedMs        = seen.intervalSumMs();
                 }
@@ -2816,7 +2835,8 @@ namespace vkBasalt
                          + std::to_string(pLogicalSwapchain->chain ? pLogicalSwapchain->chain->roundTripReads : 0) + " round trip reads, " + std::to_string(mousePointerQueries())
                          + " mouse queries");
             logFrameRates(*pLogicalDevice, "over the swapchain's life", pLogicalSwapchain->presentIntervals.intervalCount(),
-                          pLogicalSwapchain->presentIntervals.intervalSumMs());
+                          pLogicalSwapchain->presentIntervals.intervalSumMs(),
+                          countedSince(presentTotalsBelowFrameGeneration(pLogicalDevice->device), pLogicalSwapchain->shownAtStart));
             pLogicalSwapchain->destroy();
             swapchainMap.erase(swapchain);
         }

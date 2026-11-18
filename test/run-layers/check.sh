@@ -13,6 +13,7 @@ cases=0
 ours=VK_LAYER_VKDAEDALUS_post_processing
 lsfg=VK_LAYER_LSFGVK_frame_generation
 mako=VK_LAYER_MAKO_render
+counter=VK_LAYER_VKDAEDALUS_present_counter
 shell=$(command -v sh)
 printer=$(command -v env)
 
@@ -70,13 +71,13 @@ expect_run() {
   on=$(order_layers_on "$home/environment")
   if [ "$want_layer" = mako ]; then
     want="$mako $ours"
-    if [ "$want_order" = before ]; then want="$ours $mako"; fi
+    if [ "$want_order" = before ]; then want="$ours $mako $counter"; fi
     [ "$(value_of ENABLE_MAKO "$home/environment")" = 1 ] || fail "$label: ENABLE_MAKO is not 1, so MAKO stays out of a game whose profile runs it"
     [ "$(value_of DISABLE_LSFGVK "$home/environment")" = 1 ] || fail "$label: DISABLE_LSFGVK is not 1, so lsfg-vk joins a game whose profile runs MAKO"
     [ -z "$(value_of VKDAEDALUS_AFTER_LSFGVK "$home/environment")" ] || fail "$label: VKDAEDALUS_AFTER_LSFGVK is set for a profile running MAKO"
   else
     want="$lsfg $ours"
-    if [ "$want_order" = before ]; then want="$ours $lsfg"; fi
+    if [ "$want_order" = before ]; then want="$ours $lsfg $counter"; fi
     [ "$(value_of DISABLE_MAKO "$home/environment")" = 1 ] || fail "$label: DISABLE_MAKO is not 1, so MAKO joins a game whose profile runs lsfg-vk"
     [ -z "$(value_of ENABLE_MAKO "$home/environment")" ] || fail "$label: ENABLE_MAKO is still set for a profile running lsfg-vk"
     [ -z "$(value_of VKDAEDALUS_AFTER_MAKO "$home/environment")" ] || fail "$label: VKDAEDALUS_AFTER_MAKO is set for a profile running lsfg-vk"
@@ -91,6 +92,8 @@ expect_run() {
   [ "$(names VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment")" = 1 ] && [ "$(value_of VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment")" = "$want_record" ] ||
     fail "$label: VKDAEDALUS_RUN_CALLER_DISABLED is '$(value_of VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment")' ($(names VKDAEDALUS_RUN_CALLER_DISABLED "$home/environment") set), want exactly '$want_record', so the overlay takes a DISABLE variable vkdaedalus-run set for one the launch options set, or the other way round"
   [ "$on" = "$want" ] || fail "$label: the order layers on are '${on//$'\n'/ | }', want exactly '$want'"
+  [ "$(value_of VK_ADD_LAYER_PATH "$home/environment" | cut -d: -f1)" = "$(dirname "$orders")/counter-layer" ] && [ -f "$(dirname "$orders")/counter-layer/vkdaedalus_present_counter.json" ] ||
+    fail "$label: VK_ADD_LAYER_PATH is '$(value_of VK_ADD_LAYER_PATH "$home/environment")', not led by the present counter's folder holding its manifest, so the loader drops the order layers that name it"
 }
 
 expect_run "MAKO, effects before" $'frameGenerationLayer = mako\n' none mako before ''

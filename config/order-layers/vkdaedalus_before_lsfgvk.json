@@ -8,7 +8,8 @@
     "description": "vkDaedalus's effects run on the game's own frames before lsfg-vk generates frames from them, for a game whose profile runs lsfg-vk",
     "component_layers": [
       "VK_LAYER_VKDAEDALUS_post_processing",
-      "VK_LAYER_LSFGVK_frame_generation"
+      "VK_LAYER_LSFGVK_frame_generation",
+      "VK_LAYER_VKDAEDALUS_present_counter"
     ],
     "enable_environment": {
       "VKDAEDALUS_RUN_FRAME_GENERATION_LAYER": "lsfg-vk"

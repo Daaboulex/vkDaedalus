@@ -19,6 +19,7 @@
 #include "wayland_display.hpp"
 #include "logical_swapchain.hpp"
 #include "frame_generation.hpp"
+#include "present_counter.hpp"
 
 #include <algorithm>
 #include <cfloat>
@@ -524,6 +525,8 @@ namespace vkBasalt
                                                                            : HudWindows{};
         latency.lastSecondMs            = windows.lastSecond ? swapchain.presentIntervals.within(drawnAt, fpsWindow) : std::vector<double>{};
         latency.lastTenSecondsMs        = windows.lastTenSeconds ? swapchain.presentIntervals.within(drawnAt, statsWindow) : std::vector<double>{};
+        latency.shownLastSecondMs       = windows.lastSecond ? presentsBelowFrameGeneration(pLogicalDevice->device, drawnAt, fpsWindow) : std::nullopt;
+        latency.shownLastTenSecondsMs   = windows.lastTenSeconds ? presentsBelowFrameGeneration(pLogicalDevice->device, drawnAt, statsWindow) : std::nullopt;
         latency.effectsOn               = state.effectsEnabled;
         latency.effectTimingSetting     = settingsManager.getEffectGpuTiming();
         latency.effectTimingOn          = swapchain.timingEnabled;

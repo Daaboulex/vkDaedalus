@@ -15,6 +15,7 @@
 #include "overlay/swapchain_overlay.hpp"
 #include "gpu_chain.hpp"
 #include "latency_stats.hpp"
+#include "present_counter.hpp"
 
 namespace vkBasalt
 {
@@ -55,6 +56,9 @@ namespace vkBasalt
         PresentClock                        presentClock;
         uint64_t                            ratesReportedIntervals = 0;
         double                              ratesReportedMs        = 0.0;
+        bool                                shownBaselineTaken     = false;
+        std::optional<PresentTotals>        shownAtStart;
+        std::optional<PresentTotals>        shownReported;
         std::vector<bool>                   timingSamplesPending;
         bool                                timingEnabled = false;
         bool                                timingReadErrorLogged = false;

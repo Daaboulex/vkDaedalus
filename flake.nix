@@ -179,9 +179,11 @@
           };
 
           postInstall = ''
-            substituteInPlace "$out/share/vulkan/implicit_layer.d/vkdaedalus.json" \
-              --replace-fail '"library_path": "libvkdaedalus.so"' \
-                             '"library_path": "'"$out/lib/libvkdaedalus.so"'"'
+            for manifest in "$out/share/vulkan/implicit_layer.d/vkdaedalus.json" "$out/share/vkdaedalus/counter-layer/vkdaedalus_present_counter.json"; do
+              substituteInPlace "$manifest" \
+                --replace-fail '"library_path": "libvkdaedalus.so"' \
+                               '"library_path": "'"$out/lib/libvkdaedalus.so"'"'
+            done
 
           '';
 
@@ -1380,19 +1382,49 @@
                 touch $out
               '';
 
-          checks.order-layers-name-both-layers =
-            pkgs.runCommand "order-layers-name-both-layers" { nativeBuildInputs = [ pkgs.jq ]; }
+          checks.layer-manifests-load-their-library =
+            pkgs.runCommand "layer-manifests-load-their-library"
+              {
+                nativeBuildInputs = [
+                  pkgs.jq
+                  pkgs.binutils
+                ];
+              }
+              ''
+                checked=0
+                while IFS= read -r manifest; do
+                  library=$(jq -r 'if type == "object" then (.layer.library_path // empty) else empty end' "$manifest")
+                  [ -n "$library" ] || continue
+                  case "$library" in
+                    /*) ;;
+                    *) echo "$manifest names its library as $library, which the loader looks for in the system's library folders, where the package never puts it"; exit 1 ;;
+                  esac
+                  [ -f "$library" ] || { echo "$manifest names $library, which does not exist"; exit 1; }
+                  exports=$(nm -D --defined-only "$library")
+                  for entry in $(jq -r '.layer.functions // {} | .[]' "$manifest"); do
+                    grep -qw -- "$entry" <<<"$exports" || { echo "$manifest names $entry, which $library does not export"; exit 1; }
+                  done
+                  checked=$((checked + 1))
+                done < <(find ${self'.packages.vkdaedalus}/share -name '*.json')
+                [ "$checked" -ge 2 ] || { echo "found $checked layer manifests naming a library, want the layer's and the present counter's"; exit 1; }
+                touch $out
+              '';
+
+          checks.order-layers-name-their-layers =
+            pkgs.runCommand "order-layers-name-their-layers" { nativeBuildInputs = [ pkgs.jq ]; }
               ''
                 ours=$(jq -er .layer.name ${./config/vkdaedalus.json.in})
                 lsfg=$(sed -n 's/.*lsfgLayerName = sizeof(void\*) == 8 ? "\([A-Za-z0-9_]*\)".*/\1/p' ${./src/frame_generation.hpp})
                 [ -n "$lsfg" ] || { echo "lsfgLayerName is gone from frame_generation.hpp, so the order layers cannot be checked against it"; exit 1; }
                 mako=$(sed -n 's/.*makoLayerName *= *"\([A-Za-z0-9_]*\)".*/\1/p' ${./src/mako_config.hpp})
                 [ -n "$mako" ] || { echo "makoLayerName is gone from mako_config.hpp, so the order layers cannot be checked against it"; exit 1; }
-                for pair in "vkdaedalus_before_lsfgvk $ours $lsfg" "lsfgvk_before_vkdaedalus $lsfg $ours" "vkdaedalus_before_mako $ours $mako" "mako_before_vkdaedalus $mako $ours"; do
-                  read -r file first second <<<"$pair"
+                counter=$(jq -er .layer.name ${./config/vkdaedalus_present_counter.json.in})
+                for pair in "vkdaedalus_before_lsfgvk $ours $lsfg $counter" "lsfgvk_before_vkdaedalus $lsfg $ours" "vkdaedalus_before_mako $ours $mako $counter" "mako_before_vkdaedalus $mako $ours"; do
+                  read -r file first second third <<<"$pair"
+                  want=$(jq -nc --arg a "$first" --arg b "$second" --arg c "$third" '[$a, $b] + (if $c == "" then [] else [$c] end)')
                   listed=$(jq -ec '.layer.component_layers' ${./config/order-layers}/$file.json)
-                  [ "$listed" = "[\"$first\",\"$second\"]" ] \
-                    || { echo "the order layer $file lists $listed, want $first then $second, so the loader drops it or keeps the wrong order"; exit 1; }
+                  [ "$listed" = "$want" ] \
+                    || { echo "the order layer $file lists $listed, want $want, so the loader drops it, keeps the wrong order or times the frames shown in the wrong place"; exit 1; }
                 done
                 touch $out
               '';

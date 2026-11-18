@@ -32,8 +32,9 @@ namespace vkBasalt
         const std::optional<double>   effects    = latency.effectTimingOn && latency.effectsOn && latency.effectsSpanMilliseconds
                                                        ? std::optional<double>(*latency.effectsSpanMilliseconds)
                                                        : std::nullopt;
-        const std::vector<std::string> lines =
-            hudLines(items, frameStats(latency.lastSecondMs), frameStats(latency.lastTenSecondsMs), multiplier, adaptive, after, effects);
+        const FrameStats               counted = latency.shownLastSecondMs ? frameStats(*latency.shownLastSecondMs) : FrameStats{};
+        const std::vector<std::string> lines   = hudLines(items, frameStats(latency.lastSecondMs), frameStats(latency.lastTenSecondsMs), multiplier, adaptive, after,
+                                                          counted.count > 0 ? std::optional<double>(counted.fps) : std::nullopt, effects);
         if (lines.empty())
             return;
         if (!hudLogged)

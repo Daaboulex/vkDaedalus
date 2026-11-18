@@ -94,7 +94,7 @@ namespace vkBasalt
 
     inline std::vector<std::string> hudLines(const std::vector<HudItem>& items, const FrameStats& lastSecond, const FrameStats& lastTenSeconds,
                                              std::optional<uint32_t> multiplier, const std::optional<AdaptiveTarget>& adaptive, bool effectsAfterFrameGeneration,
-                                             std::optional<double> effectsMs)
+                                             std::optional<double> countedBelowFps, std::optional<double> effectsMs)
     {
         const auto has = [&](HudItem item) { return std::find(items.begin(), items.end(), item) != items.end(); };
         std::vector<std::string> lines;
@@ -102,20 +102,11 @@ namespace vkBasalt
         if (has(HudItem::Fps) && lastSecond.count > 0)
         {
             lines.push_back(rateLine(lastSecond.fps, multiplier, adaptive, effectsAfterFrameGeneration));
+            if (!(adaptive && effectsAfterFrameGeneration))
+                if (const std::optional<ShownFigure> shown = shownFigure(lastSecond.fps, multiplier, adaptive, effectsAfterFrameGeneration, countedBelowFps))
+                    lines.push_back(shownWords(*shown));
             if (adaptive)
-            {
-                if (const std::optional<double> shown = effectsAfterFrameGeneration ? std::nullopt : adaptiveShownFps(lastSecond.fps, *adaptive))
-                {
-                    std::snprintf(text, sizeof(text), "%.0f shown", *shown);
-                    lines.push_back(text);
-                }
                 lines.push_back(adaptiveWords(*adaptive));
-            }
-            else if (multiplier && *multiplier >= 2)
-            {
-                std::snprintf(text, sizeof(text), "%.0f shown", frameRatesOf(lastSecond.fps, multiplier, effectsAfterFrameGeneration).shownFps);
-                lines.push_back(text);
-            }
         }
         if (has(HudItem::FrameTime) && lastSecond.count > 0)
         {

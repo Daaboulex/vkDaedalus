@@ -77,6 +77,8 @@ namespace vkBasalt
     {
         std::vector<double>  lastSecondMs;
         std::vector<double>  lastTenSecondsMs;
+        std::optional<std::vector<double>> shownLastSecondMs;
+        std::optional<std::vector<double>> shownLastTenSecondsMs;
         bool                 effectsOn           = true;
         bool                 effectTimingSetting = false;
         bool                 effectTimingOn      = false;

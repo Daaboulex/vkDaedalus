@@ -1,0 +1,16 @@
+{
+  "file_format_version" : "1.2.1",
+  "layer" : {
+    "name": "VK_LAYER_VKDAEDALUS_present_counter",
+    "type": "GLOBAL",
+    "library_path": "@ld_lib_dir_vkdaedalus@libvkdaedalus.so",
+    "library_arch": "@library_arch@",
+    "api_version": "@api_version@",
+    "implementation_version": "1",
+    "description": "times the frames frame generation presents, below it, for vkDaedalus's shown frame rate",
+    "functions": {
+      "vkGetInstanceProcAddr": "vkDaedalusCounter_GetInstanceProcAddr",
+      "vkGetDeviceProcAddr":   "vkDaedalusCounter_GetDeviceProcAddr"
+    }
+  }
+}
