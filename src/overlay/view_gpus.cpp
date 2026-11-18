@@ -7,6 +7,7 @@
 
 #include "effects/effect_registry.hpp"
 #include "gpu_assignment.hpp"
+#include "mako_status.hpp"
 #include "overlay/widgets.hpp"
 
 #include "imgui.h"
@@ -66,12 +67,7 @@ namespace vkBasalt
             return;
         }
         ImGui::TableNextColumn();
-        ui::sectionLabel("Effects run on");
-        const std::vector<uint32_t> runsOn  = gpusOfRows(plan.rows, plan.ownGpus, pEffectRegistry->getActiveEffects());
-        const auto                  effects = [&](uint32_t number, const std::string& note) {
-            const auto count = std::count(runsOn.begin(), runsOn.end(), number);
-            return count == 0 ? note : note + ", " + std::to_string(count) + (count == 1 ? " effect" : " effects");
-        };
+        ui::sectionLabel("Per GPU");
         const float rowH          = ui::px(ui::Size::row);
         const float inRowH        = ui::px(ui::Size::inRow);
         const auto  rowBackground = [&]() {
@@ -82,18 +78,117 @@ namespace vkBasalt
                                                       ui::px(ui::Size::radius));
             return at;
         };
-        const auto rowText = [&](const ImVec2& at, const std::string& number, const std::string& name, const std::string& note, bool dim) {
+        const auto rowText = [&](const ImVec2& at, const std::string& number, const std::string& name, const std::string& note, bool dim, bool badgeLine) {
             ImDrawList* draw  = ImGui::GetWindowDrawList();
             const float big   = FontSize::body * scale;
             const float small = FontSize::caption * scale;
-            const float top   = at.y + (rowH - big - small - 2.0f * scale) * 0.5f;
+            const float line  = badgeLine ? ui::rowBadgeHeight() : small;
+            const float top   = at.y + (rowH - big - line - 2.0f * scale) * 0.5f;
+            const float noteY = top + big + 2.0f * scale;
             draw->AddText(fonts.body, FontSize::label * scale, ImVec2(at.x + 12.0f * scale, at.y + (rowH - FontSize::label * scale) * 0.5f), ImGui::GetColorU32(dim ? palette.disabled : palette.muted), number.c_str());
             draw->AddText(fonts.bold, big, ImVec2(at.x + 32.0f * scale, top), ImGui::GetColorU32(dim ? palette.secondary : palette.text), name.c_str());
-            draw->AddText(fonts.body, small, ImVec2(at.x + 32.0f * scale, top + big + 2.0f * scale), ImGui::GetColorU32(palette.muted), note.c_str());
+            draw->AddText(fonts.body, small, ImVec2(at.x + 32.0f * scale, noteY + (line - small) * 0.5f), ImGui::GetColorU32(palette.muted), note.c_str());
+            const float noteW = note.empty() ? 0.0f : fonts.body->CalcTextSizeA(small, FLT_MAX, 0.0f, note.c_str()).x + ui::px(8.0f);
+            return ImVec2(at.x + 32.0f * scale + noteW, noteY);
         };
         const auto nextRow = [&](const ImVec2& at) {
             ImGui::SetCursorScreenPos(at);
             ImGui::Dummy(ImVec2(0.0f, rowH));
+        };
+        const std::vector<std::string> active  = pEffectRegistry->getActiveEffects();
+        const std::vector<uint32_t>    rowGpus = effectiveGpus(plan.ownGpus);
+        const FrameGenerationState     fg      = frameGenerationState();
+        const bool                     mako    = fg.layer == FrameGenerationLayer::Mako;
+        const bool                     scales  = mako && fg.blocker.empty() && makoScaling().run == MakoScalingRun::Scaling;
+        const auto hasWork = [&](uint32_t number) {
+            if (number == gameGpu && ((fg.on && fg.blocker.empty()) || scales))
+                return true;
+            for (const std::string& name : active)
+            {
+                const auto row = std::find(plan.rows.begin(), plan.rows.end(), name);
+                if ((row == plan.rows.end() ? gameGpu : rowGpus[static_cast<size_t>(row - plan.rows.begin())]) == number)
+                    return true;
+            }
+            return false;
+        };
+        const auto work = [&](uint32_t number, const ImVec2& from, float right) {
+            const float               gap = ui::px(ui::Size::gap);
+            std::vector<Badge>        shown;
+            std::vector<std::string>  ids;
+            std::vector<std::string>  tips;
+            std::vector<std::string>  effects;
+            if (number == gameGpu && fg.on && fg.blocker.empty())
+            {
+                shown.push_back({Tone::Info, Icon::Lock, std::string("Frame generation, ") + (mako ? "MAKO" : "lsfg-vk")});
+                ids.push_back("Frame generation##pergpu");
+                tips.push_back(mako ? "MAKO generates frames on the GPU the game renders on.\nIt supports no frame generation on another GPU than the game's."
+                                    : "lsfg-vk generates frames on the GPU the game renders on.\nIt takes each frame as memory only that GPU can import, and has no GPU setting.");
+                effects.emplace_back();
+            }
+            if (number == gameGpu && scales)
+            {
+                shown.push_back({Tone::Info, Icon::Lock, "Scaling, MAKO"});
+                ids.push_back("Scaling##pergpu");
+                tips.push_back("MAKO scales inside its own layer, on the GPU the game renders on.");
+                effects.emplace_back();
+            }
+            for (const std::string& name : active)
+            {
+                const auto     row  = std::find(plan.rows.begin(), plan.rows.end(), name);
+                const uint32_t runs = row == plan.rows.end() ? gameGpu : rowGpus[static_cast<size_t>(row - plan.rows.begin())];
+                if (runs != number)
+                    continue;
+                shown.push_back({Tone::Muted, std::nullopt, name});
+                ids.push_back(name + "##pergpu");
+                tips.push_back("Runs on GPU " + std::to_string(number) + ": pick another GPU for it");
+                effects.push_back(name);
+            }
+            const auto gpuBefore = [&](const std::string& name) {
+                const auto   row = std::find(plan.rows.begin(), plan.rows.end(), name);
+                const size_t r   = static_cast<size_t>(row - plan.rows.begin());
+                return row == plan.rows.end() || r == 0 ? gameGpu : rowGpus[r - 1];
+            };
+            float  x     = from.x;
+            size_t drawn = 0;
+            for (; drawn < shown.size(); drawn++)
+            {
+                const float  width = ui::badgeWidth(shown[drawn], true);
+                const size_t left  = shown.size() - drawn - 1;
+                const float  more  = left == 0 ? 0.0f : gap + ui::badgeWidth(Badge{Tone::Muted, std::nullopt, "+" + std::to_string(left)}, true);
+                if (x + width + more > right)
+                    break;
+                const bool clickable = !effects[drawn].empty();
+                if (ui::badgeAt(shown[drawn], ImVec2(x, from.y), ids[drawn].c_str(), tips[drawn].c_str(), clickable))
+                    ImGui::OpenPopup(("pergpu " + effects[drawn]).c_str());
+                if (clickable && ui::beginPopup(("pergpu " + effects[drawn]).c_str()))
+                {
+                    renderGpuChoices(effects[drawn], gpuBefore(effects[drawn]));
+                    ui::endPopup();
+                }
+                x += width + gap;
+            }
+            if (drawn < shown.size())
+            {
+                const std::string label = "+" + std::to_string(shown.size() - drawn);
+                const std::string popup = "pergpu more " + std::to_string(number);
+                if (ui::badgeAt(Badge{Tone::Muted, std::nullopt, label}, ImVec2(x, from.y), (label + "##pergpu").c_str(), "More on this GPU", true))
+                    ImGui::OpenPopup(popup.c_str());
+                if (ui::beginPopup(popup.c_str()))
+                {
+                    for (size_t i = drawn; i < shown.size(); i++)
+                    {
+                        if (effects[i].empty())
+                            ui::badge(shown[i], tips[i].c_str(), true);
+                        else if (ui::beginSubmenu(effects[i].c_str()))
+                        {
+                            renderGpuChoices(effects[i], gpuBefore(effects[i]));
+                            ui::endSubmenu();
+                        }
+                    }
+                    ui::endPopup();
+                }
+            }
+            return !shown.empty();
         };
         for (const OverlayGpu& gpu : state.gpus)
         {
@@ -101,10 +196,14 @@ namespace vkBasalt
             const ImVec2      at     = rowBackground();
             const size_t      entry  = gpu.number - firstListedGpu;
             const std::string number = std::to_string(gpu.number);
-            rowText(at, number, gpu.name.empty() ? gpu.id : shortGpuName(gpu.name),
-                    gpu.number == gameGpu ? effects(gameGpu, "the game draws here") : gpu.runsChain ? effects(gpu.number, gpu.status) : gpu.status, false);
+            const float       rowW   = ImGui::GetContentRegionAvail().x;
+            const bool        busy   = hasWork(gpu.number);
+            const ImVec2      line   = rowText(at, number, gpu.name.empty() ? gpu.id : shortGpuName(gpu.name),
+                                               gpu.number == gameGpu ? "the game draws here" : gpu.status, false, busy);
+            float             limit  = at.x + rowW - ui::px(ui::Size::gap);
             ImGui::SetCursorScreenPos(at);
-            ImGui::InvisibleButton("##gpuname", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, rowH));
+            ImGui::SetNextItemAllowOverlap();
+            ImGui::InvisibleButton("##gpuname", ImVec2(rowW * 0.5f, rowH));
             gpuTooltip(gpu);
             if (gpu.number >= firstListedGpu && entry < list.size())
             {
@@ -115,6 +214,7 @@ namespace vkBasalt
                 const float       right  = at.x + ImGui::GetContentRegionAvail().x - ui::px(ui::Size::gap);
                 const float       width  = ui::buttonWidth(up.c_str(), ui::Kind::Secondary, true) + ui::buttonWidth(down.c_str(), ui::Kind::Secondary, true)
                                     + inRowH + 2.0f * gap;
+                limit = right - width - ui::px(ui::Size::gap);
                 ImGui::SetCursorScreenPos(ImVec2(right - width, at.y + (rowH - inRowH) * 0.5f));
                 ImGui::BeginDisabled(gpu.number == firstListedGpu);
                 if (ui::rowButton(up.c_str()))
@@ -143,6 +243,8 @@ namespace vkBasalt
                     changeGpus(list, rowsMoved([n](uint32_t own) { return ownGpuAfterRemove(own, n); }));
                 }
             }
+            if (busy)
+                work(gpu.number, line, limit);
             nextRow(at);
             ImGui::PopID();
         }
@@ -150,7 +252,7 @@ namespace vkBasalt
         {
             ImGui::PushID(addable.id.c_str());
             const ImVec2 at = rowBackground();
-            rowText(at, "", addable.name.empty() ? addable.id : shortGpuName(addable.name), "not in use", true);
+            rowText(at, "", addable.name.empty() ? addable.id : shortGpuName(addable.name), "not in use", true, false);
             ImGui::SetCursorScreenPos(at);
             ImGui::InvisibleButton("##gpuname", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, rowH));
             gpuTooltip(addable);

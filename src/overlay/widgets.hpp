@@ -121,7 +121,9 @@ namespace vkBasalt::ui
     ImVec4 toneInk(Tone tone, const OverlayPalette& palette);
     ImVec4 badgeTextInk(Tone tone, const OverlayPalette& palette);
     float  badgeWidth(const Badge& shown, bool inRow = false);
-    void   badge(const Badge& shown, const char* tip = nullptr, bool inRow = false);
+    void   badge(const Badge& shown, const char* tip = nullptr, bool inRow = false, const char* id = nullptr);
+    float  rowBadgeHeight();
+    bool   badgeAt(const Badge& shown, const ImVec2& at, const char* id = nullptr, const char* tip = nullptr, bool clickable = false);
     float  nextLaunchRoom(bool pending);
     void   nextLaunch(const char* what, bool pending);
     void   nextLaunchAtRight(const char* what, bool pending);

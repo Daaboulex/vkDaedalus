@@ -1061,15 +1061,10 @@ namespace vkBasalt::ui
             return {px(Size::badge), px(7.0f), px(9.0f), px(13.0f), px(5.0f), FontSize::small};
         }
 
-        ImRect drawBadge(const Badge& shown, bool inRow)
+        void paintBadge(const Badge& shown, const ImRect& pill, const BadgeMetrics& m)
         {
-            const BadgeMetrics m     = badgeMetrics(inRow);
-            const float        w     = badgeWidth(shown, inRow);
-            const float        lineH = px(Size::control);
-            const ImVec2       at    = ImGui::GetCursorScreenPos();
-            const ImRect       pill(ImVec2(at.x, at.y + (lineH - m.height) * 0.5f), ImVec2(at.x + w, at.y + (lineH + m.height) * 0.5f));
-            const ImVec4       ink  = toneInk(shown.tone, palette());
-            ImDrawList*        list = ImGui::GetWindowDrawList();
+            const ImVec4 ink  = toneInk(shown.tone, palette());
+            ImDrawList*  list = ImGui::GetWindowDrawList();
             list->AddRectFilled(pill.Min, pill.Max, u32(withAlpha(ink, badgeTint)), px(Size::radius));
             float x = pill.Min.x + (shown.icon ? m.padIcon : m.pad);
             if (shown.icon)
@@ -1080,6 +1075,15 @@ namespace vkBasalt::ui
             ImGui::PushFont(fonts().bold, m.fontSize);
             list->AddText(ImVec2(x, pill.Min.y + (m.height - ImGui::GetFontSize()) * 0.5f), u32(badgeTextInk(shown.tone, palette())), shown.text.c_str());
             ImGui::PopFont();
+        }
+
+        ImRect drawBadge(const Badge& shown, bool inRow)
+        {
+            const BadgeMetrics m     = badgeMetrics(inRow);
+            const float        w     = badgeWidth(shown, inRow);
+            const float        lineH = px(Size::control);
+            const ImVec2       at    = ImGui::GetCursorScreenPos();
+            paintBadge(shown, ImRect(ImVec2(at.x, at.y + (lineH - m.height) * 0.5f), ImVec2(at.x + w, at.y + (lineH + m.height) * 0.5f)), m);
             ImGui::ItemSize(ImVec2(w, lineH), paddingFor(Size::control));
             return ImRect(at, ImVec2(at.x + w, at.y + lineH));
         }
@@ -1122,9 +1126,42 @@ namespace vkBasalt::ui
         return (shown.icon ? m.padIcon + m.icon + m.gap : m.pad) + text + m.pad;
     }
 
-    void badge(const Badge& shown, const char* tip, bool inRow)
+    float rowBadgeHeight()
     {
-        ImGui::ItemAdd(drawBadge(shown, inRow), 0);
+        return badgeMetrics(true).height;
+    }
+
+    bool badgeAt(const Badge& shown, const ImVec2& at, const char* id, const char* tip, bool clickable)
+    {
+        const BadgeMetrics m = badgeMetrics(true);
+        const ImRect       pill(at, ImVec2(at.x + badgeWidth(shown, true), at.y + m.height));
+        paintBadge(shown, pill, m);
+        const ImGuiID itemId = id != nullptr ? ImGui::GetID(id) : 0;
+        if (id != nullptr)
+            UiMap::nameNextItem(id);
+        if (!ImGui::ItemAdd(pill, itemId, nullptr, clickable ? ImGuiItemFlags_None : ImGuiItemFlags_NoNav))
+            return false;
+        bool pressed = false;
+        if (clickable && itemId != 0)
+        {
+            bool hovered = false;
+            bool held    = false;
+            pressed      = ImGui::ButtonBehavior(pill, itemId, &hovered, &held);
+            if (hovered)
+                ImGui::GetWindowDrawList()->AddRect(pill.Min, pill.Max, u32(withAlpha(toneInk(shown.tone, palette()), 0.7f)), px(Size::radius));
+            pointAt(hovered);
+        }
+        if (tip != nullptr && *tip != '\0')
+            ImGui::SetItemTooltip("%s", tip);
+        return pressed;
+    }
+
+    void badge(const Badge& shown, const char* tip, bool inRow, const char* id)
+    {
+        const ImRect box = drawBadge(shown, inRow);
+        if (id != nullptr)
+            UiMap::nameNextItem(id);
+        ImGui::ItemAdd(box, id != nullptr ? ImGui::GetID(id) : 0, nullptr, ImGuiItemFlags_NoNav);
         if (tip != nullptr && *tip != '\0')
             ImGui::SetItemTooltip("%s", tip);
     }

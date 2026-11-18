@@ -2026,14 +2026,14 @@ ui_layout_problem() {
             }
             scale = 0
             for (i = 1; i <= n; i++) if (win[i] == "vkDaedalus" && lab[i] == "Close##frame") scale = (y1[i] - y0[i]) / 32
-            split("26 32 40 52", kit, " ")
+            split("18 26 32 40 52", kit, " ")
             for (i = 1; i <= n && scale > 0; i++) {
                 if (!(inCard(win[i]) || index(win[i], "##Popup_") == 1 || index(win[i], "##Combo_") == 1) || lab[i] == win[i] || lab[i] == "(an item past the window edge)" || lab[i] == "##footer") continue
                 if (lab[i] == "##frameintervals") continue
                 fits = 0
                 for (k in kit) { d = (y1[i] - y0[i]) - kit[k] * scale; if (d >= -0.6 && d <= 0.6) fits = 1 }
                 if (!fits) {
-                    printf "\"%s\" in %s is %.1f px high, not a kit height (26, 32, 40 or 52 at scale %.2f)", lab[i], win[i], y1[i] - y0[i], scale
+                    printf "\"%s\" in %s is %.1f px high, not a kit height (18, 26, 32, 40 or 52 at scale %.2f)", lab[i], win[i], y1[i] - y0[i], scale
                     exit
                 }
             }
@@ -3456,7 +3456,7 @@ drive_effects() {
 }
 
 drive_gpus_tab() {
-    local log="$1" map="$2" profile="$3" ui_log="$1.ui" window
+    local log="$1" map="$2" profile="$3" ui_log="$1.ui" window label
     : >"$ui_log"
     if ! wait_for_line 'present cycle' 30 "$log"; then
         ui_result "$ui_log" FAIL "the GPUs page" "the game never reached 30 presents"
@@ -3474,6 +3474,14 @@ drive_gpus_tab() {
         return 0
     fi
     ui_state "$map" gpus-03-listed "$ui_log" "the GPUs card with two GPUs the profile lists"
+    ui_click "$map" "cas##pergpu" 1 "$log" || true
+    label=$(ui_label_starting "$map" "GPU 2: " "$log") || true
+    if [ -n "$label" ] && ui_click "$map" "$label" 1 "$log" && file_says "$profile" '^cas\.gpu = 2$'; then
+        ui_result "$ui_log" PASS "GPUs: an effect moves from the overview" "cas, listed under GPU 1 on the GPUs page, went to GPU 2 from its menu there and the profile saved cas.gpu = 2"
+    else
+        ui_result "$ui_log" FAIL "GPUs: an effect moves from the overview" "the GPUs page ${label:+offered $label but }never saved cas on GPU 2: $(grep -E '^cas\.gpu' "$profile" || echo no cas.gpu line)"
+    fi
+    ui_state "$map" gpus-03-moved-from-overview "$ui_log"
     ui_click "$map" "Down##2" 1 "$log" || true
     if file_says "$profile" '^gpus = 9abc:def0,1234:5678$'; then
         ui_result "$ui_log" PASS "GPUs: Down" "GPU 2's Down put 9abc:def0 first in the profile"
@@ -4361,6 +4369,14 @@ drive_frame_generation() {
         ui_result "$ui_log" FAIL "Frame generation: typed values stay in range" "99 and 0.1 typed in left $(grep -E '^(multiplier|flow_scale)' "$config" | tr '\n' ' ')instead of 20 and 0.25"
     fi
     ui_state "$map" fg-04-values "$ui_log"
+    ui_click "$map" "GPUs" 1 "$log" || true
+    if ui_wait "$map" "Frame generation##pergpu" "" "" "$log"; then
+        ui_result "$ui_log" PASS "GPUs: frame generation shows on the game's GPU" "with lsfg-vk on, the GPUs page listed frame generation under GPU 1, locked there"
+    else
+        ui_result "$ui_log" FAIL "GPUs: frame generation shows on the game's GPU" "with lsfg-vk on, the GPUs page never listed frame generation under the game's GPU"
+    fi
+    ui_click "$map" "Frame generation" 1 "$log" || true
+    ui_wait "$map" "Performance mode" "" "" "$log" || true
     ui_click "$map" "Performance mode" 1 "$log" || true
     if file_says "$config" '^performance_mode = true$'; then
         ui_result "$ui_log" PASS "Frame generation: Performance mode" "ticking it reached the lsfg-vk profile"
