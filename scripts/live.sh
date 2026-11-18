@@ -393,6 +393,7 @@ run() {
         vars+=(LSFGVK_CONFIG="$LSFG_DIR/conf.toml")
     fi
     if [[ "$layers" == *"$MAKO"* ]]; then layer_path="${layer_path:+$layer_path:}$MAKO_DIR"; fi
+    if [[ "$layers" == *"$COUNTER"* ]]; then layer_path="${layer_path:+$layer_path:}$VKB_LAYER/share/vkdaedalus/counter-layer"; fi
     if [ -n "${EXTRA_LAYER_PATH:-}" ]; then layer_path="${layer_path:+$layer_path:}$EXTRA_LAYER_PATH"; fi
     if [ -n "$layer_path" ]; then vars+=(VK_ADD_LAYER_PATH="$layer_path"); fi
     if [ "$validate" = 1 ]; then
@@ -6372,6 +6373,139 @@ mako_offload_case() {
     done
 }
 
+mako_gpu_home() {
+    local home="$1" model="$2" dll="$3" gpu="$4"
+    fresh_home "$home" cas
+    mkdir -p "$home/.config/mako-render"
+    {
+        printf '%s\n' 'version = 2' '' '[global]'
+        if [ -n "$dll" ]; then printf 'dll = "%s"\n' "$dll"; fi
+        printf '%s\n' '' '[[profile]]' 'name = "vkdaedalus default"' 'active_in = "/gpu-choice-probe"' "frame_generation_model = \"$model\"" \
+            'frame_generation_provisioned = true' 'frame_generation_enabled = true' 'multiplier = 2'
+        if [ -n "$gpu" ]; then printf 'gpu = "%s"\n' "$gpu"; fi
+    } >"$home/.config/mako-render/conf.toml"
+}
+
+mako_shown_per_drawn() {
+    local life game shown
+    life=$(grep -m1 -F "frame rates over the swapchain's life" "$1" || true)
+    game=$(sed -n 's/.*: game \([0-9.]*\) FPS measured, shown [0-9.]* FPS measured;.*/\1/p' <<<"$life")
+    shown=$(sed -n 's/.*: game [0-9.]* FPS measured, shown \([0-9.]*\) FPS measured;.*/\1/p' <<<"$life")
+    awk -v g="${game:-0}" -v s="${shown:-0}" 'BEGIN { if (g > 0 && s > 0) printf "%.2f", s / g; else print "none" }'
+}
+
+mako_sample_live() {
+    local home="$1" log="$2" out="$3" tries=0 n=0 f card id
+    : >"$out"
+    while [ ! -f "$log.rc" ] && [ "$tries" -lt 1500 ]; do
+        for f in "$home"/.config/mako-render/runtime-state/*.json; do
+            [ -f "$f" ] || continue
+            printf 'status %s\n' "$(tr -d '\n' <"$f" | grep -o -E '"frame_generation_active":(true|false)' | head -1)" >>"$out"
+            cp -f "$f" "$out.status.json" 2>/dev/null || true
+        done
+        for card in /sys/class/drm/card[0-9]*; do
+            [ -r "$card/device/gpu_busy_percent" ] || continue
+            id="$(sed 's/^0x//' "$card/device/vendor"):$(sed 's/^0x//' "$card/device/device")"
+            printf 'busy %s %s\n' "$id" "$(cat "$card/device/gpu_busy_percent" 2>/dev/null)" >>"$out"
+        done
+        if [ $((n % 5)) -eq 0 ] && command -v nvidia-smi >/dev/null; then
+            nvidia-smi --query-gpu=pci.device_id,utilization.gpu --format=csv,noheader,nounits 2>/dev/null |
+                awk -F', *' '{ d = tolower($1); printf "busy %s:%s %s\n", substr(d, 7, 4), substr(d, 3, 4), $2 }' >>"$out" || true
+        fi
+        n=$((n + 1))
+        tries=$((tries + 1))
+        sleep 0.2
+    done
+}
+
+mako_busy_of() {
+    awk -v id="$2" '$1 == "busy" && $2 == id && $3 != "" { s += $3; n++ } END { if (n) printf "%.0f%%", s / n; else print "unread" }' "$1"
+}
+
+mako_run_on() {
+    local icd="$1" dir="$2" model="$3" dll="$4" gpu="$5" tag="$6" log home
+    log="$dir/mako-$model-$tag.log" home="$dir/mako-$model-$tag-home"
+    mako_gpu_home "$home" "$model" "$dll" "$gpu"
+    rm -f "$log.rc"
+    mako_sample_live "$home" "$log" "$log.live" &
+    local sampler=$!
+    mkdir -p "$home/.config/vkdaedalus/profiles"
+    printf 'frameGenerationLayer = mako\n' >"$home/.config/vkdaedalus/profiles/default.conf"
+    run "$log" "$home" "$icd" "$VALIDATION" 1 1 -- env VK_ADD_IMPLICIT_LAYER_PATH="$MAKO_DIR" "$VKB_LAYER/bin/vkdaedalus-run" gpu-choice-probe "$FRAMES" "$LANE_GPU_ID"
+    wait "$sampler" || true
+}
+
+mako_generated() {
+    local log="$1"
+    if grep -q -E '^MAKO Renderer: frame-generation (context )?initialization failed' "$log"; then return 1; fi
+    grep -q '^status "frame_generation_active":true$' "$log.live"
+}
+
+mako_other_gpu_case() {
+    local icd="$1" dir="$2" other="$3" absent model dll name game list id makoId control controlRatio log ratio said claim verdict life errors
+    if [ -z "$other" ]; then
+        record SKIP "MAKO frame generation on another GPU" "this machine has no second GPU in the instance"
+        return 0
+    elif [ -z "$mako_manifest" ]; then
+        record SKIP "MAKO frame generation on another GPU" "$(mako_skip)"
+        return 0
+    fi
+    local MAKO_DIR="$dir/real-mako-other-gpu"
+    rm -rf "${MAKO_DIR:?}"
+    mkdir -p "$MAKO_DIR"
+    cp "$mako_manifest" "$MAKO_DIR/"
+    game=$(sed -n 's/^gpu-choice-probe: default pick [0-9]*, game picks [0-9]*: \([0-9a-f:]*\)$/\1/p' "$dir/offload-choice-without.log.stdout" | head -1)
+    list=$(awk -v game="$game" '/^gpu-choice-probe: before device/ && $7 != "4" && $5 != game { print $5 }' "$dir/offload-choice-without.log.stdout" | sort -u)
+    for model in mako-fg lossless-scaling; do
+        dll=""
+        if [ "$model" = mako-fg ]; then
+            if absent=$(mako_fg_absent); then
+                record SKIP "MAKO frame generation on another GPU, $model" "$absent"
+                continue
+            fi
+        else
+            dll="$(dirname "${lsfg_dll:-/none}")/Lossless.dll"
+            if [ -z "${lsfg_dll:-}" ] || [ ! -f "$dll" ]; then
+                record SKIP "MAKO frame generation on another GPU, $model" "no Lossless.dll beside the lsfg-vk.dll --lsfg-dll names"
+                continue
+            fi
+        fi
+        control="$dir/mako-$model-game-gpu.log"
+        mako_run_on "$icd" "$dir" "$model" "$dll" "" game-gpu
+        controlRatio=$(mako_shown_per_drawn "$control")
+        if ! mako_generated "$control"; then
+            record FAIL "MAKO frame generation on another GPU, $model" "on the game's GPU ($game) MAKO's status never said frame generation was active ($controlRatio frames shown per frame drawn): $(grep -m1 -E '^MAKO Renderer: .*(failed|fallback)' "$control" || echo 'MAKO named no failure'), so the run cannot tell what another GPU does"
+            continue
+        fi
+        for id in $list; do
+            name="MAKO frame generation from $game on $id, $model"
+            makoId="0x$(tr a-f A-F <<<"${id%%:*}"):0x$(tr a-f A-F <<<"${id##*:}")"
+            log="$dir/mako-$model-on-${id/:/-}.log"
+            mako_run_on "$icd" "$dir" "$model" "$dll" "$makoId" "on-${id/:/-}"
+            ratio=$(mako_shown_per_drawn "$log")
+            said=$(grep -m1 -E '^MAKO Renderer: (frame-generation (context )?initialization failed.*|backend GPU selection.*)' "$log" | cut -c1-160 || true)
+            life=$(grep -m1 -F "frame rates over the swapchain's life" "$log" | sed -E 's/^vkDaedalus info: +//' || true)
+            errors=$(grep -c -E 'VUID-' "$log.stdout" || true)
+            record MEAS "$name" "$ratio frames shown per frame drawn, by vkDaedalus's present counter below MAKO; $id busy $(mako_busy_of "$log.live" "$id") against $(mako_busy_of "$control.live" "$id") with MAKO's gpu unset; MAKO: ${said:-said nothing}; vkDaedalus: ${life:-no frame rates line}; validation messages: $errors"
+            claim=$(grep -m1 -E "MAKO generates frames on|MAKO's file names GPU .* for frame generation, but MAKO generates none" "$log" | sed -E 's/^vkDaedalus (info|warn): +//' || true)
+            if mako_generated "$log"; then
+                verdict="MAKO generated frames on $id"
+                if [[ "$claim" != "MAKO generates frames on GPU "* ]]; then
+                    record FAIL "$name" "$verdict, but vkDaedalus said: ${claim:-nothing}"
+                    continue
+                fi
+            else
+                verdict="MAKO generated none with its gpu on $id: $(grep -m1 -o -E 'failed[^:]*: .*|initialization failed.*' "$log" | head -1 | cut -c1-120)"
+                if [[ "$claim" != "MAKO's file names GPU "* ]]; then
+                    record FAIL "$name" "$verdict, but vkDaedalus said: ${claim:-nothing}"
+                    continue
+                fi
+            fi
+            record PASS "$name" "$verdict, and vkDaedalus said so: $claim"
+        done
+    done
+}
+
 mako_offload_home() {
     local home="$1"
     fresh_home "$home" cas:smaa
@@ -6478,6 +6612,7 @@ lane_offload() {
         fi
     fi
     mako_offload_case "$every" "$dir" "$other"
+    mako_other_gpu_case "$every" "$dir" "$other"
     local crossing="the frame crosses to GPU 2 and comes back" mode chain=solid_fill:invert_input want="191 127 64" control="$2/offload-pixels-control.log"
     if [ -z "$other" ]; then
         record SKIP "$crossing" "this machine has no second GPU in the instance"

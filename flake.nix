@@ -1354,6 +1354,15 @@
                   ${./test/lsfg-config/probe_lsfg_vk.cpp} ${inputs.lsfg-vk}/lsfg-vk-config/src/config.cpp -o theirs/lsfg-config-probe
                 bash ${./test/lsfg-config/compare.sh} "$PWD/ours/lsfg-config-probe" "$PWD/theirs/lsfg-config-probe" \
                   ${./test/lsfg-config} "$PWD/work"
+                printf 'version = 2\n[global]\n%b[[profile]]\nname = "a"\nactive_in = "a"\n%b' "" "" >plain.toml
+                printf 'version = 2\n[global]\n%b[[profile]]\nname = "a"\nactive_in = "a"\n%b' 'gpu = "0x10DE:0x2C02"\n' "" >global-gpu.toml
+                printf 'version = 2\n[global]\n%b[[profile]]\nname = "a"\nactive_in = "a"\n%b' "" 'gpu = "0x10DE:0x2C02"\n' >profile-gpu.toml
+                [ "$(theirs/lsfg-config-probe read plain.toml)" != refused ] \
+                  || { echo "lsfg-vk refused a plain file, so its refusal of a gpu key below proves nothing"; exit 1; }
+                for file in global-gpu profile-gpu; do
+                  [ "$(theirs/lsfg-config-probe read $file.toml)" = refused ] \
+                    || { echo "lsfg-vk read a gpu key in $file.toml: it has a GPU setting, which docs/frame-generation.md denies and the Frame generation card does not offer"; exit 1; }
+                done
                 touch $out
               '';
 
