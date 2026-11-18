@@ -14,21 +14,6 @@ writer:
 
 ## settings.conf
 
-```ini
-maxEffects = 10
-toggleKey = Home
-frameGenerationKey = Insert
-reloadKey = F10
-overlayKey = End
-enableOnLaunch = true
-depthCapture = false
-launchNotice = every
-autoApply = true
-autoApplyDelay = 200
-effectGpuTiming = false
-liveReshadeUniforms = true
-```
-
 Each row of the Settings card ends in a mark: a ring for the default, a filled dot for a value you
 changed. The dot's tooltip names the default, and a click on it sets the default back.
 

@@ -6,10 +6,11 @@
 [![License: Zlib](https://img.shields.io/badge/License-Zlib-blue.svg)](./LICENSE)
 <!-- END generated:badges -->
 
-A Vulkan post-processing layer with an in-game overlay: add, tune and reorder ReShade and built-in
-effects while the game runs, on X11 and Wayland, natively or under Wine and Proton. It also switches
-lsfg-vk or MAKO frame generation per game, runs effects on a second GPU and shows what it adds to
-each frame.
+A Vulkan post-processing layer forked from vkBasalt, with an in-game overlay: add, tune and reorder
+ReShade and built-in effects while the game runs, on X11 and Wayland, natively or under Wine and
+Proton. It also switches lsfg-vk or MAKO frame generation per game, runs effects on a second GPU,
+measures the frames the game draws and the frames shown, marking any figure it can only estimate,
+and shows what it adds to each frame, with a log and a report for when something goes wrong.
 
 In Steam, set a game's launch options to `vkdaedalus-run %command%`, start the game and press `End`.
 
@@ -18,17 +19,17 @@ In Steam, set a game's launch options to `vkdaedalus-run %command%`, start the g
 | Effects | Add effects | Frame generation |
 |---|---|---|
 | ![The Effects page](docs/screenshots/ui-01-effects.png) | ![Adding effects](docs/screenshots/ui-05-add-effects.png) | ![The Frame generation page](docs/screenshots/fg-04-values.png) |
-| **GPU** | **Performance** | **Settings** |
-| ![The GPU card](docs/screenshots/gpus-06-timed.png) | ![The Performance card](docs/screenshots/ui-10-performance.png) | ![The Settings card](docs/screenshots/ui-09-settings.png) |
+| **GPUs** | **Performance** | **Settings** |
+| ![The GPUs page](docs/screenshots/gpus-06-timed.png) | ![The Performance card](docs/screenshots/ui-10-performance.png) | ![The Settings card](docs/screenshots/ui-09-settings.png) |
 
-The screenshots are real frames from the test suite, a game on an NVIDIA GeForce GTX 1660 SUPER with an
-AMD Radeon RX 9070 XT as its second GPU (2026-10-25).
+The screenshots are real frames from the live test's gallery.
 
 ## Features
 
 - **Overlay** (`End`): see-through over the game, with opaque tiles and cards:
   the profile, the effects switch and Safe Anti-Cheat; Effects, Frame
-  generation, GPUs, Performance, Shaders, Debug, Keys and Settings. Hold `F8`
+  generation, Scaling in a profile that runs MAKO, GPUs, Performance, Shaders,
+  Debug, Keys and Settings. Hold `F8`
   or Preview to see the game with its effects while the overlay stays open and
   the game still gets no input. It follows the desktop's scale (the Wayland
   output the game is on, or X11's Xft.dpi, or a size chosen in Settings), turns
@@ -47,27 +48,33 @@ AMD Radeon RX 9070 XT as its second GPU (2026-10-25).
   `Textures/` folders and test-compiles every shader.
 - **Frame generation** through lsfg-vk, MAKO with Lossless Scaling's model or
   MAKO's own MAKO FG: one choice per game in the overlay, tuned there too, with
-  effects before or after it per game, and MAKO's scaling as MAKO reports it.
-  Frames are generated on the game's GPU, which both layers require.
-- **Multi-GPU offload**: effects can run on another GPU; the GPUs page also
-  shows every GPU's usage and memory.
-- **Performance card**: frame statistics and what vkDaedalus adds to a frame, an
-  estimate marked with a ~, every formula in [LATENCY.md](LATENCY.md): FPS over
-  the last second, the rest over the last 10 seconds, the display's refresh where
-  the compositor reports it. The Debug card's Frame path tab lists which figures
-  this run measures and which it estimates.
+  effects before or after it per game, and MAKO's scaling and pauses as MAKO
+  reports them. A row MAKO ignores in this run is greyed with the reason. Frames
+  are generated on the game's GPU, which both layers require.
+- **Multi-GPU offload**: effects can run on another GPU. The GPUs page lists what
+  runs on each GPU, sends an effect to another from there, keeps frame generation
+  and MAKO's scaling on the game's GPU, and shows every GPU's usage and memory.
+- **Performance card**: frame statistics and what vkDaedalus adds to a frame,
+  every formula in [LATENCY.md](LATENCY.md): FPS over the last second, the rest
+  over the last 10 seconds, the display's refresh where the compositor reports
+  it. Under frame generation it gives the game's rate and the frames shown,
+  counted below lsfg-vk or MAKO in a game started with `vkdaedalus-run`, and
+  marks a figure it can only estimate with a ~. The Debug card's Frame path tab
+  lists which figures this run measures and which it estimates.
 - **HUD**: FPS and, by choice, frame time, slowest 1% and effects time at the top
-  left while the overlay is closed, in Steam's levels (Settings, Interface); off,
-  it draws nothing.
+  left while the overlay is closed, in Steam's levels (Settings, Interface), and
+  under frame generation the frames shown, with a ~ where estimated; off, it
+  draws nothing.
 - **Settings say what you changed**: a filled dot at a row's end, in Settings
   and on every effect parameter, marks a value changed from its default, which
   its tooltip names, and a click sets it back.
-- **Nine colour schemes**, Daaboulex soft by default, each holding text, warnings,
+- **Colour schemes**, Daaboulex soft by default, each holding text, warnings,
   errors and success at 4.5:1 on every surface (Settings, Interface, Colours).
 - **Logs and a report**: the log also goes to
-  `$XDG_STATE_HOME/vkdaedalus/vkdaedalus.log`, kept under 8 MiB, lsfg-vk's beside
-  it, and Export on the Debug card's Log tab writes one report, both logs, the
-  GPUs, the layer order and the profile, to your download folder. The Log tab
+  `$XDG_STATE_HOME/vkdaedalus/vkdaedalus.log`, rotated once it grows past a size
+  limit, lsfg-vk's beside it, and Export on the Debug card's Log tab writes one
+  report, both logs, the GPUs, the layer order and the profile, to your download
+  folder. The Log tab
   keeps warnings and errors from the start and the rest from when the card
   opened.
 - **Safe Anti-Cheat**, on for every game by default: no effect reads depth.

@@ -57,3 +57,5 @@ every repo goes to `Daaboulex/nix-packaging-standard` as an issue or a change, a
 repo with the next release.
 
 ## This project
+
+This project's rules are in the This project part of [AGENTS.md](AGENTS.md), and hold for people too.

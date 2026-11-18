@@ -39,8 +39,8 @@ they run on, frame generation, MAKO's scaling and the display.
 writes the one it finds into the layer's file. No game gets lsfg-vk switched on while `lsfg-vk.dll` is missing, since
 lsfg-vk would then fail the game's swapchain. MAKO needs `Lossless.dll` only for MAKO LSFG and the LS1 scaling methods.
 
-The card's Live, Output and Next launch groups belong to the vkDaedalus profile the game runs; its lsfg-vk or MAKO
-group is the layer's own and the same for every game.
+The card's Live, Pacing, Output and Next launch groups belong to the vkDaedalus profile the game runs; its lsfg-vk or
+MAKO group is the layer's own and the same for every game.
 
 ## What changes when
 
@@ -48,6 +48,9 @@ group is the layer's own and the same for every game.
 |---|---|---|---|
 | lsfg-vk | multiplier, flow scale, performance mode, colour space, transfer function | | vsync, the swapchain image count, half precision, the DLL path, a profile switch |
 | MAKO | On, the multiplier, Adaptive and its target, flow scale, MAKO FG mode, performance mode, the pacing group, HDR quality, the scaling method and sharpness, a profile switch | the scaling factor, supersampling | Ready at start, the choice between MAKO LSFG and MAKO FG, Ultra performance, Scaling on, Keep swapchain image count, Mailbox compatibility, clearing MAKO's GPU, half precision, `Lossless.dll` |
+
+The card greys a row MAKO ignores in this run, such as one Ultra performance overrides or one that works only under
+gamescope, with MAKO's reason.
 
 lsfg-vk reads a live change and has the game rebuild its swapchain. Off sets the multiplier to 1, which passes frames
 through, so switching on again needs no new launch. MAKO looks at its file four times a second, applies a live
@@ -95,6 +98,9 @@ the size the game draws at and the size MAKO presents. When MAKO reports it inac
 switch, and while MAKO has written no such file they say that there is no status file. MAKO writes one only for a
 swapchain it works on: where it neither scales nor can generate frames it shows the game's own frames and writes
 none.
+
+The same file says whether MAKO's frame generation is active, so the card and its tile call it paused while MAKO
+reports it inactive, with MAKO's reason when it wrote one.
 
 ## Effects before or after frame generation
 

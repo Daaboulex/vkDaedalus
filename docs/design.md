@@ -213,6 +213,13 @@ check's message or a test already says is not repeated here.
   process started with, and by the saved one while MAKO does not run the profile.
 - MAKO's own layer never reads its Gamescope VRR choice: `mako-vrr-lease` applies it, a helper only
   MAKO's launchers start. So the card shows the choice greyed and starts no helper.
+- MAKO follows a display refresh, compares its refresh threshold and sizes a supersampled surface
+  only under gamescope, and with Display refresh on there it aims at the saved target only while
+  gamescope reports no refresh. So the card greys those three outside gamescope and Target while
+  Display refresh is on, and takes the target MAKO applies from its status file.
+- The frames shown are timed by a counter layer below frame generation, since the layer above it
+  sees only the game's frames. It stamps presents per device, not per swapchain: a frame generation
+  layer may hand the game a swapchain of its own, and the device is the handle both sides share.
 - The card asks for the layer once. lsfg-vk, MAKO with Lossless Scaling's model and MAKO with its own
   are one choice of three: each needs something else installed, and all three take effect at the next
   launch. MAKO's own editors call Lossless Scaling's model LSFG, so the entry is MAKO LSFG.

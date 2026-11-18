@@ -35,7 +35,8 @@ below show, because lsfg-vk queues a generated frame right behind a real one. A 
 then shows tens of thousands of FPS while the screen shows 120. Steam's overlay reporting around 10000 FPS
 with frame generation fits a counter of that kind sitting below lsfg-vk; its place in the layer order is
 not confirmed. vkDaedalus's own Performance card counts the presents over a second and over 10 seconds
-instead, as [LATENCY.md](../LATENCY.md) describes.
+instead, and where its present counter runs below frame generation it gives the shortest gap between
+the frames shown as a time, not as an FPS figure, as [LATENCY.md](../LATENCY.md) describes.
 
 ## Measured
 

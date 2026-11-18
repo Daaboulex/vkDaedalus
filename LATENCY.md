@@ -59,9 +59,10 @@ overlay has read that file, no shown rate is given.
 
 A game started with `vkdaedalus-run` with its effects before frame generation also loads the present
 counter, a layer of vkDaedalus's own library that the order layers place directly below lsfg-vk or
-MAKO. It times every frame frame generation presents, on the clock the layer uses, so there the
-frames shown are measured, at a fixed multiplier and in Adaptive alike, and the Performance card
-adds their gaps over the last 10 s. The estimates above apply only where the counter is not loaded.
+MAKO. It times every present frame generation makes on the game's device, on the clock the layer
+uses, so there the frames shown are measured, at a fixed multiplier and in Adaptive alike, and the
+Performance card adds their gaps over the last 10 s. The estimates above apply only where the
+counter is not loaded.
 
 ```example
 rates: 60.00 FPS timed, multiplier 3, effects before
@@ -126,12 +127,13 @@ older than 15 frames: 8.74%
 - Effects on the game's GPU after the frame comes back from another GPU: not measured.
 - With the effects switched off nothing of vkDaedalus' runs on the frame, and the page says so
   instead of showing the last figures.
-- Frame generation, estimated: lsfg-vk shows a frame built between the last two real frames, so it
-  holds about one real frame interval, plus its own GPU time, which is not measured. With effects
-  before frame generation the layer sees only real frames, and that interval is the average above;
-  with effects after it, every generated frame passes through the layer, and the real interval is
-  the average times the multiplier. A game at multiplier 1 has no estimate, since lsfg-vk then
-  passes frames through.
+- Frame generation, estimated: lsfg-vk and MAKO show a frame built between the last two real
+  frames, so each holds about one real frame interval, plus its own GPU time, which is not
+  measured. With effects before frame generation the layer sees only real frames, and that
+  interval is the average above; with effects after it, every generated frame passes through the
+  layer, and the real interval is the average times the multiplier. MAKO's Adaptive with the
+  effects after it has no estimate, since its multiplier changes as it goes, and neither has
+  lsfg-vk at multiplier 1, which then passes frames through.
 
 The page shows frame generation's estimate apart from the measured figures and adds nothing across
 the two kinds. Time from input to the screen is

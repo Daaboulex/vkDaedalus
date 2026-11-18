@@ -35,7 +35,8 @@ Either one brings vkDaedalus back to a game set to `none`.
 Set `ENABLE_VKDAEDALUS=1` for the game. In Lutris it goes under System options, Environment variables.
 Every Vulkan program the command starts then loads the layer. Without the input hook that
 `vkdaedalus-run` preloads, the overlay cannot hold a Wayland game's input, and on X11 it falls back to a
-keyboard and pointer grab, which a game holding the pointer refuses.
+keyboard and pointer grab, which a game holding the pointer refuses. It also loads no order layer and no
+present counter, so with the effects before frame generation the frames shown are estimated.
 
 To try the layer outside a game:
 

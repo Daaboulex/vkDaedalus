@@ -57,7 +57,8 @@ Before the game starts, `vkdaedalus-run` clears the order variables it inherited
 the profile's layer in `VKDAEDALUS_RUN_FRAME_GENERATION_LAYER` and sets that layer's after variable when the profile
 asks for effects after frame generation, so exactly one order layer is on. It keeps the other layer out with its
 `DISABLE_` variable and enables MAKO with `ENABLE_MAKO=1`. A game started with `ENABLE_VKDAEDALUS=1` alone reads no
-order layer, so the loader places the layers in the order it finds their files. The Performance card's Order line
+order layer and loads no present counter, so the loader places the layers in the order it finds their files. The
+Performance card's Order line
 shows the order this run got, read from the layers below vkDaedalus.
 
 ## A second GPU

@@ -12,9 +12,9 @@ Or place the files in `~/.config/vkdaedalus/reshade/Shaders/` and `Textures/`.
 
 ## What runs
 
-When the corpus was last recorded, 513 of the 517 shaders in ReShade's package index compiled to
-something vkDaedalus runs. [SHADER-COMPATIBILITY.md](../SHADER-COMPATIBILITY.md) lists them all, why the
-other four do not, and which shaders have been run, since compiling is not rendering.
+[SHADER-COMPATIBILITY.md](../SHADER-COMPATIBILITY.md) lists every shader in ReShade's package index,
+whether it compiles to something vkDaedalus runs, why the others do not, and which shaders have been
+run, since compiling is not rendering.
 
 Effects compute at full precision even where a shader asks for `half`; an effect that declares reduced
 precision gets a Half precision switch under This effect when its row is open.
