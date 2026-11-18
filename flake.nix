@@ -472,7 +472,7 @@
                 text = builtins.readFile ./scripts/study.sh;
               }
             );
-            meta.description = "Collect a live run's measurements into docs/performance.tsv and write its tables into docs/performance.md";
+            meta.description = "Collect a live run's measurements and print them as one table per GPU";
           };
 
           apps.tour-gif = {
@@ -487,8 +487,8 @@
             meta.description = "Make docs/screenshots/tour.gif from a live run's gallery";
           };
 
-          checks.performance-matches-its-data =
-            pkgs.runCommand "performance-matches-its-data"
+          checks.study-prints-its-figures =
+            pkgs.runCommand "study-prints-its-figures"
               {
                 nativeBuildInputs = [
                   pkgs.gawk
@@ -496,10 +496,12 @@
                 ];
               }
               ''
-                bash ${./scripts/study.sh} check ${./docs/performance.tsv} ${./docs/performance.md}
-                awk -F'\t' 'NR == 1 { $4 = $4 " drifted" } { print }' OFS='\t' ${./docs/performance.tsv} > drifted.tsv
-                if bash ${./scripts/study.sh} check drifted.tsv ${./docs/performance.md} > drift.log; then
-                  echo "the study check passed a data file it no longer matches, so it checks nothing"
+                bash ${./scripts/study.sh} show ${./test/study/figures.tsv} > shown.md
+                diff ${./test/study/tables.txt} shown.md
+                awk -F'\t' 'NR == 1 { $4 = $4 " drifted" } { print }' OFS='\t' ${./test/study/figures.tsv} > drifted.tsv
+                bash ${./scripts/study.sh} show drifted.tsv > drifted.md
+                if diff -q ${./test/study/tables.txt} drifted.md > /dev/null; then
+                  echo "the study printed drifted figures the same as the fixture's, so the check compares nothing"
                   exit 1
                 fi
                 touch $out

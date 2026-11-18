@@ -1,0 +1,3 @@
+An example GPU	1.0	per-frame cost, one effect, cas	0.12 ms
+An example GPU	1.0	per-frame cost of the HUD, hud	0.01 ms
+Another example GPU	2.0	per-frame cost, one effect, cas	0.30 ms

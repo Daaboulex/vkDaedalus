@@ -1,0 +1,12 @@
+### An example GPU, driver 1.0
+
+| Measured | Result |
+| --- | --- |
+| per-frame cost, one effect, cas | 0.12 ms |
+| per-frame cost of the HUD, hud | 0.01 ms |
+
+### Another example GPU, driver 2.0
+
+| Measured | Result |
+| --- | --- |
+| per-frame cost, one effect, cas | 0.30 ms |

@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-usage="usage: study collect <live log>... | study write <data.tsv> <doc.md> | study check <data.tsv> <doc.md>"
-begin='<!-- BEGIN generated:study -->'
-end='<!-- END generated:study -->'
+usage="usage: study collect <live log>... | study show <data.tsv>"
 
 collect() {
     awk '
@@ -63,35 +61,17 @@ render() {
     ' "$1"
 }
 
-block_of() {
-    awk -v b="$begin" -v e="$end" '$0 == b { on = 1; next } $0 == e { on = 0 } on' "$1"
-}
-
 case "${1:-}" in
     collect)
         shift
         [ "$#" -gt 0 ] || { echo "$usage" >&2; exit 2; }
         collect "$@"
         ;;
-    write)
-        [ "$#" -eq 3 ] || { echo "$usage" >&2; exit 2; }
-        if ! grep -qxF "$begin" "$3" || ! grep -qxF "$end" "$3"; then
-            echo "$3 has no $begin and $end lines" >&2
-            exit 1
-        fi
+    show)
+        [ "$#" -eq 2 ] || { echo "$usage" >&2; exit 2; }
         rendered=$(render "$2")
         [ -n "$rendered" ] || { echo "$2 holds no measurement" >&2; exit 1; }
-        awk -v b="$begin" -v e="$end" -v r="$rendered" '$0 == b { print; print ""; print r; print ""; skip = 1; next } $0 == e { skip = 0 } !skip' "$3" >"$3.new" && mv "$3.new" "$3"
-        ;;
-    check)
-        [ "$#" -eq 3 ] || { echo "$usage" >&2; exit 2; }
-        want=$(printf '\n%s\n' "$(render "$2")")
-        have=$(block_of "$3")
-        if [ "$want" != "$(printf '%s\n' "$have")" ]; then
-            echo "$3's measured tables differ from $2: run study write $2 $3"
-            diff <(printf '%s\n' "$want") <(printf '%s\n' "$have") | head -20
-            exit 1
-        fi
+        printf '%s\n' "$rendered"
         ;;
     *)
         echo "$usage" >&2

@@ -3,22 +3,22 @@
 Measured, not estimated. Every `.fx` in the shader packs listed below is compiled
 through this layer's own compile environment and the result recorded in
 `test/shader-corpus-baseline.txt`. The current counts are in the generated
-support table at the bottom of this file -- that table is the source of truth,
+support table at the bottom of this file. That table is the source of truth,
 regenerated from the baseline, and this hand-written part deliberately repeats
 no number from it.
 
 Every module the compiler emits is validated with `spirv-val`; a shader whose
 SPIR-V a driver would reject is demoted rather than reported green. Compiling
-is still not the same as rendering correctly -- see "What a green result
+is still not the same as rendering correctly; see "What a green result
 claims" below.
 
 ## What was tested
 
 The corpus is every package in ReShade's own official index,
 [`EffectPackages.ini`](https://github.com/crosire/reshade-shaders/blob/list/EffectPackages.ini)
-(`crosire/reshade-shaders`, `list` branch) — not a hand-picked selection. Every listed
-repository is pinned by revision and hash in `test/shader-corpus.lock.json`; the
-pins of 2026-10-05 hold all 44 at their default branch.
+(`crosire/reshade-shaders`, `list` branch), not a hand-picked selection. Every listed
+repository is pinned by revision and hash in `test/shader-corpus.lock.json`, each
+at a revision of its default branch.
 
 Every directory under a pack's `Shaders` directory became an include path, as the
 layer resolves them, so cross-pack includes resolve as they would in a real install.
@@ -52,7 +52,7 @@ refuses (its own `#error` gates, or constructs like branching on a vector that
 only DXC accepts) fails here for the same reason it fails there. `__RESHADE__`
 reports the level this build actually keeps (`src/reshade_fx_version.hpp`), so
 a shader demanding a newer runtime refuses to load and says which version it
-wants -- honest, where reporting a fake version once compiled shaders their
+wants. That is honest, where reporting a fake version once compiled shaders their
 authors had ruled out.
 
 **Refused with a named requirement.** Atomics addressing storage-image texels

@@ -145,7 +145,7 @@ nixpkgs.overlays = [ inputs.vkdaedalus.overlays.default ];
 | [Safe Anti-Cheat](docs/safe-anti-cheat.md) | what it turns off and what it cannot do |
 | [Limitations](docs/limitations.md) | known limits and what applies only at the next start |
 | [How it works](docs/how-it-works.md) | the frame, input, layer order, a second GPU, failures |
-| [Performance](docs/performance.md) | what a frame costs with vkDaedalus, measured per GPU, and FPS counters under frame generation |
+| [Performance](docs/performance.md) | how the cost of a frame with vkDaedalus is measured on your GPUs, and FPS counters under frame generation |
 | [Development](docs/development.md) | building and testing |
 | [Design](docs/design.md) | the decisions behind the code and the outside facts they rest on |
 | [TESTING.md](TESTING.md), [LATENCY.md](LATENCY.md), [SHADER-COMPATIBILITY.md](SHADER-COMPATIBILITY.md) | what is tested, every timing formula, every shader pack's result |
