@@ -20,6 +20,14 @@ namespace vkBasalt::ui
     {
         const OverlayFonts* frameFonts = nullptr;
 
+        struct SliderDrawn
+        {
+            ImGuiID     id      = 0;
+            bool        typable = false;
+            std::string label;
+        };
+        SliderDrawn lastSlider;
+
         struct Panel
         {
             ImDrawListSplitter splitter;
@@ -97,15 +105,51 @@ namespace vkBasalt::ui
             ImGui::SetCursorScreenPos(ImVec2(std::max(at.x, right - width), at.y));
         }
 
-        void parameterValue(const char* values, float width)
+        bool lastSliderTypable()
         {
-            const ImVec2 at    = ImGui::GetCursorScreenPos();
-            const float  lineH = px(Size::control);
-            const float  textY = at.y + (lineH - ImGui::GetFontSize()) * 0.5f;
-            const ImVec2 size  = ImGui::CalcTextSize(values);
-            ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), ImVec2(std::max(at.x, at.x + width - size.x), textY), ImVec2(at.x + width, textY + ImGui::GetFontSize()),
-                                      at.x + width, values, nullptr, &size);
-            ImGui::Dummy(ImVec2(width, lineH));
+            return lastSlider.typable && lastSlider.id != 0 && GImGui->LastItemData.ID == lastSlider.id;
+        }
+
+        bool typeOnClick(const ImVec2& itemSize)
+        {
+            ImGuiContext&     g      = *GImGui;
+            const ImGuiID     slider = lastSlider.id;
+            const std::string name   = "value " + lastSlider.label;
+            ImGui::PushID(static_cast<int>(slider));
+            const bool clicked = ImGui::InvisibleButton(name.c_str(), itemSize);
+            ImGui::PopID();
+            const bool hovered = ImGui::IsItemHovered();
+            pointAt(hovered);
+            ImGui::SetItemTooltip("Click to type a value, or Ctrl+click the slider");
+            if (clicked)
+            {
+                ImGui::ActivateItemByID(slider);
+                g.NavNextActivateFlags = ImGuiActivateFlags_PreferInput;
+            }
+            return hovered;
+        }
+
+        void underline(const ImVec2& textAt, const ImVec2& textSize, const ImVec4& ink)
+        {
+            ImGui::GetWindowDrawList()->AddLine(ImVec2(textAt.x, textAt.y + textSize.y), ImVec2(textAt.x + textSize.x, textAt.y + textSize.y), u32(ink), 1.0f);
+        }
+
+        void parameterValue(const char* values, float width, bool typable)
+        {
+            const ImVec2 at      = ImGui::GetCursorScreenPos();
+            const float  lineH   = px(Size::control);
+            const float  textY   = at.y + (lineH - ImGui::GetFontSize()) * 0.5f;
+            const ImVec2 size    = ImGui::CalcTextSize(values);
+            const ImVec2 textAt(std::max(at.x, at.x + width - size.x), textY);
+            const bool   hovered = typable && typeOnClick(ImVec2(width, lineH));
+            if (!typable)
+                ImGui::Dummy(ImVec2(width, lineH));
+            const ImVec4 ink = hovered ? palette().accent : ImGui::GetStyleColorVec4(ImGuiCol_Text);
+            ImGui::PushStyleColor(ImGuiCol_Text, ink);
+            ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), textAt, ImVec2(at.x + width, textY + ImGui::GetFontSize()), at.x + width, values, nullptr, &size);
+            ImGui::PopStyleColor();
+            if (hovered)
+                underline(textAt, ImVec2(std::min(size.x, width), ImGui::GetFontSize()), ink);
         }
 
         struct Look
@@ -496,6 +540,7 @@ namespace vkBasalt::ui
         const ImVec2  pos   = window->DC.CursorPos;
         const ImRect  frame(pos, ImVec2(pos.x + width, pos.y + lineH));
         const bool    typingAllowed = (flags & ImGuiSliderFlags_NoInput) == 0;
+        lastSlider                  = {id, typingAllowed, label};
         ImGui::ItemSize(frame, (lineH - g.FontSize) * 0.5f);
         if (!ImGui::ItemAdd(frame, id, &frame, typingAllowed ? ImGuiItemFlags_Inputable : 0))
         {
@@ -618,8 +663,9 @@ namespace vkBasalt::ui
             }
             ImGui::PopID();
         }
+        const bool typable = components <= 1 && lastSliderTypable();
         ImGui::SameLine(0.0f, gap);
-        parameterValue(valuesOf().c_str(), valueW);
+        parameterValue(valuesOf().c_str(), valueW, typable);
         return changed;
     }
 
@@ -714,7 +760,7 @@ namespace vkBasalt::ui
         }
         ImGui::PopID();
         ImGui::SameLine(0.0f, gap);
-        parameterValue(hex, valueW);
+        parameterValue(hex, valueW, false);
         return changed;
     }
 
@@ -812,9 +858,24 @@ namespace vkBasalt::ui
 
     void sliderRowEnd(const char* value, float trailing)
     {
-        alignRight(ImGui::CalcTextSize(value).x + trailing);
+        const ImVec2 size = ImGui::CalcTextSize(value);
+        if (!lastSliderTypable())
+        {
+            alignRight(size.x + trailing);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(palette().secondary, "%s", value);
+            return;
+        }
+        ImGui::SameLine();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(palette().secondary, "%s", value);
+        const ImVec2 at      = ImGui::GetCursorScreenPos();
+        const float  width   = std::max(size.x, ImGui::GetContentRegionAvail().x - trailing);
+        const bool   hovered = typeOnClick(ImVec2(width, ImGui::GetFrameHeight()));
+        const ImVec4 ink     = hovered ? palette().accent : palette().secondary;
+        const ImVec2 text(at.x + width - size.x, at.y + GImGui->Style.FramePadding.y);
+        ImGui::GetWindowDrawList()->AddText(text, u32(ink), value);
+        if (hovered)
+            underline(text, size, ink);
     }
 
     void noteBox(const char* text, const ImVec4& ink)

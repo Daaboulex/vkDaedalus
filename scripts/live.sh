@@ -3151,6 +3151,16 @@ drive_effects() {
         else
             ui_result "$ui_log" FAIL "Effects: a parameter's default mark" "cas's Sharpness at 0.7 never filled its mark, or a click on it left 0.7 in the profile"
         fi
+        if ui_click "$map" "value Sharpness" 1 "$log"; then
+            for i in 1 2 3 4 5 6 7 8; do ui_key BackSpace || true; done
+            ui_type 0.6 || true
+            ui_key Return || true
+        fi
+        if file_says "$profile" 'casSharpness = 0\.6'; then
+            ui_result "$ui_log" PASS "Effects: a parameter's value takes typing" "a click on Sharpness's shown value, with no Ctrl, opened it for typing, and 0.6 typed there reached the profile"
+        else
+            ui_result "$ui_log" FAIL "Effects: a parameter's value takes typing" "a click on Sharpness's shown value and 0.6 typed left $(grep -m1 'casSharpness' "$profile" || echo 'no casSharpness') in the profile"
+        fi
         ui_set_value "$map" "Sharpness" 0.7 "$log" || true
         if ! file_says "$profile" 'casSharpness = 0\.7'; then
             ui_result "$ui_log" FAIL "Effects: Reset to defaults" "0.7 typed into cas's Sharpness again never reached the profile, so there was nothing to reset"

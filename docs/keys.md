@@ -12,6 +12,7 @@ Rebind any of them on the Keys card: click a key, and while it reads Press a key
 click it again to cancel. A key another action already uses is refused. Keys are saved for every game. No
 action is tied to `Esc`, so it can be bound like any other key.
 
-One key is fixed while the overlay is open. `Ctrl+Z` on the Effects card takes back the latest saved
+Two keys are fixed while the overlay is open. `Ctrl+Z` on the Effects card takes back the latest saved
 change to the profile, then the one before it, as the card's Undo button does; hovering Undo names what it
-puts back.
+puts back. A slider's shown value takes a typed value after a click on it, and `Ctrl`+click on the slider
+does the same.
