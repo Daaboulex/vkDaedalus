@@ -89,6 +89,10 @@ int main(int argc, char** argv)
     const std::optional<MakoStatus> generating = parseMakoStatus(generatingText, problem);
     expect(generating && generating->generationActive && !generating->generationUnavailableReason,
            "frame generation reported active, with null for its unavailable reason, is read as running with no reason");
+    const std::optional<MakoStatus> matched = parseMakoStatus(swapped(generatingText, "\"applied\":{", "\"applied\":{\"target_fps\":144,"), problem);
+    expect(matched && matched->appliedTargetFps == 144u,
+           "the target MAKO applies, which it matches to gamescope's refresh when Display refresh is on, is read from the applied profile");
+    expect(generating && !generating->appliedTargetFps, "a status naming no applied target leaves it unknown rather than zero");
     const std::string nativeText =
         statusText("frame-generation", 2, "lossless-scaling", true, false, "application-extent-mismatch", sizesText(1280, 720, 1280, 720), "native");
     const std::optional<MakoStatus> native = parseMakoStatus(nativeText, problem);

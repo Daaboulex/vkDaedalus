@@ -287,6 +287,13 @@ namespace vkBasalt
             || !whole(root, {"spatial_scaling", "presentation_width"}, status.presentationWidth, problem)
             || !whole(root, {"spatial_scaling", "presentation_height"}, status.presentationHeight, problem))
             return std::nullopt;
+        if (found(root, {"applied", "target_fps"}) != nullptr)
+        {
+            uint32_t target = 0;
+            if (!whole(root, {"applied", "target_fps"}, target, problem))
+                return std::nullopt;
+            status.appliedTargetFps = target;
+        }
         const Json* unavailable = found(root, {"frame_generation_unavailable"});
         if (unavailable == nullptr || (unavailable->kind != JsonKind::Null && unavailable->kind != JsonKind::Object))
         {

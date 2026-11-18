@@ -16,6 +16,7 @@ namespace vkBasalt
         std::string                role;
         uint64_t                   context = 0;
         std::string                appliedModel;
+        std::optional<uint32_t>    appliedTargetFps;
         bool                       generationActive = false;
         std::optional<std::string> generationUnavailableReason;
         bool                       appliedScalingEnabled = false;

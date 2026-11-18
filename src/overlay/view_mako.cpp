@@ -221,7 +221,12 @@ namespace vkBasalt
         const MakoSettings* now = makoGeneratingHere();
         if (now == nullptr || !now->adaptive)
             return std::nullopt;
-        return AdaptiveTarget{now->targetFps, now->adaptiveTargetRefreshRate && underGamescope(), static_cast<uint32_t>(now->adaptiveMaxMultiplier)};
+        const uint32_t ceiling = static_cast<uint32_t>(now->adaptiveMaxMultiplier);
+        if (!now->adaptiveTargetRefreshRate || !underGamescope())
+            return AdaptiveTarget{now->targetFps, false, ceiling};
+        if (const MakoStatus* generation = makoGenerationStatus(makoStatus.ofSwapchain); generation && generation->appliedTargetFps.value_or(0) > 0)
+            return AdaptiveTarget{*generation->appliedTargetFps, false, ceiling};
+        return AdaptiveTarget{now->targetFps, true, ceiling};
     }
 
     MakoSettings ImGuiOverlay::makoSettingsAtStart() const

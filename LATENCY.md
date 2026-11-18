@@ -54,7 +54,8 @@ none. With the effects after frame generation the layer times the frames shown, 
 rate is not worked out. With the effects before it the game's rate is measured, and the frames shown
 are estimated as the target, or the game's rate times Max multiplier when that is lower, and never
 below the game's own rate, since MAKO lets native frames above its target through. While MAKO
-follows gamescope's refresh, which the layer does not read, no shown rate is given.
+follows gamescope's refresh, the target is the one MAKO's status file says it applies; before the
+overlay has read that file, no shown rate is given.
 
 A game started with `vkdaedalus-run` with its effects before frame generation also loads the present
 counter, a layer of vkDaedalus's own library that the order layers place directly below lsfg-vk or
