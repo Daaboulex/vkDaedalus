@@ -88,8 +88,11 @@ and the notices always act on and show the set MAKO uses now; a tab picks only w
 
 ## Scaling
 
-MAKO also scales: the game draws at its window's size divided by up to the factor, and MAKO scales each frame up to the
-window. The Scaling card appears for a profile that runs MAKO, since scaling runs inside MAKO's own layer.
+MAKO also scales. In a window the game draws at the window's size divided by the factor, which MAKO rounds down to an
+even number, and MAKO scales each frame up to the window. Under gamescope the game keeps its size and MAKO presents it
+larger, up to gamescope's output, which is the only place Supersampling does anything: everywhere else the window's size
+is fixed. The card shows under Factor the size the factor gives on this swapchain. The Scaling card appears for a
+profile that runs MAKO, since scaling runs inside MAKO's own layer.
 
 Scaling switched on is not always scaling: MAKO scales nothing at factor 1, or when the game asks for the window's full
 size. MAKO writes what it does for each swapchain into a status file in `runtime-state` beside its own file, and the

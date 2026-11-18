@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
@@ -441,6 +443,24 @@ namespace vkBasalt
         if (reason == "application-extent-mismatch")
             return "MAKO does not scale: the game asks for a size MAKO did not offer it";
         return "MAKO does not scale, and names the reason " + std::string(reason);
+    }
+
+    std::string makoFactorEffect(float factor, bool gamescope, uint32_t width, uint32_t height)
+    {
+        char at[24];
+        std::snprintf(at, sizeof(at), "At %.2fx", factor);
+        if (factor <= 1.0f || width == 0 || height == 0)
+            return std::string(at) + " MAKO scales nothing";
+        const auto even = [](double value) {
+            const auto whole = static_cast<uint32_t>(std::max(1.0, std::floor(value)));
+            return whole > 1 ? whole & ~uint32_t{1} : whole;
+        };
+        const auto size = [](uint32_t w, uint32_t h) { return std::to_string(w) + "x" + std::to_string(h); };
+        if (gamescope)
+            return std::string(at) + " MAKO presents the game's " + size(width, height) + " at up to "
+                   + size(even(static_cast<double>(width) * factor), even(static_cast<double>(height) * factor)) + ", as far as gamescope's output allows";
+        return std::string(at) + " the game draws at " + size(even(static_cast<double>(width) / factor), even(static_cast<double>(height) / factor))
+               + " and MAKO scales it up to the " + size(width, height) + " window";
     }
 
     MakoScalingShown makoScalingShown(bool onInFile, bool makoRunsTheProfile, const MakoStatusRead& read)

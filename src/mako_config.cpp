@@ -593,7 +593,7 @@ namespace vkBasalt
         {
             why.displayRefresh   = "Works only under gamescope: MAKO follows the refresh gamescope reports";
             why.refreshThreshold = "Works only under gamescope: MAKO compares it with the refresh gamescope reports";
-            why.supersampling    = "Works only under gamescope, on a surface gamescope lets MAKO size";
+            why.supersampling    = "Only under gamescope: elsewhere the window has a fixed size, so there is nothing to supersample";
         }
         else if (edited.adaptiveTargetRefreshRate)
             why.target = "The fallback while Display refresh is on: MAKO aims at gamescope's refresh, and at this target only while gamescope reports none";

@@ -285,6 +285,17 @@ int main(int argc, char** argv)
                && makoScalingInactiveWords("swapchain-format-unsupported") == "MAKO does not scale, and names the reason swapchain-format-unsupported",
            "a reason this card has words for is said in them, and any other is named as MAKO names it");
 
+    expect(makoFactorEffect(1.5f, false, 1920, 1080) == "At 1.50x the game draws at 1280x720 and MAKO scales it up to the 1920x1080 window",
+           "in a window the game draws at the window's size divided by the factor");
+    expect(makoFactorEffect(2.0f, false, 1366, 768) == "At 2.00x the game draws at 682x384 and MAKO scales it up to the 1366x768 window",
+           "MAKO rounds the game's size down to an even number, as its own scaledSourceDimension does");
+    expect(makoFactorEffect(1.33f, false, 2560, 1440) == "At 1.33x the game draws at 1924x1082 and MAKO scales it up to the 2560x1440 window",
+           "the division is by the factor as MAKO stores it, then floored and made even");
+    expect(makoFactorEffect(1.5f, true, 1280, 720) == "At 1.50x MAKO presents the game's 1280x720 at up to 1920x1080, as far as gamescope's output allows",
+           "under gamescope the game keeps its size and MAKO presents it larger, up to gamescope's limit");
+    expect(makoFactorEffect(1.0f, false, 1920, 1080) == "At 1.00x MAKO scales nothing" && makoFactorEffect(1.5f, false, 0, 0) == "At 1.50x MAKO scales nothing",
+           "a factor of 1, or no size to scale, scales nothing");
+
     const std::string folder = (work / "runtime-state").string();
     expect(readMakoStatus((work / "missing").string(), 4242, 77, 1280, 720).ofSwapchain.empty() && readMakoStatus((work / "missing").string(), 4242, 77, 1280, 720).problem.empty(),
            "a status folder MAKO has not made yet is no status and no problem");

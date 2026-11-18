@@ -84,6 +84,7 @@ namespace vkBasalt
     std::optional<std::string> makoGenerationPaused(const std::vector<MakoStatus>& ofSwapchain);
     std::string       makoScalingSizes(const MakoStatus& status);
     std::string       makoScalingInactiveWords(std::string_view reason);
+    std::string       makoFactorEffect(float factor, bool gamescope, uint32_t width, uint32_t height);
     MakoScalingShown  makoScalingShown(bool onInFile, bool makoRunsTheProfile, const MakoStatusRead& read);
     bool              makoStatusReadDue(uint64_t presents);
 

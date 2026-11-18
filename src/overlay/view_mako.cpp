@@ -826,6 +826,11 @@ namespace vkBasalt
             ui::beginPanel();
             slide("Factor", "##Factor", set.scalingFactor, MakoLimits::lowestScalingFactor, MakoLimits::highestScalingFactor, "%.2fx",
                   "2x shows the game's frame at twice its width and height");
+            const bool        gamescope = underGamescope();
+            const MakoStatus* scaled    = scales ? makoScalingStatus(makoStatus.ofSwapchain) : nullptr;
+            const uint32_t    width     = scaled ? (gamescope ? scaled->sourceWidth : scaled->presentationWidth) : currentWidth;
+            const uint32_t    height    = scaled ? (gamescope ? scaled->sourceHeight : scaled->presentationHeight) : currentHeight;
+            ui::note(makoFactorEffect(set.scalingFactor, gamescope, width, height).c_str());
             ui::panelRow();
             ImGui::BeginDisabled(!greyedWhy.supersampling.empty());
             changed = ui::checkbox("Supersampling", &set.scalingSupersampling) || changed;
@@ -835,6 +840,8 @@ namespace vkBasalt
             ui::endPanel();
             ImGui::EndTable();
         }
+        if (!scales && !unsure && !loads)
+            ui::note("MAKO scales a game only from a start with vkdaedalus-run, as vkdaedalus-run %command% in Steam's launch options");
         if (held)
             makoDraft = tuned;
         else
