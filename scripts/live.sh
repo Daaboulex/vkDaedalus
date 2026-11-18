@@ -5133,7 +5133,9 @@ wine_hook_case() {
         background drive_wine_hook "$log" "$map" "$ready"
         driver=$!
         probe_command "$wine" "$prefix" "$VKB_LAYER/bin/vkdaedalus-run" 900 "$mode"
-        run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" "${probe_env[@]}" "${probe[@]}"
+        rm -f "$8/wine-$4-$mode.validation"
+        run "$log" "$home" "$icd" "$BASALT:$VALIDATION" 1 1 -- env VKDAEDALUS_UI_MAP="$map" "${probe_env[@]}" VK_KHRONOS_VALIDATION_LOG_FILENAME="$8/wine-$4-$mode.validation" "${probe[@]}"
+        if [ -s "$8/wine-$4-$mode.validation" ]; then cat "$8/wine-$4-$mode.validation" >>"$log.stdout"; fi
         driver_finished "drive_wine_hook"
         stopped=0
         probe_stopped "$wine" "$prefix" || stopped=1
@@ -5209,7 +5211,9 @@ wine_hook_cases_of() {
     fi
     for attempt in $(seq "$wine_starts_allowed"); do
         probe_command "$wine" "$prefix" "" 120 poll
-        run "$control" "$game_seen/wine-$slug-control-home" "$icd" "$VALIDATION" 0 1 -- env "${probe_env[@]}" "${probe[@]}"
+        rm -f "$game_seen/wine-$slug-control.validation"
+        run "$control" "$game_seen/wine-$slug-control-home" "$icd" "$VALIDATION" 0 1 -- env "${probe_env[@]}" VK_KHRONOS_VALIDATION_LOG_FILENAME="$game_seen/wine-$slug-control.validation" "${probe[@]}"
+        if [ -s "$game_seen/wine-$slug-control.validation" ]; then cat "$game_seen/wine-$slug-control.validation" >>"$control.stdout"; fi
         stopped=0
         probe_stopped "$wine" "$prefix" || stopped=1
         if [ "$stopped" = 1 ] || [ "$attempt" = "$wine_starts_allowed" ] || [ "$(count '^wine-input-probe: window shown' "$control")" -gt 0 ]; then break; fi
