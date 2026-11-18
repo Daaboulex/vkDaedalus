@@ -3668,8 +3668,11 @@ drive_mako() {
     else
         ui_result "$ui_log" FAIL "MAKO: GPU headroom only on AMD" "on $LANE_GPU_ID, not AMD's, the row is drawn"
     fi
-    ui_pick "$map" "Gamescope VRR" Off "$log" || true
-    mako_says "$config" '^gamescope_vrr_mode = "off"$' "$ui_log" "MAKO: Gamescope VRR" "Off picked with GAMESCOPE_WAYLAND_DISPLAY set"
+    if [ "$(ui_field "$map" "Off##Gamescope VRR" 7)" = 1 ] || [ "$(ui_field "$map" "##Gamescope VRR" 7)" = 1 ]; then
+        ui_result "$ui_log" PASS "MAKO: Gamescope VRR greyed" "with GAMESCOPE_WAYLAND_DISPLAY set the row is drawn greyed: only MAKO's own launchers start the helper that applies it"
+    else
+        ui_result "$ui_log" FAIL "MAKO: Gamescope VRR greyed" "with GAMESCOPE_WAYLAND_DISPLAY set the row is $( [ -n "$(ui_line "$map" "Off##Gamescope VRR")$(ui_line "$map" "##Gamescope VRR")" ] && echo 'usable, though no helper applies it' || echo 'not drawn')"
+    fi
     if [ -z "$(ui_line "$map" "##HDR quality")" ] && [ -z "$(ui_line "$map" "Quality##HDR quality")" ]; then
         ui_result "$ui_log" PASS "MAKO: HDR quality only on an HDR swapchain" "vkcube's sRGB swapchain draws no HDR quality row"
     else

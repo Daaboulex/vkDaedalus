@@ -197,6 +197,8 @@ check's message or a test already says is not repeated here.
   `ENABLE_MAKO=1` the outer run's caller set is recorded too and counts for the game.
 - `mako-launch` is not used: it replaces `VK_IMPLICIT_LAYER_PATH`, which drops vkDaedalus.
   `vkdaedalus-run` sets the one variable of it MAKO needs, `ENABLE_MAKO=1`.
+- MAKO's own layer never reads its Gamescope VRR choice: `mako-vrr-lease` applies it, a helper only
+  MAKO's launchers start. So the card shows the choice greyed and starts no helper.
 - The card asks for the layer once. lsfg-vk, MAKO with Lossless Scaling's model and MAKO with its own
   are one choice of three: each needs something else installed, and all three take effect at the next
   launch. MAKO's own editors call Lossless Scaling's model LSFG, so the entry is MAKO LSFG.

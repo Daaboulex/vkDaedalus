@@ -517,7 +517,9 @@ namespace vkBasalt
                 if (gamescope)
                 {
                     ui::panelRow();
-                    changed = pickFrom("Gamescope VRR", makoGamescopeVrrModes, set.gamescopeVrrMode, column, none) || changed;
+                    greyed(true, "MAKO applies it through a helper that only MAKO's own launchers start, and vkDaedalus runs without them", [&] {
+                        changed = pickFrom("Gamescope VRR", makoGamescopeVrrModes, set.gamescopeVrrMode, column, none) || changed;
+                    });
                 }
                 ui::endPanel();
             }
