@@ -138,10 +138,10 @@ GALLERY_STATES=(ui-00-launch-notice ui-01-effects ui-13-fixed-file ui-04a-move-u
     sh-02-rescanned sh-03-folders-open sh-04-folders-removed sh-05-pack-removed fx-21-definitions
     fx-22-definition-reset fx-23-definition-refused fx-24-definition-added fx-25-definition-removed sh-11-cache-cleared
     fx-01-rows-moved fx-02-effects-off fx-03-parameter-set fx-04-reset fx-05-half-precision
-    fx-06-every-parameter-type fx-07-insert-here fx-08-inserted fx-09-two-chosen fx-10-no-match fx-11-add-cancelled
+    fx-06-every-parameter-type fx-06b-pack-annotations fx-07-insert-here fx-08-inserted fx-09-two-chosen fx-10-no-match fx-11-add-cancelled
     fx-12-limit-greyed fx-13-dragged fx-14-compiling fx-15-compile-cancelled fx-16-none-profile fx-17-new-cancelled
-    fx-18-delete-cancelled fx-19-rename-profile fx-20-renamed gpus-03-listed gpus-03-moved-down gpus-04-moved-up
-    gpus-05-removed ac-01-locked fg-02-dll-missing fg-03-on fg-04-values fg-05-colour-space-menu fg-06-next-launch
+    fx-18-delete-cancelled fx-19-rename-profile fx-20-renamed gpus-03-listed gpus-03-moved-from-overview gpus-03-moved-down gpus-04-moved-up
+    gpus-05-removed ac-01-locked fg-02-dll-missing fg-03-on fg-04-values fg-04b-gpus-locked fg-05-colour-space-menu fg-06-next-launch
     fg-01-frame-generation fg-07-off fg-08-start-only gpus-01-gpu-menu gpus-02-gpus perf-01-timed-offload gpus-06-timed
     size-1080p-performance size-1080p-gpus size-1080p-frame-generation size-1440p-performance size-1440p-gpus size-1440p-frame-generation
     size-1080p-performance-timed size-1080p-gpus-timed size-1440p-performance-timed size-1440p-gpus-timed
@@ -4372,6 +4372,7 @@ drive_frame_generation() {
     ui_click "$map" "GPUs" 1 "$log" || true
     if ui_wait "$map" "Frame generation##pergpu" "" "" "$log"; then
         ui_result "$ui_log" PASS "GPUs: frame generation shows on the game's GPU" "with lsfg-vk on, the GPUs page listed frame generation under GPU 1, locked there"
+        ui_state "$map" fg-04b-gpus-locked "$ui_log" "frame generation locked on the game's GPU on the GPUs page"
     else
         ui_result "$ui_log" FAIL "GPUs: frame generation shows on the game's GPU" "with lsfg-vk on, the GPUs page never listed frame generation under the game's GPU"
     fi
