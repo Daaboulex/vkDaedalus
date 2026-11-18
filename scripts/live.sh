@@ -3746,6 +3746,7 @@ drive_mako() {
 
     sed -i 's/^name = "vkdaedalus default"$/&\ngpu = "Another GPU"/' "$config"
     if ui_wait "$map" "Use the game's GPU" "" "" "$log"; then
+        restart_mark_says "$map" "GPU" 1 "$log" "$ui_log" "MAKO: a GPU named in the run waits for the next start" "gpu = \"Another GPU\" written after the game started"
         ui_hover "$map" "Use the game's GPU" "$log" || true
         ui_state "$map" mako-09-other-gpu "$ui_log" "MAKO's file names another GPU: the GPU row says so, with one action"
         ui_click "$map" "Use the game's GPU" 1 "$log" || true
@@ -3754,6 +3755,7 @@ drive_mako() {
         else
             ui_result "$ui_log" FAIL "MAKO: a file naming another GPU" "Use the game's GPU left $(grep '^gpu = ' "$config")"
         fi
+        restart_mark_says "$map" "GPU" 0 "$log" "$ui_log" "MAKO: the GPU back as it started" "Use the game's GPU cleared the key the game started without"
     else
         ui_result "$ui_log" FAIL "MAKO: a file naming another GPU" "with gpu = \"Another GPU\" in MAKO's profile the card offered no Use the game's GPU"
     fi

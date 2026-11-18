@@ -234,7 +234,7 @@ namespace vkBasalt
         std::string          frameGenerationTabGreyed(const FrameGenerationTab& tab);
         std::string          frameGenerationTabDllMissing(const FrameGenerationTab& tab);
         void                 chooseFrameGenerationTab(const FrameGenerationTab& tab);
-        void                 renderFrameGenerationGpuRow(FrameGenerationLayer layer);
+        void                 renderFrameGenerationGpuRow(FrameGenerationLayer layer, bool gpuWaits);
         void                 refreshMakoStatus();
         MakoScalingShown     makoScaling();
         void                 renderLsfgBody(bool flipped, bool on, bool live, const std::vector<std::string>& waiting);

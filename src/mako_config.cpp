@@ -596,6 +596,22 @@ namespace vkBasalt
         return why;
     }
 
+    std::vector<std::string> makoNextLaunchChanges(const MakoSettings& now, const MakoSettings& atStart)
+    {
+        std::vector<std::string> waiting;
+        if (now.frameGenerationProvisioned != atStart.frameGenerationProvisioned)
+            waiting.push_back("Ready at start");
+        if (now.ultraPerformance != atStart.ultraPerformance)
+            waiting.push_back("Ultra performance");
+        if (now.swapchainImageCountCompatibility != atStart.swapchainImageCountCompatibility)
+            waiting.push_back("Keep swapchain image count");
+        if (now.mailboxPresentationCompatibility != atStart.mailboxPresentationCompatibility)
+            waiting.push_back("Mailbox compatibility");
+        if (now.gpu != atStart.gpu)
+            waiting.push_back("GPU");
+        return waiting;
+    }
+
     bool makoGpuNamesAnother(const std::string& gpu, const MakoGpu& game)
     {
         const auto idText = [](uint32_t id) {

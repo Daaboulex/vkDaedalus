@@ -809,6 +809,25 @@ static void greyedControls()
     }
 }
 
+static void nextLaunchChanges()
+{
+    const MakoSettings started;
+    expect(makoNextLaunchChanges(started, started).empty(), "a profile as it was at the start waits for nothing");
+    MakoSettings named = started;
+    named.gpu          = "Another GPU";
+    expect(makoNextLaunchChanges(named, started) == std::vector<std::string>{"GPU"} && makoNextLaunchChanges(started, named) == std::vector<std::string>{"GPU"},
+           "MAKO reads its GPU once per process, so naming one or clearing it waits for the next start");
+    MakoSettings every                     = named;
+    every.frameGenerationProvisioned       = !started.frameGenerationProvisioned;
+    every.ultraPerformance                 = !started.ultraPerformance;
+    every.swapchainImageCountCompatibility = !started.swapchainImageCountCompatibility;
+    every.mailboxPresentationCompatibility = !started.mailboxPresentationCompatibility;
+    every.multiplier                       = started.multiplier + 1;
+    expect(makoNextLaunchChanges(every, started)
+               == std::vector<std::string>{"Ready at start", "Ultra performance", "Keep swapchain image count", "Mailbox compatibility", "GPU"},
+           "each process-start setting changed is named by its row, and a live one such as the multiplier is not");
+}
+
 int main(int argc, char** argv)
 {
     if (argc < 2)
@@ -832,6 +851,7 @@ int main(int argc, char** argv)
     overlayFacts(dir);
     polls();
     greyedControls();
+    nextLaunchChanges();
     if (failures)
         std::printf("%d MAKO file check(s) failed\n", failures);
     return failures ? 1 : 0;

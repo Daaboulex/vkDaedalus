@@ -444,7 +444,7 @@ namespace vkBasalt
         }
     }
 
-    void ImGuiOverlay::renderFrameGenerationGpuRow(FrameGenerationLayer layer)
+    void ImGuiOverlay::renderFrameGenerationGpuRow(FrameGenerationLayer layer, bool gpuWaits)
     {
         const OverlayPalette& palette = activePalette();
         const bool            mako    = layer == FrameGenerationLayer::Mako;
@@ -464,13 +464,18 @@ namespace vkBasalt
         UiMap::nameNextItem(shown.c_str());
         ImGui::ItemAdd(ImRect(at, ImVec2(at.x + ImGui::GetItemRectSize().x, at.y + ImGui::GetFrameHeight())), ImGui::GetID("##frameGenerationGpu"));
         ImGui::SetItemTooltip("%s", why.c_str());
-        if (const std::optional<std::string> elsewhere = mako ? makoGpuElsewhere() : std::nullopt)
+        const std::optional<std::string> elsewhere = mako ? makoGpuElsewhere() : std::nullopt;
+        if (mako && !elsewhere)
+            restartMarkAtRight("GPU", gpuWaits);
+        if (elsewhere)
         {
             ImGui::SetCursorPosX(column);
             UiMap::nameNextItem("Use the game's GPU");
             if (ui::lineButton("Use the game's GPU"))
                 useGamesGpuInMako();
-            ImGui::SetItemTooltip("Removes the GPU from MAKO's profile, so MAKO generates frames on the GPU the game renders on");
+            ImGui::SetItemTooltip("Read when the game starts. Removes the GPU from MAKO's profile, so from the next launch MAKO generates frames\n"
+                                  "on the GPU the game renders on.");
+            restartMark("GPU", gpuWaits, palette);
             ImGui::SameLine(0.0f, ui::px(ui::Size::groupGap));
             ImGui::AlignTextToFramePadding();
             ImGui::TextColored(palette.warn, "%s", elsewhere->c_str());
@@ -622,7 +627,7 @@ namespace vkBasalt
             frameGenerationGpuName = properties.deviceName;
         }
         ui::beginScrollArea("##framegenerationbody");
-        renderFrameGenerationGpuRow(fg.layer);
+        renderFrameGenerationGpuRow(fg.layer, std::find(waiting.begin(), waiting.end(), "GPU") != waiting.end());
         renderPipelineStrip(fg.layer);
         if (mako)
             renderMakoBody(flipped, on, waiting);

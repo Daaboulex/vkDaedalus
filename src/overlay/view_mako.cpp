@@ -233,18 +233,7 @@ namespace vkBasalt
     {
         std::vector<std::string> waiting;
         if (inUse)
-        {
-            const MakoSettings& now  = makoSettingsFor(*inUse, powerSupplies.source);
-            const MakoSettings  then = makoSettingsAtStart();
-            if (now.frameGenerationProvisioned != then.frameGenerationProvisioned)
-                waiting.push_back("Ready at start");
-            if (now.ultraPerformance != then.ultraPerformance)
-                waiting.push_back("Ultra performance");
-            if (now.swapchainImageCountCompatibility != then.swapchainImageCountCompatibility)
-                waiting.push_back("Keep swapchain image count");
-            if (now.mailboxPresentationCompatibility != then.mailboxPresentationCompatibility)
-                waiting.push_back("Mailbox compatibility");
-        }
+            waiting = makoNextLaunchChanges(makoSettingsFor(*inUse, powerSupplies.source), makoSettingsAtStart());
         if (makoFile && makoGlobalAtStart)
         {
             if (makoFile->global.allowHalfPrecision != makoGlobalAtStart->allowHalfPrecision)

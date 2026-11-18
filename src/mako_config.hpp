@@ -189,6 +189,7 @@ namespace vkBasalt
     MakoProfile               makoProfileWithModel(MakoProfile profile, MakoPowerSource edited, std::string_view model);
     bool frameGenerationTabWaits(const FrameGenerationTab& chosen, std::optional<FrameGenerationLayer> loaded, std::string_view makoModelAtStart);
     MakoGreyedWhy makoGreyedWhy(const MakoSettings& edited, bool gamescope);
+    std::vector<std::string> makoNextLaunchChanges(const MakoSettings& now, const MakoSettings& atStart);
 
     std::optional<std::string>
     makoTextWith(const std::string& text, const std::optional<MakoGlobal>& global, const std::optional<MakoProfile>& profile, std::string& problem);
