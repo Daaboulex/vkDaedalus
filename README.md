@@ -44,9 +44,10 @@ AMD Radeon RX 9070 XT as its second GPU (2026-10-25).
   `.exe` under Wine and Proton), runs one, and `none` keeps the layer out of a program.
 - **Shader manager**: point it at shader packs; it finds their `Shaders/` and
   `Textures/` folders and test-compiles every shader.
-- **Frame generation** through lsfg-vk or MAKO, the layer picked, switched and
-  tuned per game from the overlay, with effects before or after it per game,
-  and MAKO's scaling.
+- **Frame generation** through lsfg-vk, MAKO with Lossless Scaling's model or
+  MAKO's own MAKO FG: one choice per game in the overlay, tuned there too, with
+  effects before or after it per game, and MAKO's scaling as MAKO reports it.
+  Frames are generated on the game's GPU, which both layers require.
 - **Multi-GPU offload**: effects can run on another GPU; the GPUs page also
   shows every GPU's usage and memory.
 - **Performance card**: frame statistics and what vkDaedalus adds to a frame, an
@@ -73,8 +74,12 @@ AMD Radeon RX 9070 XT as its second GPU (2026-10-25).
   `vkdaedalus-run` preloads holds the game's keys, buttons and motion on Wayland
   and X11, and on X11 the pointer position a game reads or moves, with no grab,
   so a game holding the pointer is held too; a release
-  whose press reached the game still does, so a held key does not stick. Started
-  without `vkdaedalus-run`, an X11 game gets a keyboard and pointer grab instead.
+  whose press reached the game still does, so a held key does not stick. A
+  game's own pointer grab, as Wine holds one for a cursor clipped to the window,
+  is let go while the overlay is open and given back when it closes, beside
+  Steam's overlay too, and under Proton the raw input of the whole prefix is
+  held. Started without `vkdaedalus-run`, an X11 game gets a keyboard and pointer
+  grab instead.
 
 <!-- BEGIN generated:upstream -->
 ## Upstream
@@ -143,6 +148,7 @@ nixpkgs.overlays = [ inputs.vkdaedalus.overlays.default ];
 - **ReShade**'s shader compiler by [@crosire](https://github.com/crosire)
 - **Dear ImGui** by [@ocornut](https://github.com/ocornut)
 - **lsfg-vk** by [@PancakeTAS](https://github.com/PancakeTAS)
+- **MAKO** by [@eugeniosegala](https://github.com/eugeniosegala/MAKO) (Eugenio Segala and contributors), [GPL-3.0-or-later](https://github.com/eugeniosegala/MAKO/blob/main/LICENSE.md)
 
 <!-- BEGIN generated:footer -->
 <!-- END generated:footer -->
