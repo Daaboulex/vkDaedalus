@@ -640,8 +640,15 @@ namespace vkBasalt
             return std::string(mako ? "MAKO" : "lsfg-vk") + " is not installed where this game's Vulkan loader looks";
         if (activeProfilePath.empty())
             return "This run reads a fixed config file, which keeps no frame generation layer";
-        if (mako)
+        if (mako && tab.makoModel == "mako-fg")
             return readMakoOnce() ? makoModelMissing(std::string(tab.makoModel)) : "";
+        return "";
+    }
+
+    std::string ImGuiOverlay::frameGenerationTabDllMissing(const FrameGenerationTab& tab)
+    {
+        if (tab.layer == FrameGenerationLayer::Mako)
+            return tab.makoModel == "lossless-scaling" && readMakoOnce() ? makoModelMissing(std::string(tab.makoModel)) : "";
         if (!readFrameGenerationOnce())
             return "";
         if (!frameGenerationDll)
@@ -696,19 +703,21 @@ namespace vkBasalt
                                                                                    : "MAKO running its own model, MAKO FG, which needs no DLL.\n" + kept
                                                                                          + ", the model in MAKO's profile.";
             const std::string why      = frameGenerationTabGreyed(tab);
+            const std::string missing  = why.empty() ? frameGenerationTabDllMissing(tab) : "";
             const std::string item     = std::string(tab.shown) + "##Layer";
             ImGui::SameLine(0.0f, ui::px(ui::Size::gap));
             ImGui::BeginDisabled(!why.empty());
             if (ui::tab(item.c_str(), chosen == &tab) && chosen != &tab)
                 chooseFrameGenerationTab(tab);
             ImGui::EndDisabled();
-            if (lossless && fellBack)
-            {
+            if ((lossless && fellBack) || !missing.empty())
                 ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(ImGui::GetItemRectMax().x - ui::px(6.0f), ImGui::GetItemRectMin().y + ui::px(6.0f)), ui::px(3.0f),
                                                             ImGui::GetColorU32(palette.warn));
+            if (lossless && fellBack)
                 ImGui::SetItemTooltip("MAKO could not start Lossless Scaling's model when this game started: this run has MAKO FG in its place.%s%s", why.empty() ? "" : "\n",
                                       why.c_str());
-            }
+            else if (!missing.empty())
+                ImGui::SetItemTooltip("%s\n%s. Chosen, its card's DLL row looks for it again.", what.c_str(), missing.c_str());
             else
                 ImGui::SetItemTooltip("%s", why.empty() ? what.c_str() : why.c_str());
         }

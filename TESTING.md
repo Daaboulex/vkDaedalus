@@ -143,8 +143,8 @@ of a game whose profile runs MAKO. The one Layer choice is driven through each
 of its three entries: lsfg-vk must write the profile's layer alone, MAKO LSFG
 the layer and MAKO's Lossless Scaling model, with frame generation left off,
 and MAKO FG the layer and MAKO's own model, on x86-64, where MAKO FG is
-published; each entry must be greyed while its layer, its DLL or its model is
-missing, one mark must show a choice waiting for the next launch, and the body
+published; an entry must be greyed while its layer or its model is missing, and
+marked yet selectable while only its DLL is, one mark must show a choice waiting for the next launch, and the body
 of each layer must start with the GPU row. The lane also drives the tile row with three and with four
 tiles on 16:9, 16:10, 4:3, 21:9, 32:9, portrait and 800x600 displays. MAKO and
 the card both read the power source from `/sys/class/power_supply` and neither

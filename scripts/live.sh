@@ -3643,14 +3643,14 @@ drive_mako() {
         ui_result "$ui_log" FAIL "MAKO: HDR quality only on an HDR swapchain" "vkcube's sRGB swapchain drew the HDR quality row"
     fi
 
-    greyed_says "$map" "MAKO LSFG##Layer" 1 "$log" "$ui_log" "MAKO: MAKO LSFG greyed without Lossless.dll" "with no Lossless.dll anywhere MAKO LSFG is greyed with the reason"
+    greyed_says "$map" "MAKO LSFG##Layer" 0 "$log" "$ui_log" "MAKO: MAKO LSFG stays selectable without Lossless.dll" "with no Lossless.dll anywhere MAKO LSFG can still be chosen, marked, so its card can look for the DLL again"
     if [ "$(uname -m)" != x86_64 ]; then
         greyed_says "$map" "MAKO FG##Layer" 1 "$log" "$ui_log" "MAKO: MAKO FG greyed off x86-64" "on $(uname -m) MAKO FG is greyed: published for x86-64 only"
     else
         greyed_says "$map" "MAKO FG##Layer" 0 "$log" "$ui_log" "MAKO: MAKO FG needs no DLL" "with no Lossless.dll anywhere MAKO FG can still be chosen"
     fi
     ui_hover "$map" "MAKO LSFG##Layer" "$log" || true
-    ui_state "$map" mako-05-no-lossless "$ui_log" "no Lossless.dll: MAKO LSFG greyed with the reason; off x86-64 MAKO FG greyed too"
+    ui_state "$map" mako-05-no-lossless "$ui_log" "no Lossless.dll: MAKO LSFG marked with the reason and still selectable; off x86-64 MAKO FG greyed"
     library="$home/games/steamapps/common/Lossless Scaling"
     mkdir -p "$library" "$home/.local/share/Steam/steamapps"
     : >"$library/Lossless.dll"
@@ -3841,9 +3841,9 @@ drive_layer_state() {
             else
                 ui_result "$ui_log" FAIL "frame generation, lsfg-vk alone installed" "MAKO LSFG greyed $(ui_field "$map" "MAKO LSFG##Layer" 7), MAKO FG greyed $(ui_field "$map" "MAKO FG##Layer" 7), lsfg-vk chosen $(ui_field "$map" "lsfg-vk##Layer" 8), the tiles say: $(tile_line "$log")"
             fi
-            greyed_says "$map" "lsfg-vk##Layer" 1 "$log" "$ui_log" "the layer choice: lsfg-vk greyed without lsfg-vk.dll" "with lsfg-vk.dll in no Steam library lsfg-vk is greyed with the reason, and stays the one chosen"
+            greyed_says "$map" "lsfg-vk##Layer" 0 "$log" "$ui_log" "the layer choice: lsfg-vk stays selectable without lsfg-vk.dll" "with lsfg-vk.dll in no Steam library lsfg-vk is marked with the reason and stays selectable, so its card can point to the DLL"
             ui_hover "$map" "lsfg-vk##Layer" "$log" || true
-            ui_state "$map" fgl-02-lsfg-vk-only "$ui_log" "lsfg-vk alone installed, its DLL missing: every layer choice greyed with its own reason, lsfg-vk.dll not found, no Scaling tile"
+            ui_state "$map" fgl-02-lsfg-vk-only "$ui_log" "lsfg-vk alone installed, its DLL missing: both MAKO choices greyed, lsfg-vk marked and selectable, lsfg-vk.dll not found, no Scaling tile"
             ;;
         both)
             if tile_says "$log" '; no Scaling tile$' && ui_wait "$map" "lsfg-vk##Layer" 8 1 "$log" && ui_wait "$map" "lsfg-vk##Layer" 7 0 "$log" && ui_wait "$map" "MAKO LSFG##Layer" 7 0 "$log"; then

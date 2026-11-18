@@ -13,7 +13,8 @@ The card's Layer choice has three entries, and each vkDaedalus profile runs one 
 - MAKO LSFG, which is MAKO running Lossless Scaling's model and needs `Lossless.dll`.
 - MAKO FG, which is MAKO running its own model and needs no DLL.
 
-An entry whose layer, DLL or model is missing is greyed with that reason. The layer is kept in the vkDaedalus profile
+An entry whose layer or model is missing is greyed with that reason. One whose DLL alone is missing is marked with the
+reason and stays selectable, so its card can look for the DLL again. The layer is kept in the vkDaedalus profile
 and MAKO's model in MAKO's profile. `vkdaedalus-run` loads the profile's layer alone and keeps the other out of the
 game, and MAKO picks its model when the game starts, so every change of the choice applies from the next launch. When
 MAKO cannot start Lossless Scaling's model it runs MAKO FG in its place for that run, which the card marks on MAKO LSFG.

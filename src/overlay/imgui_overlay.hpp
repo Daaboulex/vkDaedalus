@@ -231,6 +231,7 @@ namespace vkBasalt
         void                 renderLayerChoice(const FrameGenerationTab* chosen, bool waits);
         const FrameGenerationTab* frameGenerationTabChosen(FrameGenerationLayer layer);
         std::string          frameGenerationTabGreyed(const FrameGenerationTab& tab);
+        std::string          frameGenerationTabDllMissing(const FrameGenerationTab& tab);
         void                 chooseFrameGenerationTab(const FrameGenerationTab& tab);
         void                 renderFrameGenerationGpuRow(FrameGenerationLayer layer);
         void                 refreshMakoStatus();
