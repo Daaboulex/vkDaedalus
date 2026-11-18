@@ -87,8 +87,13 @@ int main(int argc, char** argv)
         return fail("usage: swapchain-probe formats|compute-only");
 
     xcb_connection_t* connection = xcb_connect(NULL, NULL);
-    if (xcb_connection_has_error(connection))
-        return fail("no X11 display");
+    const int connectError = xcb_connection_has_error(connection);
+    if (connectError)
+    {
+        const char* display = getenv("DISPLAY");
+        fprintf(stderr, "swapchain-probe: no X11 display: xcb_connect to DISPLAY=%s failed with error %d\n", display ? display : "(unset)", connectError);
+        return 1;
+    }
     const xcb_screen_t* screen = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
     const xcb_window_t  window = xcb_generate_id(connection);
     xcb_create_window(connection, XCB_COPY_FROM_PARENT, window, screen->root, 0, 0, 320, 240, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT,

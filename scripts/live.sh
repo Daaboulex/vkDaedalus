@@ -294,6 +294,7 @@ start_session() {
 start_x_server() {
     local logs="$1" geometry="${2:-1296x784}" n tries=0
     : >"$logs/xwayland.display"
+    if [ -s "$logs/xwayland.log" ]; then cat "$logs/xwayland.log" >>"$logs/xwayland.earlier.log"; fi
     env -u DISPLAY XDG_RUNTIME_DIR="$PRIVATE_RUNTIME" WAYLAND_DISPLAY="$PRIVATE_WAYLAND" \
         Xwayland -displayfd 3 -geometry "$geometry" -nolisten tcp 3>"$logs/xwayland.display" >"$logs/xwayland.log" 2>&1 &
     x_server_pid=$!

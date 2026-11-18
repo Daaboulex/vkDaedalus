@@ -414,8 +414,13 @@ int main(int argc, char** argv)
         return fail("usage: two-swapchain-probe <presents, 8 to 100000> [depth|retire]");
 
     xcb_connection_t* connection = xcb_connect(NULL, NULL);
-    if (xcb_connection_has_error(connection))
-        return fail("no X11 display");
+    const int connectError = xcb_connection_has_error(connection);
+    if (connectError)
+    {
+        const char* display = getenv("DISPLAY");
+        fprintf(stderr, "two-swapchain-probe: no X11 display: xcb_connect to DISPLAY=%s failed with error %d\n", display ? display : "(unset)", connectError);
+        return 1;
+    }
     const xcb_screen_t* screen = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
 
     struct chain chains[CHAINS];
