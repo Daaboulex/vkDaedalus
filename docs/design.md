@@ -198,9 +198,9 @@ check's message or a test already says is not repeated here.
 - `mako-launch` is not used: it replaces `VK_IMPLICIT_LAYER_PATH`, which drops vkDaedalus.
   `vkdaedalus-run` sets the one variable of it MAKO needs, `ENABLE_MAKO=1`.
 - MAKO's Ultra performance holds for a whole process: it locks the flow scale, turns performance mode
-  on and raises MAKO FG mode Quality and Balanced to Performance. So the card greys those by the Ultra
-  performance the running process started with, and by the saved one while MAKO does not run the
-  profile.
+  on, raises MAKO FG mode Quality and Balanced to Performance and, while Scaling is on, scales with
+  MAKO Scaler whatever the method says. So the cards grey those by the Ultra performance the running
+  process started with, and by the saved one while MAKO does not run the profile.
 - MAKO's own layer never reads its Gamescope VRR choice: `mako-vrr-lease` applies it, a helper only
   MAKO's launchers start. So the card shows the choice greyed and starts no helper.
 - The card asks for the layer once. lsfg-vk, MAKO with Lossless Scaling's model and MAKO with its own

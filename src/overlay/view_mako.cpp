@@ -801,15 +801,21 @@ namespace vkBasalt
             caption("Live", live ? "profile" : unsure ? "profile, once MAKO scales" : loads ? "profile, from the next launch" : "profile, needs vkdaedalus-run",
                     ("Kept in MAKO's profile " + tuned.name + ". Applies at once while MAKO scales the game.").c_str());
             ui::beginPanel();
-            const float column = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
+            const float         column    = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
+            const MakoSettings  started   = makoSettingsAtStart();
+            const MakoGreyedWhy greyedWhy = makoGreyedWhy(set, makoLiveHere() && makoAtStart ? &started : nullptr, underGamescope());
             ui::panelRow();
             const auto lossless = [&](std::string_view method) { return method.starts_with("ls1") ? makoModelMissing("lossless-scaling") : std::string(); };
+            ImGui::BeginDisabled(!greyedWhy.scalingMethod.empty());
             if (pickFrom("Method", makoScalingMethods, set.scalingMethod, column, lossless))
             {
                 changed = true;
                 global  = makoGlobalWithDll(set);
             }
-            if (const std::string why = lossless("ls1"); !why.empty())
+            ImGui::EndDisabled();
+            if (!greyedWhy.scalingMethod.empty())
+                whyGreyed(greyedWhy.scalingMethod);
+            else if (const std::string why = lossless("ls1"); !why.empty())
                 whyGreyed("LS1: " + why);
             slide("Sharpness", "##Sharpness", set.scalingSharpness, MakoLimits::lowestScalingSharpness, MakoLimits::highestScalingSharpness, "%.2f",
                   "Higher is sharper, and can show grain and halos at strong edges");
@@ -820,13 +826,12 @@ namespace vkBasalt
             ui::beginPanel();
             slide("Factor", "##Factor", set.scalingFactor, MakoLimits::lowestScalingFactor, MakoLimits::highestScalingFactor, "%.2fx",
                   "2x shows the game's frame at twice its width and height");
-            const std::string supersamplingWhy = makoGreyedWhy(set, nullptr, underGamescope()).supersampling;
             ui::panelRow();
-            ImGui::BeginDisabled(!supersamplingWhy.empty());
+            ImGui::BeginDisabled(!greyedWhy.supersampling.empty());
             changed = ui::checkbox("Supersampling", &set.scalingSupersampling) || changed;
             ImGui::EndDisabled();
             ImGui::SetItemTooltip("Lets MAKO exceed a gamescope output limit to scale down at higher quality, at more GPU and memory use");
-            whyGreyed(supersamplingWhy);
+            whyGreyed(greyedWhy.supersampling);
             ui::endPanel();
             ImGui::EndTable();
         }

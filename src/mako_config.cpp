@@ -602,6 +602,7 @@ namespace vkBasalt
             why.flowScale       = "Ultra performance locks it at 0.60 with MAKO FG and 0.70 with Lossless Scaling";
             why.performanceMode = "Ultra performance turns it on";
             why.raisedFgModes   = "Ultra performance raises Quality and Balanced to Performance";
+            why.scalingMethod   = "Ultra performance scales with MAKO Scaler whenever Scaling is on";
         }
         if (!edited.dynamicCadenceRecovery)
             why.probeInterval = "Used only while Cadence recovery is on";

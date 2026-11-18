@@ -182,6 +182,7 @@ namespace vkBasalt
         std::string refreshThreshold;
         std::string probeInterval;
         std::string supersampling;
+        std::string scalingMethod;
     };
 
     std::optional<MakoFile> parseMakoFile(const std::string& text, std::string& problem);

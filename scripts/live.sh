@@ -3841,8 +3841,17 @@ drive_mako() {
     ui_click "$map" "On###scaling" 1 "$log" || true
     mako_says "$config" '^scaling_enabled = true$' "$ui_log" "Scaling: On" "ticked"
     restart_mark_says "$map" "Scaling" 1 "$log" "$ui_log" "Scaling: On waits for the next start" "ticked"
+    if [ "$(ui_field "$map" "MAKO Scaler##Method" 7)" = 1 ] || [ "$(ui_field "$map" "##Method" 7)" = 1 ]; then
+        ui_result "$ui_log" PASS "Scaling: Ultra performance forces MAKO Scaler" "with Ultra performance ticked while MAKO does not run the profile, the next launch scales with MAKO Scaler, so Method is greyed"
+    else
+        ui_result "$ui_log" FAIL "Scaling: Ultra performance forces MAKO Scaler" "with Ultra performance ticked Method can still be changed, though MAKO scales with MAKO Scaler"
+    fi
+    ui_click "$map" "Frame generation" 1 "$log" || true
+    ui_click "$map" "Ultra performance" 1 "$log" || true
+    mako_says "$config" '^ultra_performance = false$' "$ui_log" "MAKO: Ultra performance off" "unticked, so Method is the scaling MAKO runs again"
+    ui_click "$map" "Scaling" 1 "$log" || true
     ui_pick "$map" Method LS1 "$log" || true
-    mako_says "$config" '^scaling_method = "ls1"$' "$ui_log" "Scaling: Method" "LS1 picked, Lossless.dll set"
+    mako_says "$config" '^scaling_method = "ls1"$' "$ui_log" "Scaling: Method" "LS1 picked with Ultra performance off, Lossless.dll set"
     ui_set_value "$map" "##Sharpness" 0.5 "$log" || true
     mako_says "$config" '^scaling_sharpness = 0\.5$' "$ui_log" "Scaling: Sharpness" "0.5 typed into it"
     ui_set_value "$map" "##Factor" 2 "$log" || true

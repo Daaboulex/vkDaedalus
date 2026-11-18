@@ -812,15 +812,19 @@ static void greyedControls()
     ultra.ultraPerformance = true;
     const auto byUltra     = [](const MakoGreyedWhy& why) {
         return why.flowScale.find("Ultra performance") != std::string::npos && why.performanceMode.find("Ultra performance") != std::string::npos
-               && why.raisedFgModes.find("Ultra performance") != std::string::npos;
+               && why.raisedFgModes.find("Ultra performance") != std::string::npos && why.scalingMethod.find("Ultra performance") != std::string::npos;
     };
-    const auto free = [](const MakoGreyedWhy& why) { return why.flowScale.empty() && why.performanceMode.empty() && why.raisedFgModes.empty(); };
+    const auto free = [](const MakoGreyedWhy& why) {
+        return why.flowScale.empty() && why.performanceMode.empty() && why.raisedFgModes.empty() && why.scalingMethod.empty();
+    };
     expect(byUltra(makoGreyedWhy(ultra, nullptr, true)) && free(makoGreyedWhy(fixedTarget, nullptr, true)),
            "while MAKO does not run the profile, the edited set's own Ultra performance greys what it forces at the next launch");
     expect(free(makoGreyedWhy(ultra, &fixedTarget, true)),
            "Ultra performance ticked in this run waits for the next launch, so what MAKO runs now stays editable");
     expect(byUltra(makoGreyedWhy(fixedTarget, &ultra, true)),
            "Ultra performance that MAKO started with keeps forcing these in this run, though it is unticked now");
+    expect(makoGreyedWhy(ultra, nullptr, true).scalingMethod.find("MAKO Scaler") != std::string::npos,
+           "Ultra performance makes MAKO scale with MAKO Scaler whatever Method names, and the reason says so");
     expect(makoUltraRaises("quality") && makoUltraRaises("balanced") && !makoUltraRaises("performance") && !makoUltraRaises("extra-performance"),
            "Ultra performance raises MAKO FG mode Quality and Balanced to Performance and leaves Performance and Extra performance as they are");
 
