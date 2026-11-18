@@ -425,9 +425,14 @@ namespace vkBasalt
                       "Frames shown per real frame: 2x doubles them");
             else
             {
-                slide("Target", "##Target", set.targetFps, MakoLimits::lowestTargetFps, MakoLimits::highestTargetFps, std::to_string(set.targetFps) + " FPS",
-                      "The frame rate MAKO aims to show");
-                flag("Display refresh", set.adaptiveTargetRefreshRate, "Use the display's refresh rate as the target, following it when it changes", false);
+                const MakoGreyedWhy greyedWhy = makoGreyedWhy(set, underGamescope());
+                greyed(!greyedWhy.target.empty(), greyedWhy.target.c_str(), [&] {
+                    slide("Target", "##Target", set.targetFps, MakoLimits::lowestTargetFps, MakoLimits::highestTargetFps, std::to_string(set.targetFps) + " FPS",
+                          "The frame rate MAKO aims to show");
+                });
+                greyed(!greyedWhy.displayRefresh.empty(), greyedWhy.displayRefresh.c_str(), [&] {
+                    flag("Display refresh", set.adaptiveTargetRefreshRate, "Use the display's refresh rate as the target, following it when it changes", false);
+                });
                 slide("Max multiplier", "##Max multiplier", set.adaptiveMaxMultiplier, MakoLimits::lowestAdaptiveMaxMultiplier, MakoLimits::highestAdaptiveMaxMultiplier,
                       std::to_string(set.adaptiveMaxMultiplier) + "x", "The most frames MAKO shows per real frame");
                 ui::panelRow();

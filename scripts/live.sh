@@ -3618,6 +3618,7 @@ drive_mako() {
     mako_says "$config" '^target_fps = 90$' "$ui_log" "MAKO: Target" "90 typed into it"
     ui_click "$map" "Display refresh" 1 "$log" || true
     mako_says "$config" '^adaptive_target_refresh_rate = true$' "$ui_log" "MAKO: Display refresh" "ticked"
+    greyed_says "$map" "##Target" 1 "$log" "$ui_log" "MAKO: Display refresh makes Target the fallback" "with Display refresh ticked under gamescope Target is greyed, as MAKO aims at gamescope's refresh"
     ui_set_value "$map" "##Max multiplier" 4 "$log" || true
     mako_says "$config" '^adaptive_max_multiplier = 4$' "$ui_log" "MAKO: Max multiplier" "4 typed into it"
     ui_pick "$map" "Real frames" High "$log" || true

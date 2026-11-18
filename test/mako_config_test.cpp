@@ -786,6 +786,29 @@ static void overlayFacts(const fs::path& dir)
 #endif
 }
 
+static void greyedControls()
+{
+    MakoSettings followed;
+    followed.adaptive                     = true;
+    followed.adaptiveTargetRefreshRate    = true;
+    MakoSettings fixedTarget              = followed;
+    fixedTarget.adaptiveTargetRefreshRate = false;
+
+    const MakoGreyedWhy underGamescopeFollowed = makoGreyedWhy(followed, true);
+    expect(!underGamescopeFollowed.target.empty() && underGamescopeFollowed.target.find("fallback") != std::string::npos
+               && underGamescopeFollowed.displayRefresh.empty(),
+           "under gamescope with Display refresh on, Target is greyed as the fallback and Display refresh stays editable");
+    const MakoGreyedWhy underGamescopeTarget = makoGreyedWhy(fixedTarget, true);
+    expect(underGamescopeTarget.target.empty() && underGamescopeTarget.displayRefresh.empty(),
+           "under gamescope with Display refresh off, both stay editable");
+    for (const MakoSettings& set : {followed, fixedTarget})
+    {
+        const MakoGreyedWhy outside = makoGreyedWhy(set, false);
+        expect(outside.target.empty() && outside.displayRefresh.find("gamescope") != std::string::npos,
+               "outside gamescope Display refresh is greyed as working only under gamescope and Target stays editable, whatever the file says");
+    }
+}
+
 int main(int argc, char** argv)
 {
     if (argc < 2)
@@ -808,6 +831,7 @@ int main(int argc, char** argv)
     paths(dir);
     overlayFacts(dir);
     polls();
+    greyedControls();
     if (failures)
         std::printf("%d MAKO file check(s) failed\n", failures);
     return failures ? 1 : 0;

@@ -172,6 +172,12 @@ namespace vkBasalt
         std::optional<PciAddress> pci;
     };
 
+    struct MakoGreyedWhy
+    {
+        std::string target;
+        std::string displayRefresh;
+    };
+
     std::optional<MakoFile> parseMakoFile(const std::string& text, std::string& problem);
     MakoSettings            makoSettingsInEffect(MakoSettings settings);
     const MakoSettings&     makoSettingsFor(const MakoProfile& profile, MakoPowerSource source);
@@ -182,6 +188,7 @@ namespace vkBasalt
     const FrameGenerationTab& frameGenerationTabOf(FrameGenerationLayer layer, std::string_view makoModel);
     MakoProfile               makoProfileWithModel(MakoProfile profile, MakoPowerSource edited, std::string_view model);
     bool frameGenerationTabWaits(const FrameGenerationTab& chosen, std::optional<FrameGenerationLayer> loaded, std::string_view makoModelAtStart);
+    MakoGreyedWhy makoGreyedWhy(const MakoSettings& edited, bool gamescope);
 
     std::optional<std::string>
     makoTextWith(const std::string& text, const std::optional<MakoGlobal>& global, const std::optional<MakoProfile>& profile, std::string& problem);

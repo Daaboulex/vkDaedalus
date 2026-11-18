@@ -586,6 +586,16 @@ namespace vkBasalt
         return layerChangeWaits(loaded, chosen.layer) || (chosen.layer == FrameGenerationLayer::Mako && chosen.makoModel != makoModelAtStart);
     }
 
+    MakoGreyedWhy makoGreyedWhy(const MakoSettings& edited, bool gamescope)
+    {
+        MakoGreyedWhy why;
+        if (!gamescope)
+            why.displayRefresh = "Works only under gamescope: MAKO follows the refresh gamescope reports";
+        else if (edited.adaptiveTargetRefreshRate)
+            why.target = "The fallback while Display refresh is on: MAKO aims at gamescope's refresh, and at this target only while gamescope reports none";
+        return why;
+    }
+
     bool makoGpuNamesAnother(const std::string& gpu, const MakoGpu& game)
     {
         const auto idText = [](uint32_t id) {
