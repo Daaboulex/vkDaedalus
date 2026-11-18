@@ -1178,7 +1178,7 @@ namespace vkBasalt
         {
             Logger::info(frameGenerationPlaceWords(place, loadedFrameGenerationLayerName()));
             const bool profileWantsAfter = ConfigSerializer::profileSettingsFor(detectedGameName).effectsAfterFrameGeneration.value_or(false);
-            if (const std::optional<std::string> mismatch = orderMismatchWords(place, profileWantsAfter, loadedFrameGenerationLayerName()))
+            if (const std::optional<std::string> mismatch = orderMismatchWords(place, profileWantsAfter, loadedFrameGenerationLayerName(), startedWithVkdaedalusRun()))
                 Logger::warn(*mismatch);
         }
 

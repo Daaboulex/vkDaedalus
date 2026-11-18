@@ -92,16 +92,21 @@ int main()
     expect(below.gameFps == 60.0 && below.gameMeasured && below.shownFps == 240.0 && !below.shownMeasured,
            "with lsfg-vk below, the 60 presents the layer times are the game's and 240 are shown, estimated");
 
-    expect(!vkBasalt::orderMismatchWords(FrameGenerationPlace::BelowTheLayer, false, "mako"), "MAKO below a profile asking effects before is no mismatch");
-    expect(!vkBasalt::orderMismatchWords(FrameGenerationPlace::AboveTheLayer, true, "mako"), "MAKO above a profile asking effects after is no mismatch");
-    expect(!vkBasalt::orderMismatchWords(FrameGenerationPlace::NotLoaded, true, "lsfg-vk"), "no frame generation layer, no mismatch");
-    const std::optional<std::string> lost = vkBasalt::orderMismatchWords(FrameGenerationPlace::AboveTheLayer, false, "mako");
+    expect(!vkBasalt::orderMismatchWords(FrameGenerationPlace::BelowTheLayer, false, "mako", true), "MAKO below a profile asking effects before is no mismatch");
+    expect(!vkBasalt::orderMismatchWords(FrameGenerationPlace::AboveTheLayer, true, "mako", true), "MAKO above a profile asking effects after is no mismatch");
+    expect(!vkBasalt::orderMismatchWords(FrameGenerationPlace::NotLoaded, true, "lsfg-vk", true), "no frame generation layer, no mismatch");
+    const std::optional<std::string> lost = vkBasalt::orderMismatchWords(FrameGenerationPlace::AboveTheLayer, false, "mako", true);
     expect(lost && lost->find("asks for effects before") != std::string::npos && lost->find("mako runs above the layer") != std::string::npos
                && lost->find("the effects run after it") != std::string::npos,
            "MAKO above a profile asking effects before names the order asked for and the one that runs: " + lost.value_or("no words"));
-    const std::optional<std::string> flipped = vkBasalt::orderMismatchWords(FrameGenerationPlace::BelowTheLayer, true, "lsfg-vk");
+    const std::optional<std::string> flipped = vkBasalt::orderMismatchWords(FrameGenerationPlace::BelowTheLayer, true, "lsfg-vk", true);
     expect(flipped && flipped->find("asks for effects after") != std::string::npos && flipped->find("lsfg-vk runs below the layer") != std::string::npos,
            "lsfg-vk below a profile asking effects after is a mismatch too: " + flipped.value_or("no words"));
+    expect(lost && lost->find("order layers of vkdaedalus-run did not reach") != std::string::npos,
+           "a game vkdaedalus-run started blames its order layers: " + lost.value_or("no words"));
+    const std::optional<std::string> unordered = vkBasalt::orderMismatchWords(FrameGenerationPlace::AboveTheLayer, false, "mako", false);
+    expect(unordered && unordered->find("not started with vkdaedalus-run") != std::string::npos && unordered->find("did not reach") == std::string::npos,
+           "a game started without vkdaedalus-run is told so, not that order layers it never had failed: " + unordered.value_or("no words"));
 
     return failures == 0 ? 0 : 1;
 }

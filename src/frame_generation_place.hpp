@@ -120,14 +120,14 @@ namespace vkBasalt
         return steps;
     }
 
-    inline std::optional<std::string> orderMismatchWords(FrameGenerationPlace place, bool profileWantsAfter, std::string_view layer)
+    inline std::optional<std::string> orderMismatchWords(FrameGenerationPlace place, bool profileWantsAfter, std::string_view layer, bool startedWithRun)
     {
         const bool after = place == FrameGenerationPlace::AboveTheLayer;
         if (place == FrameGenerationPlace::NotLoaded || after == profileWantsAfter)
             return std::nullopt;
         return "the profile asks for effects " + std::string(profileWantsAfter ? "after" : "before") + " frame generation, but " + std::string(layer) + " runs "
                + (after ? "above" : "below") + " the layer, so the effects run " + (after ? "after" : "before")
-               + " it: the order layers of vkdaedalus-run did not reach the game's Vulkan loader";
+               + " it: " + (startedWithRun ? "the order layers of vkdaedalus-run did not reach the game's Vulkan loader" : "the game was not started with vkdaedalus-run, whose order layers set it");
     }
 
     inline std::string frameGenerationPlaceWords(FrameGenerationPlace place, std::string_view layer)
