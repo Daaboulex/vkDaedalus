@@ -58,13 +58,6 @@ namespace vkBasalt
         return at == choices.end() ? name : std::string(at->shown);
     }
 
-    inline void restartMarkAtRight(const char* what, bool pending)
-    {
-        ui::alignRight(ui::px(restartMarkGap + restartMarkSize));
-        ImGui::Dummy(ImVec2(0.0f, 0.0f));
-        restartMark(what, pending, activePalette());
-    }
-
     inline void whyGreyed(const std::string& why)
     {
         if (why.empty())
@@ -90,7 +83,7 @@ namespace vkBasalt
             widths[i] = widthOnGrid(ui::buttonWidth(std::string(choices[i].shown).c_str(), ui::Kind::Quiet), gap);
             need += widths[i];
         }
-        const float room   = ImGui::GetContentRegionAvail().x - ui::px(restartMarkGap + restartMarkSize);
+        const float room   = ImGui::GetContentRegionAvail().x;
         bool        chosen = false;
         ImGui::PushID(label);
         if (need <= room)
@@ -115,7 +108,7 @@ namespace vkBasalt
         else
         {
             const std::string combo = std::string("##") + label;
-            if (ui::beginCombo(combo.c_str(), shownChoice(choices, value).c_str(), ImGui::GetContentRegionAvail().x - ui::px(restartMarkGap + restartMarkSize)))
+            if (ui::beginCombo(combo.c_str(), shownChoice(choices, value).c_str(), ImGui::GetContentRegionAvail().x))
             {
                 for (const FrameGenerationChoice& choice : choices)
                 {

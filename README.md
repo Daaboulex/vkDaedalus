@@ -35,7 +35,8 @@ AMD Radeon RX 9070 XT as its second GPU (2026-10-25).
   compact on 4:3, portrait and small displays so its text stays readable, closes
   with its key or its close button, and draws its own pointer. No action is tied
   to Esc, so Esc can be bound like any key. Changes apply live; a setting read
-  only when a game starts carries a restart mark.
+  only when a game starts says so in its tooltip and shows Next launch while a
+  saved change waits.
 - **Effects**: CAS, RCAS, DLS, FXAA, SMAA, Deband and LUT built in, and ReShade
   FX shaders compiled by the upstream ReShade compiler. Add, remove, reorder by
   dragging, run several instances (`cas`, `cas.1`), tune every parameter type,

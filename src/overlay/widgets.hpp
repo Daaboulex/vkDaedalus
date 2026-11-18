@@ -9,16 +9,20 @@
 
 #include "overlay/frame_draw.hpp"
 #include "overlay/overlay_style.hpp"
+#include "overlay/status_badge.hpp"
 
 namespace vkBasalt::ui
 {
+    constexpr float badgeTint = 0.16f;
+
     struct Size
     {
         static constexpr float control     = 32.0f;
         static constexpr float inRow       = 26.0f;
         static constexpr float row         = 40.0f;
         static constexpr float tallRow     = 52.0f;
-        static constexpr float chip        = 20.0f;
+        static constexpr float badge       = 22.0f;
+        static constexpr float rowBadge    = 18.0f;
         static constexpr float box         = 18.0f;
         static constexpr float knob        = 14.0f;
         static constexpr float track       = 4.0f;
@@ -114,7 +118,14 @@ namespace vkBasalt::ui
     void label(const char* text);
     void note(const char* text);
     void notef(const char* format, ...) IM_FMTARGS(1);
-    void chip(const char* text, const ImVec4& colour, const char* tip = nullptr);
+    ImVec4 toneInk(Tone tone, const OverlayPalette& palette);
+    ImVec4 badgeTextInk(Tone tone, const OverlayPalette& palette);
+    float  badgeWidth(const Badge& shown, bool inRow = false);
+    void   badge(const Badge& shown, const char* tip = nullptr, bool inRow = false);
+    float  nextLaunchRoom(bool pending);
+    void   nextLaunch(const char* what, bool pending);
+    void   nextLaunchAtRight(const char* what, bool pending);
+    void   itemDot(Tone tone);
     void divider();
     void alignRight(float width);
     void atColumn(float x);

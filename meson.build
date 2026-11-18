@@ -431,6 +431,11 @@ if get_option('with_so')
         include_directories : include_directories('src'))
     test('shader-test-result', shader_test_result_test)
 
+    status_badge_test = executable('status-badge-test',
+        'test/status_badge_test.cpp',
+        include_directories : include_directories('src'))
+    test('status-badge', status_badge_test)
+
     input_blocker_test = executable('input-blocker-test',
         'test/input_blocker_test.cpp', 'src/input_blocker.cpp', 'src/logger.cpp',
         include_directories : include_directories('src'),

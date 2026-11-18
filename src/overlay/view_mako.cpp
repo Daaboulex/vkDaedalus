@@ -382,9 +382,9 @@ namespace vkBasalt
         const auto flag = [&](const char* label, bool& value, const char* tip, bool nextLaunch) {
             ui::panelRow();
             changed = ui::checkbox(label, &value) || changed;
-            ImGui::SetItemTooltip("%s", tip);
+            ImGui::SetItemTooltip("%s%s", nextLaunch ? "Read when the game starts. " : "", tip);
             if (nextLaunch)
-                restartMarkAtRight(label, pending(label));
+                ui::nextLaunchAtRight(label, pending(label));
         };
         const auto greyed = [&](bool off, const char* why, const auto& draw) {
             ImGui::BeginDisabled(off);
@@ -550,7 +550,7 @@ namespace vkBasalt
                     autoSaveProfile();
                 }
                 ImGui::SetItemTooltip("Read when the game starts. Needs vkdaedalus-run. Saved in the vkDaedalus profile.");
-                restartMarkAtRight("Effects after frame generation", pending("Effects after frame generation"));
+                ui::nextLaunchAtRight("Effects after frame generation", pending("Effects after frame generation"));
             }
             flag("Keep swapchain image count", set.swapchainImageCountCompatibility, "Only for a game that fails with frame generation", true);
             flag("Mailbox compatibility", set.mailboxPresentationCompatibility, "Presents through mailbox: may fix a game that hangs with frame generation", true);
@@ -587,8 +587,7 @@ namespace vkBasalt
                             makoTab = source;
                         const bool now = powerSupplies.source == source;
                         if (now)
-                            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(ImGui::GetItemRectMax().x - ui::px(6.0f), ImGui::GetItemRectMin().y + ui::px(6.0f)),
-                                                                        ui::px(3.0f), ImGui::GetColorU32(palette.ok));
+                            ui::itemDot(Tone::Ok);
                         ImGui::SetItemTooltip("MAKO's %s set%s", makoName, now ? ": MAKO runs it now" : "");
                     }
                 }
@@ -646,7 +645,7 @@ namespace vkBasalt
         const float column = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
         ui::panelRow();
         ui::label("Lossless.dll");
-        ImGui::SetItemTooltip("Lossless Scaling's library, which MAKO needs only for the Lossless Scaling model and LS1");
+        ImGui::SetItemTooltip("Lossless Scaling's library, which MAKO needs only for the Lossless Scaling model and LS1. Read when a game starts.");
         ui::atColumn(column);
         ImGui::AlignTextToFramePadding();
         const char* action = nullptr;
@@ -667,9 +666,10 @@ namespace vkBasalt
             ImGui::SetItemTooltip("Install Lossless Scaling in Steam");
             action = "Look again";
         }
+        const bool dllWaits = makoGlobalAtStart && global.dll != makoGlobalAtStart->dll;
         if (action)
         {
-            ui::alignRight(ui::buttonWidth(action, ui::Kind::Secondary, true) + ui::px(restartMarkGap + restartMarkSize));
+            ui::alignRight(ui::buttonWidth(action, ui::Kind::Secondary, true) + ui::nextLaunchRoom(dllWaits));
             UiMap::nameNextItem(action);
             if (ui::lineButton(action))
             {
@@ -683,16 +683,16 @@ namespace vkBasalt
             }
         }
         if (action)
-            restartMark("Lossless.dll", makoGlobalAtStart && global.dll != makoGlobalAtStart->dll, palette);
+            ui::nextLaunch("Lossless.dll", dllWaits);
         else
-            restartMarkAtRight("Lossless.dll", makoGlobalAtStart && global.dll != makoGlobalAtStart->dll);
+            ui::nextLaunchAtRight("Lossless.dll", dllWaits);
         ui::panelRow();
         ui::label("Half precision");
         ImGui::SetItemTooltip("Read when a game starts. MAKO: FP16 for the models that support it and MAKO Scaler; LS1 always uses FP32.");
         ui::atColumn(column);
         changed = ui::checkbox("##Half precision", &global.allowHalfPrecision) || changed;
         ImGui::SetItemTooltip("Read when a game starts. MAKO: FP16 for the models that support it and MAKO Scaler; LS1 always uses FP32.");
-        restartMarkAtRight("Half precision", makoGlobalAtStart && global.allowHalfPrecision != makoGlobalAtStart->allowHalfPrecision);
+        ui::nextLaunchAtRight("Half precision", makoGlobalAtStart && global.allowHalfPrecision != makoGlobalAtStart->allowHalfPrecision);
         ui::endPanel();
         if (changed)
             saveMako(global, std::nullopt);
@@ -700,7 +700,6 @@ namespace vkBasalt
 
     void ImGuiOverlay::renderScalingView()
     {
-        const OverlayPalette& palette = activePalette();
         refreshMakoFile(false);
         bool               notInstalled = false;
         const std::string  blocker      = makoBlocker(notInstalled);
@@ -721,35 +720,23 @@ namespace vkBasalt
         if (inUse)
             ImGui::SetItemTooltip("Kept in MAKO's profile '%s', used in: %s", inUse->name.c_str(), joined(inUse->activeIn).c_str());
         ImGui::SameLine();
-        ImGui::AlignTextToFramePadding();
-        if (!blocker.empty())
-            ImGui::TextColored(palette.faint, "Unavailable");
-        else if (scales)
-        {
-            ImGui::TextColored(palette.ok, "%s %s, on", shownChoice(makoScalingMethods, scaling.method).c_str(), scaling.detail.c_str());
-            ImGui::SetItemTooltip("From MAKO's status file for this swapchain: the size the game draws at and the size MAKO presents");
-        }
-        else if (unsure)
-        {
-            ImGui::TextColored(palette.warn, "%s", scaling.run == MakoScalingRun::NotScaling ? "Not scaling" : "No status file");
-            ImGui::SetItemTooltip("%s", scaling.detail.c_str());
-        }
-        else if (scaling.run == MakoScalingRun::Off)
-            ImGui::TextColored(palette.muted, "Off");
-        else
-        {
-            ImGui::TextColored(palette.warn, "%s, %s", amount.c_str(), loads ? "next launch" : "needs vkdaedalus-run");
-            ImGui::SetItemTooltip("%s", loads ? "MAKO starts scaling when the game starts" : std::string(makoNeedsVkdaedalusRun).c_str());
-        }
-        ui::alignRight(ui::px(ui::Size::box) + ui::px(ui::Size::gap) + ImGui::CalcTextSize("On").x + ui::px(restartMarkGap + restartMarkSize));
-        ImGui::BeginDisabled(!blocker.empty());
+        const bool        blocked = !blocker.empty();
+        const std::string headerTip = blocked || scaling.run == MakoScalingRun::Off ? std::string()
+                                      : scales ? "From MAKO's status file for this swapchain: the size the game draws at and the size MAKO presents"
+                                      : unsure ? scaling.detail
+                                      : loads  ? "MAKO starts scaling when the game starts"
+                                               : std::string(makoNeedsVkdaedalusRun);
+        ui::badge(scalingBadge(blocked, scaling, shownChoice(makoScalingMethods, scaling.method), amount, loads), headerTip.c_str());
+        ui::alignRight(ui::px(ui::Size::box) + ui::px(ui::Size::gap) + ImGui::CalcTextSize("On").x + ui::nextLaunchRoom(pending));
+        ImGui::BeginDisabled(blocked);
         const bool flipped = ui::checkbox("On###scaling", &on);
         ImGui::EndDisabled();
+        const char* readAtStart = "Read when the game starts: MAKO scales the game's frames up to the display. Saved in MAKO's profile.";
         if (unsure)
-            ImGui::SetItemTooltip("%s", scaling.detail.c_str());
+            ImGui::SetItemTooltip("%s\n%s", scaling.detail.c_str(), readAtStart);
         else
-            ImGui::SetItemTooltip("Read when the game starts: MAKO scales the game's frames up to the display. Saved in MAKO's profile.");
-        restartMark("Scaling", pending, palette);
+            ImGui::SetItemTooltip("%s", readAtStart);
+        ui::nextLaunch("Scaling", pending);
         if (unsure)
             whyGreyed(scaling.detail);
 

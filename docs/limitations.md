@@ -41,7 +41,7 @@ file and the game rebuilds its swapchain. MAKO's Live, Pacing and Output groups 
 and sharpness apply live as MAKO reads its file; its scaling factor and supersampling apply when the
 game rebuilds its swapchain.
 
-The controls below are saved at once and marked with the restart icon until a start uses them.
+The controls below are saved at once and marked Next launch until a start uses them.
 
 | Control | Why it waits | Live alternative | Proven by |
 | --- | --- | --- | --- |

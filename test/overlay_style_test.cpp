@@ -46,6 +46,12 @@ int main()
             expect(contrast(p.warn, *background) >= 4.5f && contrast(p.ok, *background) >= 4.5f && contrast(p.bad, *background) >= 4.5f,
                    "warnings, success and errors read at 4.5:1 on every surface of every palette");
             expect(contrast(p.accent, *background) >= 3.0f, "the accent stands at 3:1 on every surface of every palette");
+            for (Tone tone : {Tone::Ok, Tone::Muted, Tone::Warn, Tone::Bad, Tone::Info})
+            {
+                const ImVec4 fill = ui::mix(*background, ui::toneInk(tone, p), ui::badgeTint);
+                expect(contrast(ui::badgeTextInk(tone, p), fill) >= 4.5f, "a badge's text reads at 4.5:1 on its own tinted fill on every surface of every palette");
+                expect(contrast(ui::toneInk(tone, p), fill) >= 3.0f, "a badge's icon stands at 3:1 on its own tinted fill on every surface of every palette");
+            }
         }
         expect(contrast(p.onStrong, p.strong) >= 4.5f, "button text reads at 4.5:1 on every palette's buttons");
     }
@@ -189,6 +195,51 @@ int main()
     ImGui::End();
     ImGui::Render();
     expect(ImGui::GetDrawData() != nullptr && ImGui::GetDrawData()->CmdLists.Size > 0, "panels inside a table and inside each other still draw");
+
+    struct RowEnd
+    {
+        ImGuiID last;
+        ImGuiID badge;
+        ImGuiID control;
+        float   right;
+        float   edge;
+    };
+    const auto rowEnd = [&](bool pending, bool atRight) {
+        ImGui::NewFrame();
+        ui::beginFrame(fonts);
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImVec2(400, 300));
+        ImGui::Begin("next launch", nullptr, ImGuiWindowFlags_NoDecoration);
+        RowEnd row{};
+        row.edge  = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+        row.badge = ImGui::GetID("Row next launch");
+        ui::label("Row");
+        if (atRight)
+            ui::nextLaunchAtRight("Row", pending);
+        else
+        {
+            ui::alignRight(ui::buttonWidth("Set", ui::Kind::Secondary, true) + ui::nextLaunchRoom(pending));
+            ui::lineButton("Set");
+            row.control = ImGui::GetItemID();
+            ui::nextLaunch("Row", pending);
+        }
+        row.last  = ImGui::GetItemID();
+        row.right = ImGui::GetItemRectMax().x;
+        ImGui::End();
+        ImGui::EndFrame();
+        return row;
+    };
+    const RowEnd inlineWaiting = rowEnd(true, false);
+    expect(inlineWaiting.last == inlineWaiting.badge && std::fabs(inlineWaiting.right - inlineWaiting.edge) < 0.5f,
+           "a Next launch badge after a right-aligned control fills the room kept for it and ends at the row's right edge");
+    const RowEnd inlineSettled = rowEnd(false, false);
+    expect(inlineSettled.last == inlineSettled.control && std::fabs(inlineSettled.right - inlineSettled.edge) < 0.5f,
+           "with nothing waiting no badge is drawn and the control keeps the row's right edge");
+    const RowEnd rightWaiting = rowEnd(true, true);
+    expect(rightWaiting.last == rightWaiting.badge && std::fabs(rightWaiting.right - rightWaiting.edge) < 0.5f,
+           "a Next launch badge at the right ends at the row's right edge");
+    const RowEnd rightSettled = rowEnd(false, true);
+    expect(rightSettled.last != rightSettled.badge, "a row whose saved value is what runs draws no Next launch badge");
     ImGui::DestroyContext(context);
     if (failures)
         std::printf("%d overlay style check(s) failed\n", failures);

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -84,7 +85,7 @@ namespace vkBasalt::ui
             ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), ImVec2(at.x, textY), ImVec2(nameMax, textY + ImGui::GetFontSize()), nameMax, name.c_str(), nullptr,
                                       nullptr);
             ImGui::PopStyleColor();
-            const float right = at.x + ImGui::GetContentRegionAvail().x - px(restartMarkSize) - px(Size::gap);
+            const float right = at.x + ImGui::GetContentRegionAvail().x - px(defaultMarkSize) - px(Size::gap);
             ImGui::Dummy(ImVec2(nameW, lineH));
             ImGui::SameLine(0.0f, 0.0f);
             return right;
@@ -656,7 +657,7 @@ namespace vkBasalt::ui
     bool parameterSegments(const char* label, int* value, const std::vector<std::string>& items)
     {
         const float gap  = px(Size::gap);
-        const float room = ImGui::GetContentRegionAvail().x - px(Size::nameColumn) - px(restartMarkSize) - gap;
+        const float room = ImGui::GetContentRegionAvail().x - px(Size::nameColumn) - px(defaultMarkSize) - gap;
         float       need = gap * static_cast<float>(items.empty() ? 0 : items.size() - 1);
         for (const std::string& item : items)
             need += buttonWidth(item.c_str(), Kind::Quiet);
@@ -1041,24 +1042,121 @@ namespace vkBasalt::ui
         note(text);
     }
 
-    void chip(const char* text, const ImVec4& colour, const char* tip)
+    namespace
     {
-        ImGui::PushFont(nullptr, FontSize::caption);
-        const ImVec2 textSize = ImGui::CalcTextSize(text);
-        const float  h        = px(Size::chip);
-        const float  padX     = px(8.0f);
-        const float  w        = textSize.x + padX * 2.0f;
-        const float  lineH    = px(Size::control);
-        const ImVec2 at       = ImGui::GetCursorScreenPos();
-        const ImRect pill(ImVec2(at.x, at.y + (lineH - h) * 0.5f), ImVec2(at.x + w, at.y + (lineH + h) * 0.5f));
-        ImDrawList*  list = ImGui::GetWindowDrawList();
-        list->AddRect(pill.Min, pill.Max, u32(mix(colour, palette().panel, 0.45f)), h * 0.5f, 1.0f);
-        list->AddText(ImVec2(pill.Min.x + padX, pill.Min.y + (h - ImGui::GetFontSize()) * 0.5f), u32(colour), text);
+        struct BadgeMetrics
+        {
+            float height;
+            float padIcon;
+            float pad;
+            float icon;
+            float gap;
+            float fontSize;
+        };
+
+        BadgeMetrics badgeMetrics(bool inRow)
+        {
+            if (inRow)
+                return {px(Size::rowBadge), px(5.0f), px(7.0f), px(11.0f), px(4.0f), FontSize::caption};
+            return {px(Size::badge), px(7.0f), px(9.0f), px(13.0f), px(5.0f), FontSize::small};
+        }
+
+        ImRect drawBadge(const Badge& shown, bool inRow)
+        {
+            const BadgeMetrics m     = badgeMetrics(inRow);
+            const float        w     = badgeWidth(shown, inRow);
+            const float        lineH = px(Size::control);
+            const ImVec2       at    = ImGui::GetCursorScreenPos();
+            const ImRect       pill(ImVec2(at.x, at.y + (lineH - m.height) * 0.5f), ImVec2(at.x + w, at.y + (lineH + m.height) * 0.5f));
+            const ImVec4       ink  = toneInk(shown.tone, palette());
+            ImDrawList*        list = ImGui::GetWindowDrawList();
+            list->AddRectFilled(pill.Min, pill.Max, u32(withAlpha(ink, badgeTint)), px(Size::radius));
+            float x = pill.Min.x + (shown.icon ? m.padIcon : m.pad);
+            if (shown.icon)
+            {
+                drawIcon(list, *shown.icon, ImVec2(x, pill.Min.y + (m.height - m.icon) * 0.5f), m.icon, u32(ink));
+                x += m.icon + m.gap;
+            }
+            ImGui::PushFont(fonts().bold, m.fontSize);
+            list->AddText(ImVec2(x, pill.Min.y + (m.height - ImGui::GetFontSize()) * 0.5f), u32(badgeTextInk(shown.tone, palette())), shown.text.c_str());
+            ImGui::PopFont();
+            ImGui::ItemSize(ImVec2(w, lineH), paddingFor(Size::control));
+            return ImRect(at, ImVec2(at.x + w, at.y + lineH));
+        }
+
+        void nextLaunchHere(const char* what, const Badge& shown)
+        {
+            const ImRect      box  = drawBadge(shown, true);
+            const std::string name = std::string(what) + " next launch";
+            UiMap::nameNextItem(name.c_str());
+            if (ImGui::ItemAdd(box, ImGui::GetID(name.c_str()), nullptr, ImGuiItemFlags_NoNav))
+                UiMap::markChecked(ImGui::GetItemID(), true);
+            ImGui::SetItemTooltip("Saved: this run keeps the value it started with");
+        }
+    }
+
+    ImVec4 toneInk(Tone tone, const OverlayPalette& p)
+    {
+        switch (tone)
+        {
+            case Tone::Ok: return p.ok;
+            case Tone::Warn: return p.warn;
+            case Tone::Bad: return p.bad;
+            case Tone::Info: return p.info;
+            case Tone::Muted: break;
+        }
+        return p.muted;
+    }
+
+    ImVec4 badgeTextInk(Tone tone, const OverlayPalette& p)
+    {
+        return mix(toneInk(tone, p), p.bright, 0.25f);
+    }
+
+    float badgeWidth(const Badge& shown, bool inRow)
+    {
+        const BadgeMetrics m = badgeMetrics(inRow);
+        ImGui::PushFont(fonts().bold, m.fontSize);
+        const float text = ImGui::CalcTextSize(shown.text.c_str()).x;
         ImGui::PopFont();
-        ImGui::ItemSize(ImVec2(w, lineH), paddingFor(Size::control));
-        ImGui::ItemAdd(ImRect(at, ImVec2(at.x + w, at.y + lineH)), 0);
+        return (shown.icon ? m.padIcon + m.icon + m.gap : m.pad) + text + m.pad;
+    }
+
+    void badge(const Badge& shown, const char* tip, bool inRow)
+    {
+        ImGui::ItemAdd(drawBadge(shown, inRow), 0);
         if (tip != nullptr && *tip != '\0')
             ImGui::SetItemTooltip("%s", tip);
+    }
+
+    float nextLaunchRoom(bool pending)
+    {
+        const std::optional<Badge> shown = nextLaunchBadge(pending);
+        return shown ? px(Size::gap) + badgeWidth(*shown, true) : 0.0f;
+    }
+
+    void nextLaunch(const char* what, bool pending)
+    {
+        const std::optional<Badge> shown = nextLaunchBadge(pending);
+        if (!shown)
+            return;
+        ImGui::SameLine(0.0f, px(Size::gap));
+        nextLaunchHere(what, *shown);
+    }
+
+    void nextLaunchAtRight(const char* what, bool pending)
+    {
+        const std::optional<Badge> shown = nextLaunchBadge(pending);
+        if (!shown)
+            return;
+        alignRight(badgeWidth(*shown, true));
+        nextLaunchHere(what, *shown);
+    }
+
+    void itemDot(Tone tone)
+    {
+        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(ImGui::GetItemRectMax().x - px(6.0f), ImGui::GetItemRectMin().y + px(6.0f)), px(3.0f),
+                                                    u32(toneInk(tone, palette())));
     }
 
     void divider()

@@ -64,7 +64,7 @@ namespace vkBasalt
             const float nameLeft  = ImGui::GetItemRectMin().x;
             const float nameRight = ImGui::GetItemRectMax().x;
             const float valueW    = switched ? ui::px(ui::Size::box) : stepped ? 2.0f * control + ui::px(52.0f) + 2.0f * gap : ui::px(160.0f);
-            ui::alignRight(valueW + gap + (added ? control : ui::px(restartMarkSize)));
+            ui::alignRight(valueW + gap + (added ? control : ui::px(defaultMarkSize)));
             const ImVec2 valueAt = ImGui::GetCursorScreenPos();
             if (switched)
             {
@@ -278,12 +278,9 @@ namespace vkBasalt
                 ImGui::TextColored(palette.faint, "%s", defs[i].name.c_str());
                 ImGui::PopFont();
                 ImGui::EndGroup();
-                const char* global = "set for every effect";
-                ImGui::PushFont(nullptr, FontSize::caption);
-                const float globalW = ImGui::CalcTextSize(global).x + ui::px(16.0f);
-                ImGui::PopFont();
-                ui::alignRight(globalW);
-                ui::chip(global, palette.secondary);
+                const Badge global{Tone::Muted, std::nullopt, "set for every effect"};
+                ui::alignRight(ui::badgeWidth(global, true));
+                ui::badge(global, nullptr, true);
             }
             else
             {
@@ -709,7 +706,7 @@ namespace vkBasalt
         if (!rowKeyProblem.empty())
         {
             ImGui::SameLine();
-            ui::chip(rowKeyProblem.c_str(), palette.warn);
+            ui::badge({Tone::Warn, Icon::Warning, rowKeyProblem});
         }
         ui::alignRight(ui::buttonWidth("Add effects..."));
         if (ui::button("Add effects..."))
@@ -899,8 +896,7 @@ namespace vkBasalt
                 const ImVec2 pillBottom(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ui::px(4.0f));
                 if (stray)
                 {
-                    const ImVec2 at = ImGui::GetItemRectMax();
-                    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(at.x - ui::px(10.0f), (ImGui::GetItemRectMin().y + at.y) * 0.5f), ui::px(3.0f), ImGui::GetColorU32(palette.warn));
+                    ui::itemDot(Tone::Warn);
                     ImGui::SetItemTooltip("Between two GPU %u effects, so the frame goes to GPU %u and back twice", rowGpus[i - 1], rowGpus[i - 1]);
                 }
                 else if (ownGpus[i] != 0)

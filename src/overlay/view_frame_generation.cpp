@@ -466,7 +466,7 @@ namespace vkBasalt
         ImGui::SetItemTooltip("%s", why.c_str());
         const std::optional<std::string> elsewhere = mako ? makoGpuElsewhere() : std::nullopt;
         if (mako && !elsewhere)
-            restartMarkAtRight("GPU", gpuWaits);
+            ui::nextLaunchAtRight("GPU", gpuWaits);
         if (elsewhere)
         {
             ImGui::SetCursorPosX(column);
@@ -475,7 +475,7 @@ namespace vkBasalt
                 useGamesGpuInMako();
             ImGui::SetItemTooltip("Read when the game starts. Removes the GPU from MAKO's profile, so from the next launch MAKO generates frames\n"
                                   "on the GPU the game renders on.");
-            restartMark("GPU", gpuWaits, palette);
+            ui::nextLaunch("GPU", gpuWaits);
             ImGui::SameLine(0.0f, ui::px(ui::Size::groupGap));
             ImGui::AlignTextToFramePadding();
             ImGui::TextColored(palette.warn, "%s", elsewhere->c_str());
@@ -486,7 +486,6 @@ namespace vkBasalt
 
     void ImGuiOverlay::renderFrameGenerationView()
     {
-        const OverlayPalette& palette = activePalette();
         refreshFrameGenerationFile(false);
         refreshMakoFile(false);
 
@@ -535,46 +534,35 @@ namespace vkBasalt
         else if (makoInUse)
             ImGui::SetItemTooltip("Kept in MAKO's profile '%s', used in: %s", makoInUse->name.c_str(), joined(makoInUse->activeIn).c_str());
         ImGui::SameLine();
-        ImGui::AlignTextToFramePadding();
-        if (!blocker.empty())
-            ImGui::TextColored(palette.faint, "%s", fg.notInstalled ? "Not installed" : "Unavailable");
-        else if (!on && !loaded)
-        {
-            ImGui::TextColored(palette.muted, "Off, not loaded");
-            ImGui::SetItemTooltip("%s", fg.loadsNextLaunch ? (notLoaded + ", so On runs from the next launch." + readyFromFirstLaunch).c_str() : notLoaded.c_str());
-        }
-        else if (!on)
-            ImGui::TextColored(palette.muted, "Off");
-        else if (mako && !fg.unavailable.empty())
-        {
-            ImGui::TextColored(palette.warn, "%s, needs a model", amount.c_str());
-            ImGui::SetItemTooltip("%s", fg.unavailable.c_str());
-        }
-        else if (!fg.paused.empty())
-        {
-            ImGui::TextColored(palette.warn, "%s, paused", amount.c_str());
-            ImGui::SetItemTooltip("%s", fg.paused.c_str());
-        }
-        else if (fg.live)
-            ImGui::TextColored(palette.ok, "%s, on", amount.c_str());
-        else
-        {
-            ImGui::TextColored(palette.warn, "%s, %s", amount.c_str(), fg.loadsNextLaunch ? "next launch" : "needs vkdaedalus-run");
-            ImGui::SetItemTooltip("%s", !loaded ? notLoaded.c_str()
-                                        : mako  ? "MAKO set up no frame generation when this game started: Ready at start was off, or MAKO ran another profile"
-                                                : "lsfg-vk was not loaded when this game started");
-        }
+        FrameGenerationHeader header;
+        header.blocked         = !blocker.empty();
+        header.notInstalled    = fg.notInstalled;
+        header.on              = on;
+        header.loaded          = loaded;
+        header.needsModel      = mako && !fg.unavailable.empty();
+        header.paused          = !fg.paused.empty();
+        header.live            = fg.live;
+        header.loadsNextLaunch = fg.loadsNextLaunch;
+        header.amount          = amount;
+        const std::string headerTip = header.blocked      ? std::string()
+                                      : !on && loaded     ? std::string()
+                                      : !on               ? (fg.loadsNextLaunch ? notLoaded + ", so On runs from the next launch." + readyFromFirstLaunch : notLoaded)
+                                      : header.needsModel ? fg.unavailable
+                                      : header.paused     ? fg.paused
+                                      : fg.live           ? std::string()
+                                      : !loaded           ? notLoaded
+                                      : mako ? "MAKO set up no frame generation when this game started: Ready at start was off, or MAKO ran another profile"
+                                             : "lsfg-vk was not loaded when this game started";
+        ui::badge(frameGenerationBadge(header), headerTip.c_str());
         if (!waiting.empty())
         {
             ImGui::SameLine();
-            const std::string pending = std::to_string(waiting.size()) + (waiting.size() == 1 ? " change" : " changes") + " at next launch";
-            const std::string tip     = "Saved now, used at next launch: " + joined(waiting);
-            ui::chip(pending.c_str(), palette.warn, tip.c_str());
+            ui::badge(changesWaitingBadge(waiting.size()), ("Saved now, used at next launch: " + joined(waiting)).c_str());
         }
 
         const bool  neither = !frameGenerationLayerInstalled(FrameGenerationLayer::LsfgVk) && !frameGenerationLayerInstalled(FrameGenerationLayer::Mako);
         const float gap     = ui::px(ui::Size::gap);
-        float       layerW  = ImGui::CalcTextSize("Layer").x + ui::px(restartMarkGap + restartMarkSize) + ui::px(ui::Size::groupGap);
+        float       layerW  = ImGui::CalcTextSize("Layer").x + ui::nextLaunchRoom(layerWaits) + ui::px(ui::Size::groupGap);
         for (const FrameGenerationTab& tab : frameGenerationTabs)
             layerW += gap + ui::buttonWidth(std::string(tab.shown).c_str(), ui::Kind::Quiet);
         const float controls = (neither ? 0.0f : layerW) + ui::px(ui::Size::box) + gap + ImGui::CalcTextSize("On").x;
@@ -700,9 +688,8 @@ namespace vkBasalt
 
     void ImGuiOverlay::renderLayerChoice(const FrameGenerationTab* chosen, bool waits)
     {
-        const OverlayPalette& palette = activePalette();
-        const std::string     kept    = "Read when a game starts: vkdaedalus-run loads this layer alone and keeps the other out.\nThe layer is kept in the vkDaedalus profile "
-                                        + activeProfileName;
+        const std::string kept = "Read when a game starts: vkdaedalus-run loads this layer alone and keeps the other out.\nThe layer is kept in the vkDaedalus profile "
+                                 + activeProfileName;
         const bool fellBack = makoLiveHere() && makoAtStart && makoFellBackToMakoFg(makoSettingsAtStart().frameGenerationModel, makoStatus.ofSwapchain);
         ui::label("Layer");
         ImGui::SetItemTooltip("%s.", kept.c_str());
@@ -723,8 +710,7 @@ namespace vkBasalt
                 chooseFrameGenerationTab(tab);
             ImGui::EndDisabled();
             if ((lossless && fellBack) || !missing.empty())
-                ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(ImGui::GetItemRectMax().x - ui::px(6.0f), ImGui::GetItemRectMin().y + ui::px(6.0f)), ui::px(3.0f),
-                                                            ImGui::GetColorU32(palette.warn));
+                ui::itemDot(Tone::Warn);
             if (lossless && fellBack)
                 ImGui::SetItemTooltip("MAKO could not start Lossless Scaling's model when this game started: this run has MAKO FG in its place.%s%s", why.empty() ? "" : "\n",
                                       why.c_str());
@@ -733,7 +719,7 @@ namespace vkBasalt
             else
                 ImGui::SetItemTooltip("%s", why.empty() ? what.c_str() : why.c_str());
         }
-        restartMark("Layer", waits, palette);
+        ui::nextLaunch("Layer", waits);
     }
 
     void ImGuiOverlay::renderFrameOrderNote()
@@ -889,7 +875,7 @@ namespace vkBasalt
             const auto startOnly = [&](const char* label, bool& value, const char* tooltip) {
                 const bool flippedHere = ui::checkbox(label, &value);
                 ImGui::SetItemTooltip("Read when the game starts. %s", tooltip);
-                restartMark(label, std::find(waiting.begin(), waiting.end(), std::string(label)) != waiting.end(), palette);
+                ui::nextLaunchAtRight(label, std::find(waiting.begin(), waiting.end(), std::string(label)) != waiting.end());
                 return flippedHere;
             };
             ImGui::Dummy(ImVec2(0.0f, ui::px(ui::Size::groupGap)));
@@ -983,13 +969,14 @@ namespace vkBasalt
         ui::atColumn(column);
         bool changed = ui::checkbox("##Half precision", &global.allowHalfPrecision);
         ImGui::SetItemTooltip("Read when a game starts. lsfg-vk: it does not affect quality.");
-        restartMark("Half precision", global.allowHalfPrecision != frameGenerationGlobalAtStart->allowHalfPrecision, palette);
+        ui::nextLaunchAtRight("Half precision", global.allowHalfPrecision != frameGenerationGlobalAtStart->allowHalfPrecision);
 
+        const bool dllWaits = global.dll != frameGenerationGlobalAtStart->dll;
         if (!frameGenerationDll)
             frameGenerationDll = lsfgDllStatus(global);
         ui::panelRow();
         ui::label("lsfg-vk.dll");
-        ImGui::SetItemTooltip("The frame generation library from Lossless Scaling, which lsfg-vk needs");
+        ImGui::SetItemTooltip("The frame generation library from Lossless Scaling, which lsfg-vk needs. Read when a game starts.");
         ui::atColumn(column);
         ImGui::AlignTextToFramePadding();
         if (frameGenerationDll->found)
@@ -998,7 +985,7 @@ namespace vkBasalt
             ImGui::SetItemTooltip("%s", frameGenerationDll->path->c_str());
             ImGui::SameLine();
             const std::string where = frameGenerationDll->inSteamLibrary ? "Steam library" : frameGenerationDll->path->substr(0, frameGenerationDll->path->rfind('/'));
-            const float       tail  = ui::px(ui::Size::gap) + ui::buttonWidth("Change...", ui::Kind::Secondary, true) + ui::px(restartMarkGap + restartMarkSize);
+            const float       tail  = ui::px(ui::Size::gap) + ui::buttonWidth("Change...", ui::Kind::Secondary, true) + ui::nextLaunchRoom(dllWaits);
             ImGui::PushFont(nullptr, FontSize::small);
             ImGui::TextColored(palette.muted, "%s", ui::elideStart(where, ImGui::GetContentRegionAvail().x - tail).c_str());
             ImGui::PopFont();
@@ -1007,7 +994,7 @@ namespace vkBasalt
             ImGui::TextColored(palette.bad, "Not found");
         const float trailing = ui::buttonWidth("Change...", ui::Kind::Secondary, true)
                              + (frameGenerationDll->found ? 0.0f : ImGui::GetStyle().ItemSpacing.x + ui::buttonWidth("Look again", ui::Kind::Secondary, true))
-                             + ui::px(restartMarkGap + restartMarkSize);
+                             + ui::nextLaunchRoom(dllWaits);
         ui::alignRight(trailing);
         if (ui::lineButton("Change..."))
         {
@@ -1023,7 +1010,7 @@ namespace vkBasalt
             if (ui::lineButton("Look again"))
                 frameGenerationDll.reset();
         }
-        restartMark("lsfg-vk.dll", global.dll != frameGenerationGlobalAtStart->dll, palette);
+        ui::nextLaunch("lsfg-vk.dll", dllWaits);
         ui::endPanel();
         ImGuiErrorRecoveryState beforeBrowser;
         ImGui::ErrorRecoveryStoreState(&beforeBrowser);

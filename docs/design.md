@@ -100,6 +100,16 @@ check's message or a test already says is not repeated here.
 - No live lane runs two devices with the overlay open. The source check is all that holds the
   context rule.
 
+## Overlay status
+
+- Every status the overlay states is one badge of the kit: a fill of its tone over the surface, an
+  icon in the tone and short text. Green runs now, grey is off, amber waits for something, red is a
+  fault and the palette's info colour informs. The text is a lighter shade of the tone: the tone's
+  own colour on its own fill read below 4.5:1 on several palettes.
+- A setting read only when a game starts says so in its tooltip, and its row shows an amber Next
+  launch badge only while the saved value differs from the one the run started with. A row keeps no
+  empty room for it.
+
 ## Safe Anti-Cheat
 
 - It is on by default, so that no game causes a ban by accident.

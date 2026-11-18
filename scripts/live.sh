@@ -2515,17 +2515,21 @@ drive_ui() {
     fi
 }
 
-restart_mark_says() {
-    local map="$1" what="$2" want="$3" log="$4" ui_log="$5" name="$6" why="$7" got
-    if ui_wait "$map" "$what restart mark" 8 "$want" "$log"; then
-        if [ "$want" = 1 ]; then
-            ui_result "$ui_log" PASS "$name" "$why, its restart mark shows the change waits for the next start"
+next_launch_says() {
+    local map="$1" what="$2" want="$3" log="$4" ui_log="$5" name="$6" why="$7" row="${8:-}" got
+    if [ "$want" = 1 ]; then
+        if ui_wait "$map" "$what next launch" 8 1 "$log"; then
+            ui_result "$ui_log" PASS "$name" "$why, its row shows Next launch: the change waits for the next start"
         else
-            ui_result "$ui_log" PASS "$name" "$why, its restart mark shows nothing waits"
+            got=$(ui_field "$map" "$what next launch" 8)
+            ui_result "$ui_log" FAIL "$name" "$why, but its row shows ${got:+a Next launch badge not marked waiting}${got:-no Next launch badge}"
         fi
+    elif ! ui_wait "$map" "$row" "" "" "$log"; then
+        ui_result "$ui_log" FAIL "$name" "$why, but its row ${row:-(none named)} is not on the page, so the badge's absence proves nothing"
+    elif ui_gone "$map" "$what next launch" "$log"; then
+        ui_result "$ui_log" PASS "$name" "$why, its row shows no Next launch badge: nothing waits"
     else
-        got=$(ui_field "$map" "$what restart mark" 8)
-        ui_result "$ui_log" FAIL "$name" "$why, its restart mark says ${got:-nothing, it is not on the page}, want $want"
+        ui_result "$ui_log" FAIL "$name" "$why, but its row still shows Next launch"
     fi
 }
 
@@ -2539,7 +2543,7 @@ start_only_flips() {
     if [ "$was" = true ]; then want=false; else want=true; fi
     ui_click "$map" "$label" 1 "$log" || true
     if [ "$(lsfg_profile_value "$config" "$key")" = "$want" ]; then
-        restart_mark_says "$map" "$label" 1 "$log" "$ui_log" "Frame generation: $label waits for the next start" "a click saved $key = $want in vkcube's lsfg-vk profile"
+        next_launch_says "$map" "$label" 1 "$log" "$ui_log" "Frame generation: $label waits for the next start" "a click saved $key = $want in vkcube's lsfg-vk profile"
     else
         ui_result "$ui_log" FAIL "Frame generation: $label waits for the next start" "a click left $key at $(lsfg_profile_value "$config" "$key"), want $want"
     fi
@@ -2559,7 +2563,7 @@ drive_next_start_frame_generation() {
         return 0
     fi
     ui_click "$map" "Frame generation" 1 "$log" || true
-    restart_mark_says "$map" "Half precision" 0 "$log" "$ui_log" "Frame generation: Half precision applies at the next start" "the run before turned it off and this run started with allow_fp16 = $(sed -n 's/^allow_fp16 = //p' "$config")"
+    next_launch_says "$map" "Half precision" 0 "$log" "$ui_log" "Frame generation: Half precision applies at the next start" "the run before turned it off and this run started with allow_fp16 = $(sed -n 's/^allow_fp16 = //p' "$config")" "##Half precision"
     ui_click "$map" "On###frameGeneration" 1 "$log" || true
     if ! ui_wait "$map" "Force vsync (FIFO)" "" "" "$log"; then
         ui_result "$ui_log" FAIL "frame generation's start-only options" "On never showed Force vsync (FIFO): $(lsfg_profile_value "$config" multiplier)x"
@@ -2567,7 +2571,7 @@ drive_next_start_frame_generation() {
     fi
     start_only_flips "$map" "Force vsync (FIFO)" override_present_mode "$config" "$log" "$ui_log"
     start_only_flips "$map" "Keep swapchain image count" preserve_swapchain_image_count "$config" "$log" "$ui_log"
-    restart_mark_says "$map" "Effects after frame generation" 1 "$log" "$ui_log" "Frame generation: effects after it waits for vkdaedalus-run" "saved in the run before, this run was started without vkdaedalus-run, so its order is the one the layers were given"
+    next_launch_says "$map" "Effects after frame generation" 1 "$log" "$ui_log" "Frame generation: effects after it waits for vkdaedalus-run" "saved in the run before, this run was started without vkdaedalus-run, so its order is the one the layers were given"
     ui_state "$map" fg-08-start-only "$ui_log" "the next start: the start-only options marked"
     local listed=""
     ui_click "$map" "##profile" 1 "$log" || true
@@ -2605,7 +2609,7 @@ drive_next_start_settings() {
         return 0
     fi
     ui_click "$map" "Settings" 1 "$log" || true
-    restart_mark_says "$map" "Depth capture" 0 "$log" "$ui_log" "Settings: Depth capture applies at the next start" "turned on in the run before"
+    next_launch_says "$map" "Depth capture" 0 "$log" "$ui_log" "Settings: Depth capture applies at the next start" "turned on in the run before" "Depth capture"
 }
 
 settings_click_flips() {
@@ -2682,7 +2686,7 @@ drive_settings() {
         ui_result "$ui_log" FAIL "a click shorter than a frame reaches the overlay" "a press and release sent at once left Effects on at launch ticked: ${was:-unknown}"
     fi
     settings_click_flips "$map" "Depth capture" depthCapture on off "$settings" "$log" "$ui_log"
-    restart_mark_says "$map" "Depth capture" 1 "$log" "$ui_log" "Settings: Depth capture waits for the next start" "turned on while this run started without it"
+    next_launch_says "$map" "Depth capture" 1 "$log" "$ui_log" "Settings: Depth capture waits for the next start" "turned on while this run started without it"
     ui_click "$map" "Performance" 1 "$log" || true
     settings_click_flips "$map" "Per-effect GPU timing" effectGpuTiming true false "$settings" "$log" "$ui_log"
     ui_state "$map" set-01-gpu-timing "$ui_log"
@@ -3725,11 +3729,11 @@ drive_mako() {
         ui_state "$map" mako-06-dll-in-library "$ui_log" "Lossless.dll found in a Steam library MAKO does not search, with one action to set it"
         ui_click "$map" "Set" 1 "$log" || true
         mako_says "$config" "^dll = \"$library/Lossless.dll\"$" "$ui_log" "MAKO: Lossless.dll in a Steam library" "Look again found it in the library libraryfolders.vdf lists and Set wrote it into MAKO's [global]"
-        restart_mark_says "$map" "Lossless.dll" 1 "$log" "$ui_log" "MAKO: Lossless.dll waits for the next start" "Set wrote it"
+        next_launch_says "$map" "Lossless.dll" 1 "$log" "$ui_log" "MAKO: Lossless.dll waits for the next start" "Set wrote it"
     else
         ui_result "$ui_log" FAIL "MAKO: Lossless.dll in a Steam library" "Look again never offered Set for $library/Lossless.dll"
     fi
-    restart_mark_says "$map" "Layer" 0 "$log" "$ui_log" "the layer choice: nothing waits at first" "MAKO FG, the choice this profile started with"
+    next_launch_says "$map" "Layer" 0 "$log" "$ui_log" "the layer choice: nothing waits at first" "MAKO FG, the choice this profile started with" "MAKO FG##Layer"
     ui_click "$map" "MAKO LSFG##Layer" 1 "$log" || true
     mako_says "$config" '^frame_generation_model = "lossless-scaling"$' "$ui_log" "the layer choice: MAKO LSFG writes MAKO's model" "MAKO LSFG picked once Lossless.dll is set"
     if file_says "$home/.config/vkdaedalus/profiles/default.conf" '^frameGenerationLayer = mako$' && ui_wait "$map" "MAKO LSFG##Layer" 8 1 "$log" && ui_wait "$map" "MAKO FG##Layer" 8 0 "$log"; then
@@ -3737,7 +3741,7 @@ drive_mako() {
     else
         ui_result "$ui_log" FAIL "the layer choice: MAKO LSFG writes the profile's layer" "MAKO LSFG picked left $(grep '^frameGenerationLayer' "$home/.config/vkdaedalus/profiles/default.conf" || echo 'no frameGenerationLayer') in default, MAKO LSFG chosen $(ui_field "$map" "MAKO LSFG##Layer" 8), MAKO FG chosen $(ui_field "$map" "MAKO FG##Layer" 8)"
     fi
-    restart_mark_says "$map" "Layer" 1 "$log" "$ui_log" "the layer choice waits for the next start" "MAKO LSFG picked"
+    next_launch_says "$map" "Layer" 1 "$log" "$ui_log" "the layer choice waits for the next start" "MAKO LSFG picked"
     greyed_says "$map" "Performance mode" 0 "$log" "$ui_log" "MAKO: the model frees Performance mode" "with the Lossless Scaling model Performance mode can be ticked"
     ui_click "$map" "Performance mode" 1 "$log" || true
     mako_says "$config" '^performance_mode = true$' "$ui_log" "MAKO: Performance mode" "ticked"
@@ -3748,7 +3752,7 @@ drive_mako() {
     fi
     ui_click "$map" "Ready at start" 1 "$log" || true
     mako_says "$config" '^frame_generation_provisioned = false$' "$ui_log" "MAKO: Ready at start" "unticked"
-    restart_mark_says "$map" "Ready at start" 1 "$log" "$ui_log" "MAKO: Ready at start waits for the next start" "unticked"
+    next_launch_says "$map" "Ready at start" 1 "$log" "$ui_log" "MAKO: Ready at start waits for the next start" "unticked"
     ui_hover "$map" "Fixed##Mode" "$log" || true
     ui_state "$map" mako-07-ready-at-start-off "$ui_log" "Ready at start off: the card says On works only from a launch with it on"
     ui_click "$map" "Ready at start" 1 "$log" || true
@@ -3761,7 +3765,7 @@ drive_mako() {
     mako_says "$config" '^swapchain_image_count_compatibility = true$' "$ui_log" "MAKO: Keep swapchain image count" "ticked"
     ui_click "$map" "Mailbox compatibility" 1 "$log" || true
     mako_says "$config" '^mailbox_presentation_compatibility = true$' "$ui_log" "MAKO: Mailbox compatibility" "ticked"
-    restart_mark_says "$map" "Mailbox compatibility" 1 "$log" "$ui_log" "MAKO: Mailbox compatibility waits for the next start" "ticked"
+    next_launch_says "$map" "Mailbox compatibility" 1 "$log" "$ui_log" "MAKO: Mailbox compatibility waits for the next start" "ticked"
     ui_click "$map" "Effects after frame generation" 1 "$log" || true
     if file_says "$home/.config/vkdaedalus/profiles/default.conf" '^effectsAfterFrameGeneration = true$'; then
         ui_result "$ui_log" PASS "MAKO: effects after frame generation" "ticking it saved effectsAfterFrameGeneration = true in default, the profile vkcube runs"
@@ -3770,13 +3774,13 @@ drive_mako() {
     fi
     ui_click "$map" "##Half precision" 1 "$log" || true
     mako_says "$config" '^allow_fp16 = false$' "$ui_log" "MAKO: Half precision" "unticked, for every game"
-    restart_mark_says "$map" "Half precision" 1 "$log" "$ui_log" "MAKO: Half precision waits for the next start" "unticked"
+    next_launch_says "$map" "Half precision" 1 "$log" "$ui_log" "MAKO: Half precision waits for the next start" "unticked"
     ui_hover "$map" "##Half precision" "$log" || true
     ui_state "$map" mako-08-next-launch "$ui_log" "the next-launch and all-games settings changed, each marked as waiting"
 
     sed -i 's/^name = "vkdaedalus default"$/&\ngpu = "Another GPU"/' "$config"
     if ui_wait "$map" "Use the game's GPU" "" "" "$log"; then
-        restart_mark_says "$map" "GPU" 1 "$log" "$ui_log" "MAKO: a GPU named in the run waits for the next start" "gpu = \"Another GPU\" written after the game started"
+        next_launch_says "$map" "GPU" 1 "$log" "$ui_log" "MAKO: a GPU named in the run waits for the next start" "gpu = \"Another GPU\" written after the game started"
         ui_hover "$map" "Use the game's GPU" "$log" || true
         ui_state "$map" mako-09-other-gpu "$ui_log" "MAKO's file names another GPU: the GPU row says so, with one action"
         ui_click "$map" "Use the game's GPU" 1 "$log" || true
@@ -3785,7 +3789,7 @@ drive_mako() {
         else
             ui_result "$ui_log" FAIL "MAKO: a file naming another GPU" "Use the game's GPU left $(grep '^gpu = ' "$config")"
         fi
-        restart_mark_says "$map" "GPU" 0 "$log" "$ui_log" "MAKO: the GPU back as it started" "Use the game's GPU cleared the key the game started without"
+        next_launch_says "$map" "GPU" 0 "$log" "$ui_log" "MAKO: the GPU back as it started" "Use the game's GPU cleared the key the game started without" "$gpu_row"
     else
         ui_result "$ui_log" FAIL "MAKO: a file naming another GPU" "with gpu = \"Another GPU\" in MAKO's profile the card offered no Use the game's GPU"
     fi
@@ -3840,7 +3844,7 @@ drive_mako() {
     ui_click "$map" "Scaling" 1 "$log" || true
     ui_click "$map" "On###scaling" 1 "$log" || true
     mako_says "$config" '^scaling_enabled = true$' "$ui_log" "Scaling: On" "ticked"
-    restart_mark_says "$map" "Scaling" 1 "$log" "$ui_log" "Scaling: On waits for the next start" "ticked"
+    next_launch_says "$map" "Scaling" 1 "$log" "$ui_log" "Scaling: On waits for the next start" "ticked"
     if [ "$(ui_field "$map" "MAKO Scaler##Method" 7)" = 1 ] || [ "$(ui_field "$map" "##Method" 7)" = 1 ]; then
         ui_result "$ui_log" PASS "Scaling: Ultra performance forces MAKO Scaler" "with Ultra performance ticked while MAKO does not run the profile, the next launch scales with MAKO Scaler, so Method is greyed"
     else
@@ -4378,7 +4382,7 @@ drive_frame_generation() {
     else
         ui_result "$ui_log" FAIL "Frame generation: effects after it" "ticking it never saved effectsAfterFrameGeneration = true in default, the profile vkcube runs"
     fi
-    restart_mark_says "$map" "Effects after frame generation" 1 "$log" "$ui_log" "Frame generation: effects after it waits for the next start" "ticked while this run runs effects before frame generation"
+    next_launch_says "$map" "Effects after frame generation" 1 "$log" "$ui_log" "Frame generation: effects after it waits for the next start" "ticked while this run runs effects before frame generation"
     ui_state "$map" fg-06-next-launch "$ui_log"
     ui_hover "$map" "Frame generation" "$log" || true
     ui_state "$map" fg-01-frame-generation "$ui_log" "the Frame generation card, its tile hovered"
@@ -4406,7 +4410,7 @@ drive_frame_generation() {
     if ! hold_key_until "$OVERLAY_KEY" 'overlay opened' 1 "$log" || ! ui_wait "$map" "##Half precision" "" "" "$log"; then
         ui_result "$ui_log" FAIL "Frame generation: Half precision waits for the next start" "the overlay never opened again on the Frame generation card"
     elif file_says "$config" '^allow_fp16 = true$' && ui_click "$map" "##Half precision" 1 "$log" && file_says "$config" '^allow_fp16 = false$'; then
-        restart_mark_says "$map" "Half precision" 1 "$log" "$ui_log" "Frame generation: Half precision waits for the next start" "a click saved allow_fp16 = false"
+        next_launch_says "$map" "Half precision" 1 "$log" "$ui_log" "Frame generation: Half precision waits for the next start" "a click saved allow_fp16 = false"
     else
         ui_result "$ui_log" FAIL "Frame generation: Half precision waits for the next start" "a click left $(grep -m1 '^allow_fp16' "$config" || echo no allow_fp16), want allow_fp16 = false from the seeded true"
     fi

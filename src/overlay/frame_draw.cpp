@@ -153,6 +153,9 @@ namespace vkBasalt
                 pen.arc(12, 12, 8, 0.0f, 315.0f);
                 pen.lines({{20, 4}, {20, 9}, {15, 9}});
                 break;
+            case Icon::Pause:
+                pen.rect(6, 5, 4, 14, 1), pen.rect(14, 5, 4, 14, 1);
+                break;
         }
     }
 
@@ -193,26 +196,10 @@ namespace vkBasalt
         list->AddText(font, fontSize, ImVec2(at.x + fontSize * 0.45f, at.y + fontSize * 0.15f), ImGui::GetColorU32(palette.secondary), key);
     }
 
-    void restartMark(const char* what, bool pending, const OverlayPalette& palette)
-    {
-        const float scale = ImGui::GetStyle().FontScaleMain;
-        ImGui::SameLine(0.0f, restartMarkGap * scale);
-        const ImVec2 at   = ImGui::GetCursorScreenPos();
-        const float  size = restartMarkSize * scale;
-        drawIcon(ImGui::GetWindowDrawList(), Icon::Restart, ImVec2(at.x, at.y + (ImGui::GetFrameHeight() - size) * 0.5f), size,
-                 ImGui::GetColorU32(pending ? palette.warn : palette.faint));
-        const ImVec2      box(size, ImGui::GetFrameHeight());
-        const std::string name = std::string(what) + " restart mark";
-        ImGui::ItemSize(box);
-        UiMap::nameNextItem(name.c_str());
-        if (ImGui::ItemAdd(ImRect(at, ImVec2(at.x + box.x, at.y + box.y)), ImGui::GetID(name.c_str()), nullptr, ImGuiItemFlags_NoNav))
-            UiMap::markChecked(ImGui::GetItemID(), pending);
-    }
-
     bool defaultMark(const char* what, bool changed, const std::string& defaultShown, const OverlayPalette& palette)
     {
         const float scale = ImGui::GetStyle().FontScaleMain;
-        const float size  = restartMarkSize * scale;
+        const float size  = defaultMarkSize * scale;
         ui::alignRight(size);
         const ImVec2      at = ImGui::GetCursorScreenPos();
         const ImVec2      box(size, ImGui::GetFrameHeight());

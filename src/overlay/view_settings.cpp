@@ -58,7 +58,7 @@ namespace vkBasalt
         if (!keyBindingProblem.empty())
         {
             ImGui::SameLine();
-            ui::chip(keyBindingProblem.c_str(), palette.warn);
+            ui::badge({Tone::Warn, Icon::Warning, keyBindingProblem});
         }
         const float keyWidth = ui::px(150.0f);
         const auto  row      = [&](const LayerKeyBinding& binding) {
@@ -178,10 +178,11 @@ namespace vkBasalt
         const char* source = fromDesktop.source == ScaleSource::WaylandOutput ? "Wayland"
                            : fromDesktop.source == ScaleSource::XftDpi        ? "X11"
                                                                               : "not found";
-        ui::chip(source, palette.secondary,
-                 fromDesktop.source == ScaleSource::WaylandOutput ? "From the display the game is on"
-                 : fromDesktop.source == ScaleSource::XftDpi      ? "From X11's DPI setting; a game KWin already scales is not scaled again"
-                                                                  : "No scale found: 100% is used");
+        ui::badge({Tone::Muted, std::nullopt, source},
+                  fromDesktop.source == ScaleSource::WaylandOutput ? "From the display the game is on"
+                  : fromDesktop.source == ScaleSource::XftDpi      ? "From X11's DPI setting; a game KWin already scales is not scaled again"
+                                                                   : "No scale found: 100% is used",
+                  true);
         if (defaultMark("Size", chosen != VkBasaltSettings{}.overlaySizePercent, "Desktop", palette))
         {
             settingsManager.setOverlaySizePercent(VkBasaltSettings{}.overlaySizePercent);
@@ -192,7 +193,7 @@ namespace vkBasalt
 
         int               backdrop      = settingsManager.getOverlayBackdropPercent();
         const std::string backdropShown = std::to_string(backdrop) + "%";
-        const float       markRoom      = restartMarkSize * ImGui::GetStyle().FontScaleMain + ImGui::GetStyle().ItemSpacing.x;
+        const float       markRoom      = defaultMarkSize * ImGui::GetStyle().FontScaleMain + ImGui::GetStyle().ItemSpacing.x;
         ui::panelRow();
         ui::sliderRowBegin("Backdrop", backdropShown.c_str(), markRoom);
         if (ui::sliderInt("##overlayBackdrop", &backdrop, OVERLAY_BACKDROP_PERCENT_RANGE.lowest, OVERLAY_BACKDROP_PERCENT_RANGE.highest, ImGuiSliderFlags_AlwaysClamp))
@@ -443,10 +444,10 @@ namespace vkBasalt
         if (safeAntiCheat)
         {
             ImGui::SameLine();
-            ui::chip("off while Safe Anti-Cheat is on for this game", palette.muted);
+            ui::badge({Tone::Muted, Icon::Shield, "off while Safe Anti-Cheat is on for this game"}, nullptr, true);
         }
         else
-            restartMark("Depth capture", depthCapture != running, palette);
+            ui::nextLaunch("Depth capture", depthCapture != running);
         if (defaultMark("Depth capture", depthCapture != VkBasaltSettings{}.depthCapture, VkBasaltSettings{}.depthCapture ? "on" : "off", palette))
         {
             settingsManager.setDepthCapture(VkBasaltSettings{}.depthCapture);

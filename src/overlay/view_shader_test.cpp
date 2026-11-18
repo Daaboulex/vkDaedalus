@@ -160,7 +160,6 @@ namespace vkBasalt
 
         if (shaderTestComplete && !shaderTestResults.empty())
         {
-            const OverlayPalette& palette = activePalette();
             const bool blocking     = settingsManager.getSafeAntiCheat();
             int        allowedCount = 0, failCount = 0, depthCount = 0;
             for (const ShaderTestResult& result : shaderTestResults)
@@ -169,14 +168,13 @@ namespace vkBasalt
                 failCount += result.success ? 0 : 1;
                 depthCount += result.success && result.usesDepth ? 1 : 0;
             }
-            ui::chip((std::to_string(allowedCount) + " allowed").c_str(), palette.ok);
+            ui::badge(allowedBadge(allowedCount));
             ImGui::SameLine();
-            ui::chip((std::to_string(failCount) + " failed").c_str(), failCount == 0 ? palette.muted : palette.bad);
+            ui::badge(failedBadge(failCount));
             if (depthCount > 0)
             {
                 ImGui::SameLine();
-                ui::chip((std::to_string(depthCount) + (blocking ? " blocked" : " read depth")).c_str(), palette.info,
-                         blocking ? "These read depth, which Safe Anti-Cheat blocks" : "These read depth; Safe Anti-Cheat would block them");
+                ui::badge(depthBadge(depthCount, blocking), blocking ? "These read depth, which Safe Anti-Cheat blocks" : "These read depth; Safe Anti-Cheat would block them");
             }
             if (shaderTestDuplicateCount > 0)
             {
@@ -212,7 +210,7 @@ namespace vkBasalt
             {
                 const size_t lines = static_cast<size_t>(std::count(error.begin(), error.end(), '\n')) + (error.back() == '\n' ? 0 : 1);
                 ImGui::SameLine();
-                ui::chip((std::to_string(lines) + (lines == 1 ? " warning" : " warnings")).c_str(), palette.warn, error.c_str());
+                ui::badge(warningsBadge(lines), error.c_str(), true);
             }
         };
 
