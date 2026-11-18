@@ -823,6 +823,16 @@ static void greyedControls()
            "Ultra performance that MAKO started with keeps forcing these in this run, though it is unticked now");
     expect(makoUltraRaises("quality") && makoUltraRaises("balanced") && !makoUltraRaises("performance") && !makoUltraRaises("extra-performance"),
            "Ultra performance raises MAKO FG mode Quality and Balanced to Performance and leaves Performance and Extra performance as they are");
+
+    const MakoGreyedWhy outsideGamescope = makoGreyedWhy(fixedTarget, nullptr, false);
+    const MakoGreyedWhy insideGamescope  = makoGreyedWhy(fixedTarget, nullptr, true);
+    expect(outsideGamescope.refreshThreshold.find("gamescope") != std::string::npos && outsideGamescope.supersampling.find("gamescope") != std::string::npos
+               && insideGamescope.refreshThreshold.empty() && insideGamescope.supersampling.empty(),
+           "the refresh threshold and supersampling are greyed outside gamescope, whose refresh and surface they need, and editable under it");
+    MakoSettings recovering           = fixedTarget;
+    recovering.dynamicCadenceRecovery = true;
+    expect(insideGamescope.probeInterval.find("Cadence recovery") != std::string::npos && makoGreyedWhy(recovering, nullptr, true).probeInterval.empty(),
+           "the probe interval is greyed while Cadence recovery, the only thing that probes, is off");
 }
 
 static void nextLaunchChanges()

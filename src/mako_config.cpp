@@ -590,7 +590,11 @@ namespace vkBasalt
     {
         MakoGreyedWhy why;
         if (!gamescope)
-            why.displayRefresh = "Works only under gamescope: MAKO follows the refresh gamescope reports";
+        {
+            why.displayRefresh   = "Works only under gamescope: MAKO follows the refresh gamescope reports";
+            why.refreshThreshold = "Works only under gamescope: MAKO compares it with the refresh gamescope reports";
+            why.supersampling    = "Works only under gamescope, on a surface gamescope lets MAKO size";
+        }
         else if (edited.adaptiveTargetRefreshRate)
             why.target = "The fallback while Display refresh is on: MAKO aims at gamescope's refresh, and at this target only while gamescope reports none";
         if (runningSinceStart ? runningSinceStart->ultraPerformance : edited.ultraPerformance)
@@ -599,6 +603,8 @@ namespace vkBasalt
             why.performanceMode = "Ultra performance turns it on";
             why.raisedFgModes   = "Ultra performance raises Quality and Balanced to Performance";
         }
+        if (!edited.dynamicCadenceRecovery)
+            why.probeInterval = "Used only while Cadence recovery is on";
         return why;
     }
 

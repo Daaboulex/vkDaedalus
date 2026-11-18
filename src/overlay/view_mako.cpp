@@ -473,18 +473,25 @@ namespace vkBasalt
                 slide("Base FPS cap", "##Base FPS cap", set.baseFpsCap, 0u, MakoLimits::highestBaseFpsCap,
                       set.baseFpsCap == 0 ? "Off" : std::to_string(set.baseFpsCap), "Caps the game's own frames before frame generation; 0 is off");
             });
-            ui::panelRow();
-            greyed(recovery, "Off while Cadence recovery is on", [&] {
-                changed = ui::checkbox("Auto base cap", &set.adaptiveAutoBaseFpsCap) || changed;
-                ImGui::SetItemTooltip("Caps the game's own frames at half the target");
+            if (set.adaptive)
+            {
+                ui::panelRow();
+                greyed(recovery, "Off while Cadence recovery is on", [&] {
+                    changed = ui::checkbox("Auto base cap", &set.adaptiveAutoBaseFpsCap) || changed;
+                    ImGui::SetItemTooltip("Caps the game's own frames at half the target");
+                });
+            }
+            greyed(!greyedWhy.refreshThreshold.empty(), greyedWhy.refreshThreshold.c_str(), [&] {
+                slide("Refresh threshold", "##Refresh threshold", set.frameGenerationRefreshThreshold, 0u, MakoLimits::highestRefreshThreshold,
+                      set.frameGenerationRefreshThreshold == 0 ? "Off" : std::to_string(set.frameGenerationRefreshThreshold) + " Hz",
+                      "The highest display refresh rate at which frame generation stays paused; 0 is off");
             });
-            slide("Refresh threshold", "##Refresh threshold", set.frameGenerationRefreshThreshold, 0u, MakoLimits::highestRefreshThreshold,
-                  set.frameGenerationRefreshThreshold == 0 ? "Off" : std::to_string(set.frameGenerationRefreshThreshold) + " Hz",
-                  "The highest display refresh rate at which frame generation stays paused; 0 is off");
             flag("Cadence recovery", set.dynamicCadenceRecovery, "Checks the pacing now and then, for games that change their frame rate; turns the base caps off", false);
             std::snprintf(text, sizeof(text), "%.2f s", set.dynamicCadenceProbeIntervalSeconds);
-            slide("Probe interval", "##Probe interval", set.dynamicCadenceProbeIntervalSeconds, MakoLimits::lowestProbeIntervalSeconds,
-                  MakoLimits::highestProbeIntervalSeconds, text, "How often Cadence recovery checks the pacing");
+            greyed(!greyedWhy.probeInterval.empty(), greyedWhy.probeInterval.c_str(), [&] {
+                slide("Probe interval", "##Probe interval", set.dynamicCadenceProbeIntervalSeconds, MakoLimits::lowestProbeIntervalSeconds,
+                      MakoLimits::highestProbeIntervalSeconds, text, "How often Cadence recovery checks the pacing");
+            });
             VkPhysicalDeviceProperties properties{};
             pLogicalDevice->vki.GetPhysicalDeviceProperties(pLogicalDevice->physicalDevice, &properties);
             if (properties.vendorID == 0x1002)
@@ -808,9 +815,13 @@ namespace vkBasalt
             ui::beginPanel();
             slide("Factor", "##Factor", set.scalingFactor, MakoLimits::lowestScalingFactor, MakoLimits::highestScalingFactor, "%.2fx",
                   "2x shows the game's frame at twice its width and height");
+            const std::string supersamplingWhy = makoGreyedWhy(set, nullptr, underGamescope()).supersampling;
             ui::panelRow();
+            ImGui::BeginDisabled(!supersamplingWhy.empty());
             changed = ui::checkbox("Supersampling", &set.scalingSupersampling) || changed;
+            ImGui::EndDisabled();
             ImGui::SetItemTooltip("Lets MAKO exceed a gamescope output limit to scale down at higher quality, at more GPU and memory use");
+            whyGreyed(supersamplingWhy);
             ui::endPanel();
             ImGui::EndTable();
         }

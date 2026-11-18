@@ -179,6 +179,9 @@ namespace vkBasalt
         std::string flowScale;
         std::string performanceMode;
         std::string raisedFgModes;
+        std::string refreshThreshold;
+        std::string probeInterval;
+        std::string supersampling;
     };
 
     std::optional<MakoFile> parseMakoFile(const std::string& text, std::string& problem);

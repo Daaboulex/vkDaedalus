@@ -3625,10 +3625,17 @@ drive_mako() {
     mako_says "$config" '^adaptive_fractional_real_frame_priority = "high"$' "$ui_log" "MAKO: Real frames" "High picked"
     ui_click "$map" "Stable cadence" 1 "$log" || true
     mako_says "$config" '^adaptive_stable_cadence = false$' "$ui_log" "MAKO: Stable cadence" "unticked"
+    ui_click "$map" "Auto base cap" 1 "$log" || true
+    mako_says "$config" '^adaptive_auto_base_fps_cap = true$' "$ui_log" "MAKO: Auto base cap" "ticked in Adaptive"
     ui_hover "$map" "##Target" "$log" || true
-    ui_state "$map" mako-03-adaptive "$ui_log" "Adaptive: target, display refresh, max multiplier, real frames and stable cadence in place of the multiplier"
+    ui_state "$map" mako-03-adaptive "$ui_log" "Adaptive: target, display refresh, max multiplier, real frames and stable cadence in place of the multiplier, and the auto base cap"
     ui_pick "$map" Mode Fixed "$log" || true
     mako_says "$config" '^adaptive = false$' "$ui_log" "MAKO: Mode back to Fixed" "Fixed picked"
+    if ui_gone "$map" "Auto base cap" "$log"; then
+        ui_result "$ui_log" PASS "MAKO: Auto base cap only in Adaptive" "with Fixed picked the Adaptive base cap is not drawn"
+    else
+        ui_result "$ui_log" FAIL "MAKO: Auto base cap only in Adaptive" "with Fixed picked the Adaptive base cap is still drawn"
+    fi
     ui_set_value "$map" "##Multiplier" 4 "$log" || true
     mako_says "$config" '^multiplier = 4$' "$ui_log" "MAKO: Multiplier" "4 typed into it"
     ui_set_value "$map" "##Multiplier" 99 "$log" || true
@@ -3643,21 +3650,20 @@ drive_mako() {
 
     ui_set_value "$map" "##Base FPS cap" 60 "$log" || true
     mako_says "$config" '^base_fps_cap = 60$' "$ui_log" "MAKO: Base FPS cap" "60 typed into it"
-    ui_click "$map" "Auto base cap" 1 "$log" || true
-    mako_says "$config" '^adaptive_auto_base_fps_cap = true$' "$ui_log" "MAKO: Auto base cap" "ticked"
     ui_set_value "$map" "##Refresh threshold" 100 "$log" || true
     mako_says "$config" '^frame_generation_refresh_threshold = 100$' "$ui_log" "MAKO: Refresh threshold" "100 typed into it"
-    ui_set_value "$map" "##Probe interval" 0.5 "$log" || true
-    mako_says "$config" '^dynamic_cadence_probe_interval_seconds = 0\.5$' "$ui_log" "MAKO: Probe interval" "0.5 typed into it"
+    greyed_says "$map" "##Probe interval" 1 "$log" "$ui_log" "MAKO: Probe interval waits for Cadence recovery" "with Cadence recovery off nothing probes, so Probe interval is greyed"
     ui_click "$map" "Cadence recovery" 1 "$log" || true
     mako_says "$config" '^dynamic_cadence_recovery = true$' "$ui_log" "MAKO: Cadence recovery" "ticked"
-    if ui_wait "$map" "##Base FPS cap" 7 1 "$log" && ui_wait "$map" "Auto base cap" 7 1 "$log"; then
-        ui_result "$ui_log" PASS "MAKO: Cadence recovery greys what MAKO zeroes" "the base cap and the auto base cap are greyed with the reason"
+    ui_set_value "$map" "##Probe interval" 0.5 "$log" || true
+    mako_says "$config" '^dynamic_cadence_probe_interval_seconds = 0\.5$' "$ui_log" "MAKO: Probe interval" "0.5 typed into it with Cadence recovery on"
+    if ui_wait "$map" "##Base FPS cap" 7 1 "$log"; then
+        ui_result "$ui_log" PASS "MAKO: Cadence recovery greys what MAKO zeroes" "the base cap is greyed with the reason"
     else
-        ui_result "$ui_log" FAIL "MAKO: Cadence recovery greys what MAKO zeroes" "base cap greyed $(ui_field "$map" "##Base FPS cap" 7), auto base cap greyed $(ui_field "$map" "Auto base cap" 7)"
+        ui_result "$ui_log" FAIL "MAKO: Cadence recovery greys what MAKO zeroes" "base cap greyed $(ui_field "$map" "##Base FPS cap" 7)"
     fi
     ui_hover "$map" "##Base FPS cap" "$log" || true
-    ui_state "$map" mako-04-cadence-recovery "$ui_log" "Cadence recovery on: the base cap, auto base cap and headroom greyed, as MAKO zeroes them"
+    ui_state "$map" mako-04-cadence-recovery "$ui_log" "Cadence recovery on: the base cap and headroom greyed, as MAKO zeroes them"
     ui_click "$map" "Cadence recovery" 1 "$log" || true
     mako_says "$config" '^dynamic_cadence_recovery = false$' "$ui_log" "MAKO: Cadence recovery off" "unticked again"
     if [[ "$LANE_GPU_ID" == 0x1002:* ]]; then
@@ -3941,6 +3947,7 @@ drive_layer_state() {
             else
                 ui_result "$ui_log" FAIL "MAKO: Gamescope VRR only under gamescope" "with no GAMESCOPE_WAYLAND_DISPLAY in the game's environment, MAKO's card $( [ -n "$(ui_line "$map" "Follow Steam##Gamescope VRR")$(ui_line "$map" "##Gamescope VRR")" ] && echo 'drew the Gamescope VRR row' || echo 'never drew its Mode row')"
             fi
+            greyed_says "$map" "##Refresh threshold" 1 "$log" "$ui_log" "MAKO: Refresh threshold only under gamescope" "with no GAMESCOPE_WAYLAND_DISPLAY in the game's environment the threshold, which MAKO compares with gamescope's refresh, is greyed"
             ui_state "$map" fgl-05-switched-mid-run "$ui_log" "MAKO picked in a run started for lsfg-vk: it starts at the next launch, not a blocker"
             ;;
         disabled)
