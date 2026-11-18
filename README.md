@@ -50,10 +50,12 @@ The screenshots are real frames from the live test's gallery.
   MAKO's own MAKO FG: one choice per game in the overlay, tuned there too, with
   effects before or after it per game, and MAKO's scaling and pauses as MAKO
   reports them. A row MAKO ignores in this run is greyed with the reason. Frames
-  are generated on the game's GPU, which both layers require.
+  are generated on the game's GPU, which lsfg-vk and MAKO FG require; MAKO LSFG
+  can be given another GPU, and the card shows whether MAKO generates frames there.
 - **Multi-GPU offload**: effects can run on another GPU. The GPUs page lists what
-  runs on each GPU, sends an effect to another from there, keeps frame generation
-  and MAKO's scaling on the game's GPU, and shows every GPU's usage and memory.
+  runs on each GPU, sends an effect to another from there, shows frame generation
+  under the GPU it runs on and MAKO's scaling on the game's GPU, and shows every
+  GPU's usage and memory.
 - **Performance card**: frame statistics and what vkDaedalus adds to a frame,
   every formula in [LATENCY.md](LATENCY.md): FPS over the last second, the rest
   over the last 10 seconds, the display's refresh where the compositor reports

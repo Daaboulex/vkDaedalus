@@ -73,6 +73,14 @@ namespace vkBasalt
         return {Tone::Warn, Icon::Warning, amount + ", needs vkdaedalus-run"};
     }
 
+    inline Badge makoGpuClaimBadge(const MakoGpuClaim& claim)
+    {
+        const std::string where = makoGpusWords(claim.gpus, claim.named);
+        if (claim.generating)
+            return {Tone::Ok, Icon::Power, "Generating on " + where};
+        return {Tone::Bad, Icon::Warning, "No frames on " + where};
+    }
+
     inline Badge changesWaitingBadge(size_t count)
     {
         return {Tone::Warn, Icon::Warning, std::to_string(count) + (count == 1 ? " change" : " changes") + " at next launch"};

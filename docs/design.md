@@ -223,9 +223,12 @@ check's message or a test already says is not repeated here.
 - The card asks for the layer once. lsfg-vk, MAKO with Lossless Scaling's model and MAKO with its own
   are one choice of three: each needs something else installed, and all three take effect at the next
   launch. MAKO's own editors call Lossless Scaling's model LSFG, so the entry is MAKO LSFG.
-- MAKO generates frames only on the game's GPU, so the card offers no GPU and never writes MAKO's
-  `gpu` key; it offers to clear one that names another GPU. The card names the GPU in a row of its
-  own: read from a tooltip alone, the card looked as if it lacked a GPU choice.
+- Whether MAKO generates frames on the GPU its file names depends on the pair of GPUs and on the
+  model, so the card offers the GPU and shows what took. MAKO LSFG gets a GPU picker that writes
+  MAKO's `gpu` key in MAKO's own vendor and device form, or removes it for the game's GPU. MAKO FG,
+  which started on no GPU but the game's, gets the picker greyed and an offer to clear a key that
+  names another GPU. The card names the GPU in a row of its own: read from a tooltip alone, the card
+  looked as if it lacked a GPU choice.
 - Where MAKO generates frames is read from its status file, never from its settings: the GPU its
   applied profile names and the error it wrote. That GPU is matched by MAKO's own rule, so a name
   two GPUs share is claimed as either. The layer also reads the file without the overlay, at a low

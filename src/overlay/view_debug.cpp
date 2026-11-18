@@ -178,7 +178,7 @@ namespace vkBasalt
         if (debugWindowTab == 2)
         {
             ui::beginScrollArea("##debugframepath");
-            renderPipelineStrip(profileFrameGenerationLayer());
+            renderPipelineStrip();
             ui::divider();
             const float column = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
             const auto  fact   = [&](const char* name, const std::string& value, const char* tooltip) {

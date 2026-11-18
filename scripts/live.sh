@@ -883,7 +883,7 @@ drive_mako_live() {
     ui_click "$map" "Frame generation" 1 "$log" || true
     tile_says "$log" '^Frame generation tile: .*; Scaling tile: [0-9]+x[0-9]+ to [0-9]+x[0-9]+$' || true
     tile_line "$log" >"$log.tile"
-    ui_label_starting "$map" "GPU 1, " "$log" >"$log.gpu" || true
+    if ui_wait "$map" "##GPU" "" "" "$log"; then echo "with its GPU picker" >"$log.gpu"; fi
     ui_wait "$map" "MAKO Scaler step" "" "" "$log" && echo shown >"$log.scaler"
     ui_click "$map" "Scaling" 1 "$log" || true
     reloads=$(count '^MAKO Renderer: updated configuration in place; contexts=[1-9]' "$log")
@@ -971,7 +971,7 @@ mako_live_case() {
         wrong+=("the Scaling tile said: $(cat "$log.tile"), want the sizes MAKO said it scales, $source to $presented, read from MAKO's status file")
     fi
     if [ ! -s "$log.scaler" ]; then wrong+=("the strip of this run drew no MAKO Scaler step while MAKO scaled"); fi
-    if [ "$(wc -c <"$log.gpu")" -le 8 ]; then wrong+=("MAKO's body drew no GPU row naming GPU 1 and the game's GPU"); fi
+    if [ ! -s "$log.gpu" ]; then wrong+=("MAKO's body drew no GPU row with its GPU picker"); fi
     if absent=$(mako_fg_absent); then
         if [[ "$(cat "$log.tile")" != 'Frame generation tile: MAKO, needs a model ('* ]]; then wrong+=("without MAKO FG the tiles say: $(cat "$log.tile"), want MAKO, needs a model"); fi
         if [ "$(count '^MAKO Renderer: frame-generation backend initialization failed; independent spatial scaling retained:' "$log")" -lt 1 ] ||
@@ -3598,7 +3598,7 @@ greyed_says() {
 }
 
 drive_mako() {
-    local log="$1" map="$2" config="$3" home="$4" ui_log="$1.ui" window library want gpu_row
+    local log="$1" map="$2" config="$3" home="$4" ui_log="$1.ui" window library want gpu_row game_gpu other_gpu
     : >"$ui_log"
     if ! wait_for_line 'present cycle' 30 "$log"; then
         ui_result "$ui_log" FAIL "MAKO: the card" "the game never reached 30 presents"
@@ -3633,10 +3633,11 @@ drive_mako() {
     else
         ui_result "$ui_log" FAIL "MAKO: On" "the tiles say: $(tile_line "$log"), want $want"
     fi
-    if gpu_row=$(ui_label_starting "$map" "GPU 1, " "$log") && [ "${#gpu_row}" -gt 7 ]; then
-        ui_result "$ui_log" PASS "MAKO: the GPU row" "MAKO's body starts with the GPU it generates frames on: $gpu_row"
+    gpu_row="##GPU"
+    if ui_wait "$map" "$gpu_row" 7 1 "$log"; then
+        ui_result "$ui_log" PASS "MAKO: the GPU row" "MAKO's body starts with the GPU picker, greyed with MAKO FG, which does not start its frame generation on a GPU other than the game's"
     else
-        ui_result "$ui_log" FAIL "MAKO: the GPU row" "MAKO's body has no row naming GPU 1 and the game's GPU: ${gpu_row:-none}"
+        ui_result "$ui_log" FAIL "MAKO: the GPU row" "with MAKO FG chosen the GPU picker is $( [ -n "$(ui_line "$map" "$gpu_row")" ] && echo 'usable, though MAKO FG does not start on another GPU' || echo 'not on the page')"
     fi
     ui_hover "$map" "MAKO LSFG##Layer" "$log" || true
     ui_state "$map" mako-02-on "$ui_log" "MAKO switched on: its profile written; MAKO is not loaded in this game, which vkdaedalus-run did not start, so the card says MAKO needs it"
@@ -3787,19 +3788,36 @@ drive_mako() {
     ui_state "$map" mako-08-next-launch "$ui_log" "the next-launch and all-games settings changed, each marked as waiting"
 
     sed -i 's/^name = "vkdaedalus default"$/&\ngpu = "Another GPU"/' "$config"
-    if ui_wait "$map" "Use the game's GPU" "" "" "$log"; then
+    if ui_wait "$map" "$gpu_row" 7 0 "$log"; then
         next_launch_says "$map" "GPU" 1 "$log" "$ui_log" "MAKO: a GPU named in the run waits for the next start" "gpu = \"Another GPU\" written after the game started"
-        ui_hover "$map" "Use the game's GPU" "$log" || true
-        ui_state "$map" mako-09-other-gpu "$ui_log" "MAKO's file names another GPU: the GPU row says so, with one action"
-        ui_click "$map" "Use the game's GPU" 1 "$log" || true
-        if mako_lacks "$config" '^gpu = '; then
-            ui_result "$ui_log" PASS "MAKO: a file naming another GPU" "the card named it with Use the game's GPU, which cleared the key"
+        ui_click "$map" "$gpu_row" 1 "$log" || true
+        game_gpu=$(ui_label_starting "$map" "GPU 1, " "$log") || game_gpu=""
+        other_gpu=$(awk -F'\t' 'NR > 1 && index($2, "GPU ") == 1 && index($2, "GPU 1, ") != 1 && index($2, "##GPU") { print $2; exit }' "$map")
+        ui_state "$map" mako-09-other-gpu "$ui_log" "MAKO's file names another GPU: the GPU picker says so and offers the game's GPU first, then every other GPU"
+        if [ -n "$game_gpu" ]; then ui_click "$map" "$game_gpu" 1 "$log" || true; fi
+        if [ -n "$game_gpu" ] && mako_lacks "$config" '^gpu = '; then
+            ui_result "$ui_log" PASS "MAKO: picking the game's GPU" "with the Lossless Scaling model the GPU picker offered ${game_gpu%%##*} first, and picking it removed the key"
         else
-            ui_result "$ui_log" FAIL "MAKO: a file naming another GPU" "Use the game's GPU left $(grep '^gpu = ' "$config")"
+            ui_result "$ui_log" FAIL "MAKO: picking the game's GPU" "the GPU picker offered ${game_gpu:-no GPU 1}, and MAKO's file still holds $(grep '^gpu = ' "$config" || echo 'no gpu key')"
         fi
-        next_launch_says "$map" "GPU" 0 "$log" "$ui_log" "MAKO: the GPU back as it started" "Use the game's GPU cleared the key the game started without" "$gpu_row"
+        next_launch_says "$map" "GPU" 0 "$log" "$ui_log" "MAKO: the GPU back as it started" "picking the game's GPU removed the key the game started without" "$gpu_row"
+        if [ -z "$other_gpu" ]; then
+            ui_result "$ui_log" SKIP "MAKO: picking another GPU" "the game's Vulkan lists no GPU besides the game's"
+        else
+            ui_click "$map" "$gpu_row" 1 "$log" || true
+            ui_click "$map" "$other_gpu" 1 "$log" || true
+            if file_says "$config" '^gpu = "0x[0-9A-F]{4}:0x[0-9A-F]{4}"$'; then
+                ui_result "$ui_log" PASS "MAKO: picking another GPU" "${other_gpu%%##*} picked wrote $(grep '^gpu = ' "$config"), MAKO's form of vendor and device"
+            else
+                ui_result "$ui_log" FAIL "MAKO: picking another GPU" "${other_gpu%%##*} picked left $(grep '^gpu = ' "$config" || echo 'no gpu key') in MAKO's file"
+            fi
+            next_launch_says "$map" "GPU" 1 "$log" "$ui_log" "MAKO: another GPU waits for the next start" "${other_gpu%%##*} picked"
+            ui_click "$map" "$gpu_row" 1 "$log" || true
+            ui_click "$map" "$game_gpu" 1 "$log" || true
+            mako_lacks "$config" '^gpu = ' || ui_result "$ui_log" FAIL "MAKO: picking another GPU" "picking the game's GPU again left $(grep '^gpu = ' "$config")"
+        fi
     else
-        ui_result "$ui_log" FAIL "MAKO: a file naming another GPU" "with gpu = \"Another GPU\" in MAKO's profile the card offered no Use the game's GPU"
+        ui_result "$ui_log" FAIL "MAKO: picking the game's GPU" "with the Lossless Scaling model and gpu = \"Another GPU\" in MAKO's profile the GPU picker is $( [ -n "$(ui_line "$map" "$gpu_row")" ] && echo greyed || echo 'not on the page')"
     fi
 
     printf '[profile.handheld]\n[profile.docked]\n' >>"$config"

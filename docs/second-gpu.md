@@ -9,8 +9,8 @@ comes back to GPU 1, so the swapchain, present mode, VRR and vsync stay the game
 2. Click the effect under its GPU on the GPUs card, or open GPU in its row menu, and pick the GPU. The
    effect and the rows after it run there, until a row picks another GPU.
 
-The card lists under each GPU what runs on it, with frame generation and MAKO's scaling locked to the
-game's GPU, and shows every GPU's usage and memory, the trip to the other GPUs and back, and each GPU's
+The card lists under each GPU what runs on it, with frame generation under the GPU it runs on and
+MAKO's scaling locked to the game's GPU, and shows every GPU's usage and memory, the trip to the other GPUs and back, and each GPU's
 copies in and out while Per-effect GPU timing is on. The game's device gets the sharing extensions only
 when its profile lists another GPU at launch; after that, a row moved to that GPU runs there at once.
 

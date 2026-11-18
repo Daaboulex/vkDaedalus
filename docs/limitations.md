@@ -26,6 +26,9 @@
 - Whether MAKO FG is installed is read beside the MAKO library the game loaded, so in a game started
   without MAKO the card cannot tell and does not say it is missing.
 - GPU headroom is offered only on an AMD GPU: MAKO reads it from AMD's `gpu_busy_percent`.
+- Frame generation runs on another GPU than the game's only with MAKO LSFG, and only between some GPUs. As measured,
+  MAKO LSFG generated frames with the game on one of two AMD GPUs and MAKO on the other, and none between an NVIDIA and
+  an AMD GPU, either way round; MAKO FG started on no GPU but the game's, and lsfg-vk has no GPU setting.
 - No live lane runs MAKO on an HDR swapchain, so HDR quality's effect is not proven live. MAKO hands
   an HDR swapchain's colour space to a shader layer below it through a device function vkDaedalus
   does not export; which colour space the effects see in an HDR game with the effects before MAKO is

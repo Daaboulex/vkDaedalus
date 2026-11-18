@@ -47,7 +47,7 @@ MAKO group is the layer's own and the same for every game.
 | Layer | Changes live | Changes when the game rebuilds its swapchain | Changes at the next launch |
 |---|---|---|---|
 | lsfg-vk | multiplier, flow scale, performance mode, colour space, transfer function | | vsync, the swapchain image count, half precision, the DLL path, a profile switch |
-| MAKO | On, the multiplier, Adaptive and its target, flow scale, MAKO FG mode, performance mode, the pacing group, HDR quality, the scaling method and sharpness, a profile switch | the scaling factor, supersampling | Ready at start, the choice between MAKO LSFG and MAKO FG, Ultra performance, Scaling on, Keep swapchain image count, Mailbox compatibility, clearing MAKO's GPU, half precision, `Lossless.dll` |
+| MAKO | On, the multiplier, Adaptive and its target, flow scale, MAKO FG mode, performance mode, the pacing group, HDR quality, the scaling method and sharpness, a profile switch | the scaling factor, supersampling | Ready at start, the choice between MAKO LSFG and MAKO FG, Ultra performance, Scaling on, Keep swapchain image count, Mailbox compatibility, MAKO's GPU, half precision, `Lossless.dll` |
 
 The card greys a row MAKO ignores in this run, such as one Ultra performance overrides or one that works only under
 gamescope, with MAKO's reason.
@@ -116,10 +116,21 @@ launch. [How it works](how-it-works.md#the-order-around-frame-generation) explai
 
 ## Which GPU
 
-Frame generation runs on the GPU the game renders on. The card's GPU row names that GPU and offers no other. lsfg-vk 2
-has no GPU setting: it hands each frame to its own device as memory only the same GPU can import. MAKO supports no frame
-generation on another GPU than the game's; its file can name a GPU, which the card never writes, and when it names
-another than the game's the GPU row says so and offers to clear it. lsfg-vk 2's command-line tool takes a GPU for
-its benchmark and debug commands, which the layer in a game never reads. Effects can still run on another GPU, as
-[a second GPU](second-gpu.md) describes. The GPUs page lists under each GPU what runs on it: its effects, each of which
-can be sent to another GPU from there, and on the game's GPU frame generation and MAKO's scaling, locked to it.
+lsfg-vk and MAKO FG generate frames on the GPU the game renders on, and the card's GPU row names that GPU. lsfg-vk 2
+has no GPU setting: it hands each frame to its own device as memory only the same GPU can import. lsfg-vk 2's
+command-line tool takes a GPU for its benchmark and debug commands, which the layer in a game never reads.
+
+MAKO's file can name the GPU MAKO generates frames on, read when the game starts. With MAKO LSFG the GPU row picks it
+from the game's GPU and every other GPU of the game's Vulkan: the game's GPU removes MAKO's `gpu` key, and another GPU is
+written as MAKO writes vendor and device, `0xVVVV:0xDDDD`, which two GPUs of one model share, so MAKO cannot tell them
+apart. Whether MAKO starts there depends on the pair, as measured: MAKO LSFG generated frames with the game on one of
+two AMD GPUs and its file naming the other, and generated none between an NVIDIA and an AMD GPU, either way round,
+writing why into its status file. MAKO FG started its frame generation on no GPU but the game's, so with MAKO FG the
+picker is greyed, and a file naming another GPU gets an offer to clear it.
+
+The GPU row then shows, from MAKO's status file, where MAKO generates frames in this run: on the game's GPU, on the
+GPU its file names, or on none, with MAKO's error. The layer's log records the same, with the overlay closed too.
+
+Effects can still run on another GPU, as [a second GPU](second-gpu.md) describes. The GPUs page lists under each GPU
+what runs on it: its effects, each of which can be sent to another GPU from there, frame generation under the GPU it runs
+on, and MAKO's scaling on the game's GPU.

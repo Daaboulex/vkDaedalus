@@ -12,7 +12,9 @@
 #include <unistd.h>
 
 #include "config_serializer.hpp"
+#include "effects/effect_registry.hpp"
 #include "frame_generation_place.hpp"
+#include "helper_device.hpp"
 #include "latency_stats.hpp"
 #include "logger.hpp"
 #include "logical_device.hpp"
@@ -304,19 +306,33 @@ namespace vkBasalt
         return std::nullopt;
     }
 
-    void ImGuiOverlay::useGamesGpuInMako()
+    void ImGuiOverlay::setMakoGpu(const std::optional<std::string>& gpu)
     {
         const MakoProfile* inUse = makoProfileInUse();
         if (!inUse)
             return;
         MakoProfile changed  = *inUse;
-        changed.settings.gpu = std::nullopt;
+        changed.settings.gpu = gpu;
         if (changed.power)
         {
-            changed.power->handheld.gpu = std::nullopt;
-            changed.power->docked.gpu   = std::nullopt;
+            changed.power->handheld.gpu = gpu;
+            changed.power->docked.gpu   = gpu;
         }
         saveMako(std::nullopt, changed);
+    }
+
+    MakoGpus ImGuiOverlay::makoGpus()
+    {
+        if (!pLogicalDevice->offload)
+            return {};
+        return makoGpusOf(instanceGpusOf(*pLogicalDevice), pLogicalDevice->physicalDevice, pEffectRegistry ? pEffectRegistry->gpuPlan().list : std::vector<GpuListEntry>{});
+    }
+
+    std::optional<MakoGpuClaim> ImGuiOverlay::makoGpuClaimHere()
+    {
+        if (!makoLayerLoaded())
+            return std::nullopt;
+        return makoGpuClaim(makoStatus.ofSwapchain, makoGpus());
     }
 
     void ImGuiOverlay::renderMakoBody(bool flipped, bool on, const std::vector<std::string>& waiting)

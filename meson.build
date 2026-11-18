@@ -432,7 +432,7 @@ if get_option('with_so')
     test('shader-test-result', shader_test_result_test)
 
     status_badge_test = executable('status-badge-test',
-        'test/status_badge_test.cpp',
+        'test/status_badge_test.cpp', 'src/mako_status.cpp',
         include_directories : include_directories('src'))
     test('status-badge', status_badge_test)
 

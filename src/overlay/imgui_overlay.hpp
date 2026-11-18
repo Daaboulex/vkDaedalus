@@ -236,13 +236,13 @@ namespace vkBasalt
         std::string          frameGenerationTabGreyed(const FrameGenerationTab& tab);
         std::string          frameGenerationTabDllMissing(const FrameGenerationTab& tab);
         void                 chooseFrameGenerationTab(const FrameGenerationTab& tab);
-        void                 renderFrameGenerationGpuRow(FrameGenerationLayer layer, bool gpuWaits);
+        void                 renderFrameGenerationGpuRow(const FrameGenerationTab* chosen, bool gpuWaits);
         void                 refreshMakoStatus();
         MakoScalingShown     makoScaling();
         void                 renderLsfgBody(bool flipped, bool on, bool live, const std::vector<std::string>& waiting);
         void                 renderFrameOrderNote();
         void renderFrameGenerationGlobals();
-        void renderPipelineStrip(FrameGenerationLayer layer);
+        void renderPipelineStrip();
         bool                 readMakoOnce();
         void                 refreshMakoFile(bool now);
         void                 useMakoFile(const std::optional<MakoFile>& file);
@@ -259,7 +259,9 @@ namespace vkBasalt
         MakoSettings             makoSettingsAtStart() const;
         void                 switchMako(bool MakoSettings::*setting, bool on);
         std::optional<MakoGlobal> makoGlobalWithDll(const MakoSettings& written);
-        void                 useGamesGpuInMako();
+        void                 setMakoGpu(const std::optional<std::string>& gpu);
+        MakoGpus             makoGpus();
+        std::optional<MakoGpuClaim> makoGpuClaimHere();
         std::optional<std::string> makoGpuElsewhere();
         void                 renderMakoBody(bool flipped, bool on, const std::vector<std::string>& waiting);
         void                 renderMakoGlobals();

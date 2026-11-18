@@ -82,6 +82,14 @@ static void scalingHeader()
            "scaling on that waits for vkdaedalus-run is amber with the alert");
 }
 
+static void makoGpu()
+{
+    expect(is(makoGpuClaimBadge({true, {1}, "", ""}), Tone::Ok, Icon::Power, "Generating on GPU 1"), "MAKO generating on the game's GPU is green and names GPU 1");
+    expect(is(makoGpuClaimBadge({true, {2}, "0xABCD:0x2684", ""}), Tone::Ok, Icon::Power, "Generating on GPU 2"), "MAKO generating on another GPU is green and names it");
+    expect(is(makoGpuClaimBadge({false, {3}, "0xABCD:0x2684", "failed to create swapchain context"}), Tone::Bad, Icon::Warning, "No frames on GPU 3"),
+           "MAKO naming a GPU it generates no frames on is a red fault naming that GPU");
+}
+
 static void nextLaunch()
 {
     expect(is(changesWaitingBadge(1), Tone::Warn, Icon::Warning, "1 change at next launch"), "one waiting change is an amber alert in the singular");
@@ -106,6 +114,7 @@ int main()
 {
     frameGenerationHeader();
     scalingHeader();
+    makoGpu();
     nextLaunch();
     shaderTest();
     if (failures)

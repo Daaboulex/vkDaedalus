@@ -97,11 +97,18 @@ namespace vkBasalt
         };
         const std::vector<std::string> active  = pEffectRegistry->getActiveEffects();
         const std::vector<uint32_t>    rowGpus = effectiveGpus(plan.ownGpus);
-        const FrameGenerationState     fg      = frameGenerationState();
-        const bool                     mako    = fg.layer == FrameGenerationLayer::Mako;
-        const bool                     scales  = mako && fg.blocker.empty() && makoScaling().run == MakoScalingRun::Scaling;
+        const FrameGenerationState        fg       = frameGenerationState();
+        const bool                        mako     = fg.layer == FrameGenerationLayer::Mako;
+        const bool                        scales   = mako && fg.blocker.empty() && makoScaling().run == MakoScalingRun::Scaling;
+        const FrameGenerationTab*         chosen   = mako && fg.blocker.empty() ? frameGenerationTabChosen(fg.layer) : nullptr;
+        const bool                        lossless = chosen != nullptr && chosen->makoModel == "lossless-scaling";
+        const std::optional<MakoGpuClaim> claim    = mako && fg.blocker.empty() ? makoGpuClaimHere() : std::nullopt;
+        const std::vector<uint32_t>       fgGpus   = claim ? claim->gpus : std::vector<uint32_t>{gameGpu};
+        const auto                        generatesOn = [&](uint32_t number) {
+            return fg.on && fg.blocker.empty() && std::find(fgGpus.begin(), fgGpus.end(), number) != fgGpus.end();
+        };
         const auto hasWork = [&](uint32_t number) {
-            if (number == gameGpu && ((fg.on && fg.blocker.empty()) || scales))
+            if (generatesOn(number) || (number == gameGpu && scales))
                 return true;
             for (const std::string& name : active)
             {
@@ -111,18 +118,26 @@ namespace vkBasalt
             }
             return false;
         };
+        const std::string fgTip = !mako ? "lsfg-vk generates frames on the GPU the game renders on.\nIt takes each frame as memory only that GPU can import, and has no GPU setting."
+                                  : lossless
+                                      ? (claim ? makoGpuClaimLine(*claim) : std::string("MAKO generates frames on the GPU its file names when the game starts, the game's unless another is picked"))
+                                            + ".\nPick its GPU in the GPU row of the Frame generation card; MAKO reads it when the game starts."
+                                      : (claim ? makoGpuClaimLine(*claim) + ".\n" : std::string("MAKO generates frames on the GPU the game renders on.\n"))
+                                            + "MAKO FG does not start its frame generation on a GPU other than the game's.";
+        const Badge fgBadge = claim && !claim->generating ? Badge{Tone::Bad, Icon::Warning, "Frame generation, MAKO"}
+                              : lossless                  ? Badge{Tone::Info, std::nullopt, "Frame generation, MAKO"}
+                                                          : Badge{Tone::Info, Icon::Lock, std::string("Frame generation, ") + (mako ? "MAKO" : "lsfg-vk")};
         const auto work = [&](uint32_t number, const ImVec2& from, float right) {
             const float               gap = ui::px(ui::Size::gap);
             std::vector<Badge>        shown;
             std::vector<std::string>  ids;
             std::vector<std::string>  tips;
             std::vector<std::string>  effects;
-            if (number == gameGpu && fg.on && fg.blocker.empty())
+            if (generatesOn(number))
             {
-                shown.push_back({Tone::Info, Icon::Lock, std::string("Frame generation, ") + (mako ? "MAKO" : "lsfg-vk")});
+                shown.push_back(fgBadge);
                 ids.push_back("Frame generation##pergpu");
-                tips.push_back(mako ? "MAKO generates frames on the GPU the game renders on.\nIt supports no frame generation on another GPU than the game's."
-                                    : "lsfg-vk generates frames on the GPU the game renders on.\nIt takes each frame as memory only that GPU can import, and has no GPU setting.");
+                tips.push_back(fgTip);
                 effects.emplace_back();
             }
             if (number == gameGpu && scales)
@@ -251,8 +266,9 @@ namespace vkBasalt
         for (const OverlayGpu& addable : state.addableGpus)
         {
             ImGui::PushID(addable.id.c_str());
-            const ImVec2 at = rowBackground();
-            rowText(at, "", addable.name.empty() ? addable.id : shortGpuName(addable.name), "not in use", true, false);
+            const ImVec2 at   = rowBackground();
+            const bool   busy = generatesOn(addable.number);
+            const ImVec2 line = rowText(at, "", addable.name.empty() ? addable.id : shortGpuName(addable.name), busy ? "" : "not in use", true, busy);
             ImGui::SetCursorScreenPos(at);
             ImGui::InvisibleButton("##gpuname", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, rowH));
             gpuTooltip(addable);
@@ -265,6 +281,8 @@ namespace vkBasalt
                 changeGpus(list, {});
             }
             ImGui::SetItemTooltip("Adds it as GPU %zu", list.size() + firstListedGpu);
+            if (busy)
+                ui::badgeAt(fgBadge, line, "Frame generation##pergpu", fgTip.c_str());
             nextRow(at);
             ImGui::PopID();
         }

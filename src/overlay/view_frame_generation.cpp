@@ -343,7 +343,7 @@ namespace vkBasalt
         Logger::info("frame generation key: " + shortNoticeLine);
     }
 
-    void ImGuiOverlay::renderPipelineStrip(FrameGenerationLayer layer)
+    void ImGuiOverlay::renderPipelineStrip()
     {
         const OverlayPalette& palette = activePalette();
         if (frameGenerationGpuName.empty())
@@ -368,7 +368,7 @@ namespace vkBasalt
                                                                  state.effectsEnabled ? effectGpus : std::vector<uint32_t>{});
         if (scales || scaling.run == MakoScalingRun::NoStatus)
             steps.insert(steps.end() - 1, PipelineStep{"Scaling", {gameGpu}});
-        const std::optional<std::string> elsewhere = layer == FrameGenerationLayer::Mako ? makoGpuElsewhere() : std::nullopt;
+        const std::optional<MakoGpuClaim> claim = makoRuns ? makoGpuClaimHere() : std::nullopt;
         ScaleInputs outputs;
         outputs.waylandOutputs              = desktopOutputs;
         outputs.swapchainWidth              = currentWidth;
@@ -397,6 +397,8 @@ namespace vkBasalt
             std::string         where      = "GPU ";
             for (size_t g = 0; g < step.gpus.size(); g++)
                 where += (g ? " and " : "") + std::to_string(step.gpus[g]);
+            if (generation && claim)
+                where = makoGpusWords(claim->gpus, claim->named);
             if (scaler)
                 where = scales ? scaling.detail : "no status file";
             if (step.what == "Display" && refresh)
@@ -419,7 +421,7 @@ namespace vkBasalt
             const float  w     = std::max(ui::px(96.0f), std::max(named.x, sub.x) + 2.0f * padX);
             const float  textY = at.y + (h - named.y - sub.y) * 0.5f;
             draw->AddRectFilled(at, ImVec2(at.x + w, at.y + h), ImGui::GetColorU32(generation ? ui::mix(palette.row, palette.accent, 0.16f) : palette.row), ui::px(ui::Size::surface));
-            if ((generation && elsewhere && makoRuns) || (scaler && !scales))
+            if ((generation && claim && !claim->generating) || (scaler && !scales))
                 draw->AddRect(at, ImVec2(at.x + w, at.y + h), ImGui::GetColorU32(palette.warn), ui::px(ui::Size::surface), ui::px(1.5f));
             draw->AddText(fonts.bold, title, ImVec2(at.x + padX, textY), ImGui::GetColorU32(generation ? palette.accent : palette.text), name.c_str());
             draw->AddText(fonts.body, under, ImVec2(at.x + padX, textY + named.y), ImGui::GetColorU32(palette.faint), where.c_str());
@@ -428,9 +430,7 @@ namespace vkBasalt
             UiMap::nameNextItem(item.c_str());
             ImGui::ItemAdd(ImRect(at, ImVec2(at.x + w, at.y + h)), ImGui::GetID(item.c_str()));
             if (generation && makoRuns)
-                ImGui::SetItemTooltip("%s", ("MAKO generates frames on " + frameGenerationGpuName + ", the GPU the game renders on: MAKO does not support\n"
-                                             "frame generation on another GPU than the game's.")
-                                                .c_str());
+                ImGui::SetItemTooltip("%s", claim ? makoGpuClaimLine(*claim).c_str() : "MAKO's status file names no GPU it generates frames on for this swapchain");
             else if (scaler && scales)
                 ImGui::SetItemTooltip("MAKO scales each frame on the game's GPU, from the size the game draws at to the size it presents");
             else if (scaler)
@@ -444,35 +444,84 @@ namespace vkBasalt
         }
     }
 
-    void ImGuiOverlay::renderFrameGenerationGpuRow(FrameGenerationLayer layer, bool gpuWaits)
+    void ImGuiOverlay::renderFrameGenerationGpuRow(const FrameGenerationTab* chosen, bool gpuWaits)
     {
         const OverlayPalette& palette = activePalette();
-        const bool            mako    = layer == FrameGenerationLayer::Mako;
-        const std::string     shown   = "GPU " + std::to_string(gameGpu) + ", " + frameGenerationGpuName;
-        const std::string     why     = mako ? "MAKO generates frames only on the GPU the game renders on: it supports no frame generation on another GPU.\n"
-                                               "Effects can still run on another GPU, chosen on the GPUs card."
-                                             : "lsfg-vk 2 generates frames only on the GPU the game renders on: it hands each frame to its pipeline as memory\n"
-                                               "only that GPU and its driver can open, and it has no setting for another GPU.\n"
-                                               "Effects can still run on another GPU, chosen on the GPUs card.";
         const float           column  = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
+        if (chosen == nullptr || chosen->layer != FrameGenerationLayer::Mako)
+        {
+            const std::string shown = "GPU " + std::to_string(gameGpu) + ", " + frameGenerationGpuName;
+            const char*       why   = "lsfg-vk 2 generates frames only on the GPU the game renders on: it hands each frame to its pipeline as memory\n"
+                                      "only that GPU and its driver can open, and it has no setting for another GPU.\n"
+                                      "Effects can still run on another GPU, chosen on the GPUs card.";
+            ui::label("GPU");
+            ImGui::SetItemTooltip("%s", why);
+            ui::atColumn(column);
+            ImGui::AlignTextToFramePadding();
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            ImGui::TextColored(palette.secondary, "%s", shown.c_str());
+            UiMap::nameNextItem(shown.c_str());
+            ImGui::ItemAdd(ImRect(at, ImVec2(at.x + ImGui::GetItemRectSize().x, at.y + ImGui::GetFrameHeight())), ImGui::GetID("##frameGenerationGpu"));
+            ImGui::SetItemTooltip("%s", why);
+            ImGui::Dummy(ImVec2(0.0f, ui::px(ui::Size::gap) * 0.5f));
+            return;
+        }
+        const bool                        lossless = chosen->makoModel == "lossless-scaling";
+        const MakoProfile*                inUse    = makoProfileInUse();
+        const MakoGpus                    gpus     = makoGpus();
+        const std::optional<std::string>  saved    = inUse ? makoSettingsFor(*inUse, powerSupplies.source).gpu : std::nullopt;
+        const std::vector<uint32_t>       picked   = saved ? makoGpusNamedBy(*saved, gpus) : std::vector<uint32_t>{gameGpu};
+        const std::optional<MakoGpuClaim> claim    = makoGpuClaimHere();
+        const auto                        named    = [](uint32_t number, const MakoGpu& gpu) { return "GPU " + std::to_string(number) + ", " + gpu.name; };
+        std::string                       preview  = picked.empty() ? "MAKO's file names " + saved.value_or("") : makoGpusWords(picked, "");
+        if (picked == std::vector<uint32_t>{gameGpu})
+            preview = named(gameGpu, gpus.game);
+        for (const MakoGpuChoice& other : gpus.others)
+            if (picked == std::vector<uint32_t>{other.number})
+                preview = named(other.number, other.gpu);
+        const std::string why =
+            lossless ? std::string("MAKO's Lossless Scaling model generates frames on the GPU picked here, which MAKO reads when the game starts.\n"
+                                   "The game's GPU removes the GPU from MAKO's profile, so MAKO uses the GPU the game renders on.")
+                           + (makoGpusHaveTwins(gpus) ? "\nTwo GPUs here share a vendor and device, the form MAKO's file names a GPU in, so MAKO cannot tell them apart\n"
+                                                        "and may open either."
+                                                      : "")
+                     : "MAKO FG does not start its frame generation on a GPU other than the game's, so it generates frames on the GPU the game renders on.\n"
+                       "MAKO LSFG offers another GPU.";
         ui::label("GPU");
         ImGui::SetItemTooltip("%s", why.c_str());
         ui::atColumn(column);
-        ImGui::AlignTextToFramePadding();
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        ImGui::TextColored(palette.secondary, "%s", shown.c_str());
-        UiMap::nameNextItem(shown.c_str());
-        ImGui::ItemAdd(ImRect(at, ImVec2(at.x + ImGui::GetItemRectSize().x, at.y + ImGui::GetFrameHeight())), ImGui::GetID("##frameGenerationGpu"));
+        const float badgeRoom = claim ? ui::px(ui::Size::gap) + ui::badgeWidth(makoGpuClaimBadge(*claim), true) : 0.0f;
+        const float width     = std::max(ui::px(120.0f), std::min(ui::px(320.0f), ImGui::GetContentRegionAvail().x - badgeRoom - ui::nextLaunchRoom(gpuWaits)));
+        ImGui::BeginDisabled(!lossless || inUse == nullptr);
+        if (ui::beginCombo("##GPU", preview.c_str(), width))
+        {
+            const auto option = [&](uint32_t number, const MakoGpu& gpu, const std::optional<std::string>& written) {
+                const bool        chosenNow = std::find(picked.begin(), picked.end(), number) != picked.end();
+                const std::string item      = named(number, gpu) + "##GPU";
+                if (ui::option(item.c_str(), chosenNow) && saved != written)
+                    setMakoGpu(written);
+            };
+            option(gameGpu, gpus.game, std::nullopt);
+            for (const MakoGpuChoice& other : gpus.others)
+                option(other.number, other.gpu, makoGpuIdText(other.gpu.vendorId, other.gpu.deviceId));
+            ui::endCombo();
+        }
+        ImGui::EndDisabled();
         ImGui::SetItemTooltip("%s", why.c_str());
-        const std::optional<std::string> elsewhere = mako ? makoGpuElsewhere() : std::nullopt;
-        if (mako && !elsewhere)
+        if (claim)
+        {
+            ImGui::SameLine(0.0f, ui::px(ui::Size::gap));
+            ui::badge(makoGpuClaimBadge(*claim), makoGpuClaimLine(*claim).c_str(), true, "GPU in this run");
+        }
+        const std::optional<std::string> elsewhere = lossless ? std::nullopt : makoGpuElsewhere();
+        if (!elsewhere)
             ui::nextLaunchAtRight("GPU", gpuWaits);
-        if (elsewhere)
+        else
         {
             ImGui::SetCursorPosX(column);
             UiMap::nameNextItem("Use the game's GPU");
             if (ui::lineButton("Use the game's GPU"))
-                useGamesGpuInMako();
+                setMakoGpu(std::nullopt);
             ImGui::SetItemTooltip("Read when the game starts. Removes the GPU from MAKO's profile, so from the next launch MAKO generates frames\n"
                                   "on the GPU the game renders on.");
             ui::nextLaunch("GPU", gpuWaits);
@@ -615,8 +664,8 @@ namespace vkBasalt
             frameGenerationGpuName = properties.deviceName;
         }
         ui::beginScrollArea("##framegenerationbody");
-        renderFrameGenerationGpuRow(fg.layer, std::find(waiting.begin(), waiting.end(), "GPU") != waiting.end());
-        renderPipelineStrip(fg.layer);
+        renderFrameGenerationGpuRow(chosen, std::find(waiting.begin(), waiting.end(), "GPU") != waiting.end());
+        renderPipelineStrip();
         if (mako)
             renderMakoBody(flipped, on, waiting);
         else
