@@ -1092,10 +1092,12 @@ namespace vkBasalt::ui
         {
             const ImRect      box  = drawBadge(shown, true);
             const std::string name = std::string(what) + " next launch";
+            const ImGuiID     id   = ImGui::GetID(name.c_str());
             UiMap::nameNextItem(name.c_str());
-            if (ImGui::ItemAdd(box, ImGui::GetID(name.c_str()), nullptr, ImGuiItemFlags_NoNav))
-                UiMap::markChecked(ImGui::GetItemID(), true);
-            ImGui::SetItemTooltip("Saved: this run keeps the value it started with");
+            const bool visible = ImGui::ItemAdd(box, id, nullptr, ImGuiItemFlags_NoNav);
+            UiMap::markChecked(id, true);
+            if (visible)
+                ImGui::SetItemTooltip("Saved: this run keeps the value it started with");
         }
     }
 
