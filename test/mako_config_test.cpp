@@ -165,7 +165,7 @@ static void refusals()
     expect(refusalOf("version = 2\nx = = 1\n").rfind("unable to parse configuration\n- ", 0) == 0 && refusalOf("version = 2\nx = = 1\n").size() > 33,
            "a file that is not TOML is refused with MAKO's words and the parser's reason");
 
-    for (const std::string accepted : {profile + "multiplier = -3\n",
+    for (const std::string& accepted : {profile + "multiplier = -3\n",
                                        profile + "target_fps = 5000000000\n",
                                        profile + "flow_scale = nan\n",
                                        profile + "scaling_method = 5\n",
