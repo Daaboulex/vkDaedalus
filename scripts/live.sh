@@ -3727,6 +3727,8 @@ drive_mako() {
     mako_says "$config" '^frame_generation_provisioned = true$' "$ui_log" "MAKO: Ready at start back on" "ticked again"
     ui_click "$map" "Ultra performance" 1 "$log" || true
     mako_says "$config" '^ultra_performance = true$' "$ui_log" "MAKO: Ultra performance" "ticked"
+    greyed_says "$map" "##Flow scale" 1 "$log" "$ui_log" "MAKO: Ultra performance locks Flow scale" "with Ultra performance ticked while MAKO does not run the profile, the next launch locks Flow scale, so it is greyed"
+    greyed_says "$map" "Performance mode" 1 "$log" "$ui_log" "MAKO: Ultra performance turns Performance mode on" "with Ultra performance ticked and the Lossless Scaling model, Performance mode is greyed"
     ui_click "$map" "Keep swapchain image count" 1 "$log" || true
     mako_says "$config" '^swapchain_image_count_compatibility = true$' "$ui_log" "MAKO: Keep swapchain image count" "ticked"
     ui_click "$map" "Mailbox compatibility" 1 "$log" || true

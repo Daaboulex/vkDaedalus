@@ -794,19 +794,35 @@ static void greyedControls()
     MakoSettings fixedTarget              = followed;
     fixedTarget.adaptiveTargetRefreshRate = false;
 
-    const MakoGreyedWhy underGamescopeFollowed = makoGreyedWhy(followed, true);
+    const MakoGreyedWhy underGamescopeFollowed = makoGreyedWhy(followed, nullptr, true);
     expect(!underGamescopeFollowed.target.empty() && underGamescopeFollowed.target.find("fallback") != std::string::npos
                && underGamescopeFollowed.displayRefresh.empty(),
            "under gamescope with Display refresh on, Target is greyed as the fallback and Display refresh stays editable");
-    const MakoGreyedWhy underGamescopeTarget = makoGreyedWhy(fixedTarget, true);
+    const MakoGreyedWhy underGamescopeTarget = makoGreyedWhy(fixedTarget, nullptr, true);
     expect(underGamescopeTarget.target.empty() && underGamescopeTarget.displayRefresh.empty(),
            "under gamescope with Display refresh off, both stay editable");
     for (const MakoSettings& set : {followed, fixedTarget})
     {
-        const MakoGreyedWhy outside = makoGreyedWhy(set, false);
+        const MakoGreyedWhy outside = makoGreyedWhy(set, nullptr, false);
         expect(outside.target.empty() && outside.displayRefresh.find("gamescope") != std::string::npos,
                "outside gamescope Display refresh is greyed as working only under gamescope and Target stays editable, whatever the file says");
     }
+
+    MakoSettings ultra     = fixedTarget;
+    ultra.ultraPerformance = true;
+    const auto byUltra     = [](const MakoGreyedWhy& why) {
+        return why.flowScale.find("Ultra performance") != std::string::npos && why.performanceMode.find("Ultra performance") != std::string::npos
+               && why.raisedFgModes.find("Ultra performance") != std::string::npos;
+    };
+    const auto free = [](const MakoGreyedWhy& why) { return why.flowScale.empty() && why.performanceMode.empty() && why.raisedFgModes.empty(); };
+    expect(byUltra(makoGreyedWhy(ultra, nullptr, true)) && free(makoGreyedWhy(fixedTarget, nullptr, true)),
+           "while MAKO does not run the profile, the edited set's own Ultra performance greys what it forces at the next launch");
+    expect(free(makoGreyedWhy(ultra, &fixedTarget, true)),
+           "Ultra performance ticked in this run waits for the next launch, so what MAKO runs now stays editable");
+    expect(byUltra(makoGreyedWhy(fixedTarget, &ultra, true)),
+           "Ultra performance that MAKO started with keeps forcing these in this run, though it is unticked now");
+    expect(makoUltraRaises("quality") && makoUltraRaises("balanced") && !makoUltraRaises("performance") && !makoUltraRaises("extra-performance"),
+           "Ultra performance raises MAKO FG mode Quality and Balanced to Performance and leaves Performance and Extra performance as they are");
 }
 
 static void nextLaunchChanges()

@@ -401,7 +401,9 @@ namespace vkBasalt
                                         + " shares. Applies at once" + (live ? "." : std::string(" once MAKO runs this profile, ") + later + ".");
             caption("Live", live ? "profile" : std::string("profile, ") + later, liveTip.c_str());
             ui::beginPanel();
-            const float column = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
+            const float         column    = ImGui::GetCursorPosX() + ui::px(ui::Size::labelColumn);
+            const MakoSettings  started   = makoSettingsAtStart();
+            const MakoGreyedWhy greyedWhy = makoGreyedWhy(set, live ? &started : nullptr, underGamescope());
             ui::panelRow();
             std::string mode = set.adaptive ? "adaptive" : "fixed";
             if (pickFrom("Mode", makoModes, mode, column, none))
@@ -415,7 +417,6 @@ namespace vkBasalt
                       "Frames shown per real frame: 2x doubles them");
             else
             {
-                const MakoGreyedWhy greyedWhy = makoGreyedWhy(set, underGamescope());
                 greyed(!greyedWhy.target.empty(), greyedWhy.target.c_str(), [&] {
                     slide("Target", "##Target", set.targetFps, MakoLimits::lowestTargetFps, MakoLimits::highestTargetFps, std::to_string(set.targetFps) + " FPS",
                           "The frame rate MAKO aims to show");
@@ -443,15 +444,23 @@ namespace vkBasalt
                 flag("Stable cadence", set.adaptiveStableCadence, "Keeps an even rhythm of real and generated frames", false);
             }
             std::snprintf(text, sizeof(text), "%.2f", set.flowScale);
-            slide("Flow scale", "##Flow scale", set.flowScale, MakoLimits::lowestFlowScale, MakoLimits::highestFlowScale, text, "Lower is faster and looks worse");
-            ui::panelRow();
-            greyed(set.frameGenerationModel != "mako-fg", "MAKO FG only", [&] {
-                if (pickFrom("MAKO FG mode", makoFgModes, set.makoFgMode, column, none))
-                    changed = true;
+            greyed(!greyedWhy.flowScale.empty(), greyedWhy.flowScale.c_str(), [&] {
+                slide("Flow scale", "##Flow scale", set.flowScale, MakoLimits::lowestFlowScale, MakoLimits::highestFlowScale, text, "Lower is faster and looks worse");
             });
             ui::panelRow();
+            const auto raised = [&](std::string_view fgMode) { return makoUltraRaises(fgMode) ? greyedWhy.raisedFgModes : std::string(); };
+            greyed(set.frameGenerationModel != "mako-fg", "MAKO FG only", [&] {
+                if (pickFrom("MAKO FG mode", makoFgModes, set.makoFgMode, column, raised))
+                    changed = true;
+            });
+            if (set.frameGenerationModel == "mako-fg")
+                whyGreyed(raised(set.makoFgMode));
+            ui::panelRow();
             const std::string losslessMissing = makoModelMissing("lossless-scaling");
-            greyed(set.frameGenerationModel != "lossless-scaling" || !losslessMissing.empty(), losslessMissing.empty() ? "MAKO LSFG only" : losslessMissing.c_str(), [&] {
+            const std::string performanceWhy  = set.frameGenerationModel != "lossless-scaling" ? "MAKO LSFG only"
+                                                : !losslessMissing.empty()                      ? losslessMissing
+                                                                                                : greyedWhy.performanceMode;
+            greyed(!performanceWhy.empty(), performanceWhy.c_str(), [&] {
                 changed = ui::checkbox("Performance mode", &set.performanceMode) || changed;
                 ImGui::SetItemTooltip("Much faster, slightly lower quality");
             });

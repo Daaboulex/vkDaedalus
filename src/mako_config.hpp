@@ -176,6 +176,9 @@ namespace vkBasalt
     {
         std::string target;
         std::string displayRefresh;
+        std::string flowScale;
+        std::string performanceMode;
+        std::string raisedFgModes;
     };
 
     std::optional<MakoFile> parseMakoFile(const std::string& text, std::string& problem);
@@ -188,7 +191,8 @@ namespace vkBasalt
     const FrameGenerationTab& frameGenerationTabOf(FrameGenerationLayer layer, std::string_view makoModel);
     MakoProfile               makoProfileWithModel(MakoProfile profile, MakoPowerSource edited, std::string_view model);
     bool frameGenerationTabWaits(const FrameGenerationTab& chosen, std::optional<FrameGenerationLayer> loaded, std::string_view makoModelAtStart);
-    MakoGreyedWhy makoGreyedWhy(const MakoSettings& edited, bool gamescope);
+    MakoGreyedWhy makoGreyedWhy(const MakoSettings& edited, const MakoSettings* runningSinceStart, bool gamescope);
+    bool          makoUltraRaises(std::string_view makoFgMode);
     std::vector<std::string> makoNextLaunchChanges(const MakoSettings& now, const MakoSettings& atStart);
 
     std::optional<std::string>

@@ -586,14 +586,25 @@ namespace vkBasalt
         return layerChangeWaits(loaded, chosen.layer) || (chosen.layer == FrameGenerationLayer::Mako && chosen.makoModel != makoModelAtStart);
     }
 
-    MakoGreyedWhy makoGreyedWhy(const MakoSettings& edited, bool gamescope)
+    MakoGreyedWhy makoGreyedWhy(const MakoSettings& edited, const MakoSettings* runningSinceStart, bool gamescope)
     {
         MakoGreyedWhy why;
         if (!gamescope)
             why.displayRefresh = "Works only under gamescope: MAKO follows the refresh gamescope reports";
         else if (edited.adaptiveTargetRefreshRate)
             why.target = "The fallback while Display refresh is on: MAKO aims at gamescope's refresh, and at this target only while gamescope reports none";
+        if (runningSinceStart ? runningSinceStart->ultraPerformance : edited.ultraPerformance)
+        {
+            why.flowScale       = "Ultra performance locks it at 0.60 with MAKO FG and 0.70 with Lossless Scaling";
+            why.performanceMode = "Ultra performance turns it on";
+            why.raisedFgModes   = "Ultra performance raises Quality and Balanced to Performance";
+        }
         return why;
+    }
+
+    bool makoUltraRaises(std::string_view makoFgMode)
+    {
+        return makoFgMode == "quality" || makoFgMode == "balanced";
     }
 
     std::vector<std::string> makoNextLaunchChanges(const MakoSettings& now, const MakoSettings& atStart)
