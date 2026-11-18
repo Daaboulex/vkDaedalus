@@ -22,6 +22,7 @@ namespace
         ImRect               windowBox;
         bool                 disabled = false;
         ImGuiItemStatusFlags status   = 0;
+        float                alpha    = 1.0f;
         bool                 placed   = false;
     };
 
@@ -50,6 +51,7 @@ void ImGuiTestEngineHook_ItemAdd(ImGuiContext* ctx, ImGuiID id, const ImRect& bb
     item.windowBox   = ctx->CurrentWindow ? ctx->CurrentWindow->Rect() : ImRect();
     item.box         = bb;
     item.disabled    = itemData != nullptr && (itemData->ItemFlags & ImGuiItemFlags_Disabled) != 0;
+    item.alpha       = ctx->Style.Alpha;
     item.placed      = true;
     if (pendingName != nullptr)
     {
@@ -134,7 +136,7 @@ namespace vkBasalt
                         continue;
                     out << oneLine(item.window) << '\t' << (item.label.empty() ? std::string("(an item past the window edge)") : oneLine(item.label)) << '\t' << item.box.Min.x << '\t' << item.box.Min.y << '\t'
                         << item.box.Max.x << '\t' << item.box.Max.y << '\t' << (item.disabled ? 1 : 0) << '\t'
-                        << ((item.status & ImGuiItemStatusFlags_Checked) ? 1 : 0) << '\t' << ((item.status & ImGuiItemStatusFlags_Opened) ? 1 : 0)
+                        << ((item.status & ImGuiItemStatusFlags_Checked) ? 1 : 0) << '\t' << ((item.status & ImGuiItemStatusFlags_Opened) ? 1 : 0) << '\t' << item.alpha
                         << "\n";
                 }
                 for (ImGuiWindow* window : GImGui->Windows)

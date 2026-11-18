@@ -96,6 +96,10 @@ int main(int argc, char** argv)
         vkBasalt::UiMap::nameNextItem("Tile");
         ImGui::InvisibleButton("Tile", ImVec2(100, 40));
         vkBasalt::UiMap::markChecked(ImGui::GetItemID(), true);
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.25f);
+        vkBasalt::UiMap::nameNextItem("Faded");
+        ImGui::InvisibleButton("Faded", ImVec2(100, 10));
+        ImGui::PopStyleVar();
         ImGui::BeginChild("##body", ImVec2(200, 30));
         ImGui::Dummy(ImVec2(10, 90));
         ImGui::EndChild();
@@ -119,17 +123,17 @@ int main(int argc, char** argv)
                     map.substr(0, map.find('\n')).c_str());
         failures++;
     }
-    if (box.empty() || box.rfind("vkDaedalus\t", 0) != 0 || lastField(box, 1) != "1")
+    if (box.empty() || box.rfind("vkDaedalus\t", 0) != 0 || lastField(box, 2) != "1")
     {
         std::printf("FAIL: the checked checkbox is missing, in the wrong window or not marked checked: %s\n", box.c_str());
         failures++;
     }
-    if (unsafe.empty() || lastField(unsafe, 2) != "1")
+    if (unsafe.empty() || lastField(unsafe, 3) != "1")
     {
         std::printf("FAIL: an item inside BeginDisabled is not marked disabled: %s\n", unsafe.c_str());
         failures++;
     }
-    if (safe.empty() || lastField(safe, 2) != "0")
+    if (safe.empty() || lastField(safe, 3) != "0")
     {
         std::printf("FAIL: an enabled item is marked disabled or missing: %s\n", safe.c_str());
         failures++;
@@ -137,14 +141,14 @@ int main(int argc, char** argv)
     for (const char* label : {"First", "Second", "##choice", "P Float2", "Done"})
     {
         const std::string line = lineFor(map, label);
-        if (line.empty() || std::stof(lastField(line, 3)) <= std::stof(lastField(line, 5)))
+        if (line.empty() || std::stof(lastField(line, 4)) <= std::stof(lastField(line, 6)))
         {
             std::printf("FAIL: %s is missing from the map or has no box: %s\n", label, line.c_str());
             failures++;
         }
     }
     const std::string hidden = lineFor(map, "(an item past the window edge)");
-    if (hidden.empty() || hidden.rfind("vkDaedalus\t", 0) != 0 || std::stof(lastField(hidden, 6)) < 400.0f)
+    if (hidden.empty() || hidden.rfind("vkDaedalus\t", 0) != 0 || std::stof(lastField(hidden, 7)) < 400.0f)
     {
         std::printf("FAIL: a button ImGui clipped wholly past the window's right edge is missing from the map: %s\n", hidden.c_str());
         failures++;
@@ -175,9 +179,20 @@ int main(int argc, char** argv)
         failures++;
     }
     const std::string tile = lineIn(map, "vkDaedalus card", "Tile");
-    if (tile.empty() || lastField(tile, 1) != "1")
+    if (tile.empty() || lastField(tile, 2) != "1")
     {
         std::printf("FAIL: a tile marked checked is missing or not marked checked: %s\n", tile.c_str());
+        failures++;
+    }
+    if (tile.empty() || lastField(tile, 0) != "1")
+    {
+        std::printf("FAIL: an item drawn at full opacity does not record opacity 1: %s\n", tile.c_str());
+        failures++;
+    }
+    const std::string faded = lineIn(map, "vkDaedalus card", "Faded");
+    if (faded.empty() || lastField(faded, 0) != "0.25")
+    {
+        std::printf("FAIL: an item drawn at a quarter opacity, as a card still fading in draws its items, does not record 0.25: %s\n", faded.c_str());
         failures++;
     }
     if (!lineFor(map, "Hidden").empty())
@@ -188,6 +203,6 @@ int main(int argc, char** argv)
     ImGui::DestroyContext();
     if (failures != 0)
         return 1;
-    std::printf("OK: the item map names each item's window, label, box, disabled and checked state, tabs, a named combo and a named vector slider included\n");
+    std::printf("OK: the item map names each item's window, label, box, disabled and checked state, the opacity it was drawn at, tabs, a named combo and a named vector slider included\n");
     return 0;
 }

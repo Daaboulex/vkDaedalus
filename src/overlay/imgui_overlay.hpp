@@ -322,8 +322,6 @@ namespace vkBasalt
         bool                                 profileMenuWasOpen = false;
         bool                                 profileMenuClosedByPress = false;
         float                                frameShown        = 1.0f;
-        float                                cardShown         = 1.0f;
-        std::optional<OverlaySection>        shownSection;
         std::optional<std::chrono::steady_clock::time_point> appliedAt;
         std::vector<WaylandOutputFacts>      desktopOutputs;
         std::optional<float>                 desktopXftDpi;

@@ -1916,6 +1916,32 @@ ui_click() {
     sleep 0.3
 }
 
+ui_switch_opacity() {
+    local map="$1" label="$2" shows="$3" log="$4" opacity lowest="" released=0 tries=0 seenAt=""
+    ui_hover "$map" "$label" "$log" || return 1
+    DISPLAY="$PRIVATE_DISPLAY" xdotool mousedown 1 || return 1
+    while :; do
+        opacity=$(awk -F'\t' -v s="$shows" '
+            NR > 1 && $2 == s { seen = 1 }
+            NR > 1 && index($1, "vkDaedalus card") == 1 && $7 == 0 && $10 != "" { if (lowest == "" || $10 + 0 < lowest + 0) lowest = $10 }
+            END { if (seen) print lowest }' "$map" 2>/dev/null) || opacity=""
+        if [ -n "$opacity" ]; then
+            if [ -z "$seenAt" ]; then seenAt=$tries; fi
+            if [ -z "$lowest" ] || awk -v o="$opacity" -v l="$lowest" 'BEGIN { exit !(o + 0 < l + 0) }'; then lowest=$opacity; fi
+        fi
+        if [ "$released" = 0 ] && awk 'NR == 1 { exit !($6 == 1) }' "$map" 2>/dev/null; then
+            DISPLAY="$PRIVATE_DISPLAY" xdotool mouseup 1 || return 1
+            released=1
+        fi
+        if [ -n "$seenAt" ] && [ $((tries - seenAt)) -ge 100 ]; then break; fi
+        if [ -f "$log.rc" ] || [ "$tries" -ge 1000 ]; then break; fi
+        tries=$((tries + 1))
+        sleep 0.004
+    done
+    if [ "$released" = 0 ]; then DISPLAY="$PRIVATE_DISPLAY" xdotool mouseup 1 || true; fi
+    [ -n "$lowest" ] && echo "$lowest"
+}
+
 gallery_shot() {
     local map="$1" name="$2" shot="$1.$2.xwd" box window x0 y0 x1 y1
     if [ -z "$GALLERY_PARTIAL" ] || [[ "$map" != "$WORK/gpu-1/"* ]]; then return 0; fi
@@ -2403,7 +2429,13 @@ drive_ui() {
     else
         ui_result "$ui_log" FAIL "Settings: Launch notice is held by VKDAEDALUS_LAUNCH_NOTICE" "with VKDAEDALUS_LAUNCH_NOTICE=never the Launch notice menu was $( [ -n "$(ui_line "$map" "##launchNotice")" ] && echo open to change || echo missing)"
     fi
-    ui_click "$map" "Performance" 1 "$log" || true
+    local switched
+    switched=$(ui_switch_opacity "$map" "Performance" "Per-effect GPU timing" "$log") || switched=""
+    if [ "$switched" = 1 ]; then
+        ui_result "$ui_log" PASS "a card switch draws the new card whole" "from Settings to Performance, every frame read in the half second after Performance showed drew every enabled item of it at full opacity"
+    else
+        ui_result "$ui_log" FAIL "a card switch draws the new card whole" "from Settings to Performance, a frame in the half second after Performance showed drew it at opacity ${switched:-unknown, as the page never showed}, so the game showed through the card"
+    fi
     if ui_wait "$map" "Per-effect GPU timing" "" "" "$log"; then
         ui_result "$ui_log" PASS "the Performance page" "a click on Performance showed its page"
     else

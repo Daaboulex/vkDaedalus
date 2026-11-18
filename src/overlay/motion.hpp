@@ -8,7 +8,7 @@ namespace vkBasalt
     struct Motion
     {
         static constexpr float hoverSeconds = 0.04f;
-        static constexpr float cardSeconds  = 0.05f;
+        static constexpr float openSeconds  = 0.05f;
         static constexpr float settled      = 0.001f;
     };
 

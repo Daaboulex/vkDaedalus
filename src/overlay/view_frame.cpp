@@ -89,13 +89,7 @@ namespace vkBasalt
         ui::beginFrame(fonts);
         const OverlayPalette& palette = activePalette();
 
-        frameShown = approach(frameShown, 1.0f, io.DeltaTime, Motion::cardSeconds);
-        if (openSection != shownSection)
-        {
-            shownSection = openSection;
-            cardShown    = 0.0f;
-        }
-        cardShown = approach(cardShown, 1.0f, io.DeltaTime, Motion::cardSeconds);
+        frameShown = approach(frameShown, 1.0f, io.DeltaTime, Motion::openSeconds);
 
         const float backdrop = static_cast<float>(settingsManager.getOverlayBackdropPercent()) / 100.0f * frameShown;
         ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0.0f, 0.0f), io.DisplaySize, ImGui::GetColorU32(ImVec4(5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, backdrop)));
@@ -123,7 +117,7 @@ namespace vkBasalt
         if (openSection)
         {
             const LayoutRect card = layout.card();
-            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, frameShown * cardShown);
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, frameShown);
             ImGui::SetNextWindowPos(topLeft(card), ImGuiCond_Always);
             ImGui::SetNextWindowSize(ImVec2(card.w, card.h), ImGuiCond_Always);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(ui::px(ui::Size::cardPadX), ui::px(ui::Size::cardPadY)));
