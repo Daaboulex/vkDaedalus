@@ -726,8 +726,7 @@ namespace vkBasalt
             std::string names;
             for (const std::string& name : compiling)
                 names += (names.empty() ? "" : ", ") + name;
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(palette.warn, "Compiling: %s", names.c_str());
+            ui::badge(Badge{Tone::Warn, Icon::Restart, "Compiling: " + names});
             ImGui::SameLine();
             if (ui::lineButton("Cancel##compiling"))
                 effectCompileJobs.cancel();
@@ -1069,21 +1068,15 @@ namespace vkBasalt
         const bool  justApplied = appliedAt && std::chrono::steady_clock::now() - *appliedAt < std::chrono::milliseconds(1600);
         if (justApplied)
         {
-            const float doneWidth = ImGui::CalcTextSize("Applied").x;
-            ui::alignRight(doneWidth + style.ItemSpacing.x + applyWidth);
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(palette.ok, "Applied");
+            const Badge done{Tone::Ok, std::nullopt, "Applied"};
+            ui::alignRight(ui::badgeWidth(done) + style.ItemSpacing.x + applyWidth);
+            ui::badge(done);
         }
         else if (waitingForApply || (paramsDirty && !settingsManager.getAutoApply()))
         {
-            const char* waiting  = "Waits for Apply";
-            const float waitingW = ImGui::CalcTextSize(waiting).x;
-            ui::alignRight(waitingW + style.ItemSpacing.x + applyWidth);
-            const ImVec2 at = ImGui::GetCursorScreenPos();
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(palette.warn, "%s", waiting);
-            UiMap::nameNextItem(waiting);
-            ImGui::ItemAdd(ImRect(at, ImVec2(at.x + waitingW, at.y + ui::px(ui::Size::control))), ImGui::GetID("##waiting"));
+            const Badge waiting{Tone::Warn, Icon::Warning, "Waits for Apply"};
+            ui::alignRight(ui::badgeWidth(waiting) + style.ItemSpacing.x + applyWidth);
+            ui::badge(waiting, nullptr, false, "Waits for Apply");
         }
         ui::alignRight(applyWidth);
         if (ui::button("Apply", ui::Kind::Primary, applyWidth))

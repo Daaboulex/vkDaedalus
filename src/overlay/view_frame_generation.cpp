@@ -981,8 +981,7 @@ namespace vkBasalt
         ImGui::AlignTextToFramePadding();
         if (frameGenerationDll->found)
         {
-            ImGui::TextColored(palette.ok, "Found");
-            ImGui::SetItemTooltip("%s", frameGenerationDll->path->c_str());
+            ui::badge(Badge{Tone::Ok, std::nullopt, "Found"}, frameGenerationDll->path->c_str(), true);
             ImGui::SameLine();
             const std::string where = frameGenerationDll->inSteamLibrary ? "Steam library" : frameGenerationDll->path->substr(0, frameGenerationDll->path->rfind('/'));
             const float       tail  = ui::px(ui::Size::gap) + ui::buttonWidth("Change...", ui::Kind::Secondary, true) + ui::nextLaunchRoom(dllWaits);
@@ -991,7 +990,7 @@ namespace vkBasalt
             ImGui::PopFont();
         }
         else
-            ImGui::TextColored(palette.bad, "Not found");
+            ui::badge(Badge{Tone::Bad, Icon::Warning, "Not found"}, "lsfg-vk.dll is in none of the places lsfg-vk looks", true);
         const float trailing = ui::buttonWidth("Change...", ui::Kind::Secondary, true)
                              + (frameGenerationDll->found ? 0.0f : ImGui::GetStyle().ItemSpacing.x + ui::buttonWidth("Look again", ui::Kind::Secondary, true))
                              + ui::nextLaunchRoom(dllWaits);

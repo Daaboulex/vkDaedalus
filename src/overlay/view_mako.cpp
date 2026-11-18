@@ -626,8 +626,7 @@ namespace vkBasalt
 
     void ImGuiOverlay::renderMakoGlobals()
     {
-        const OverlayPalette& palette = activePalette();
-        const char*           tip     = "MAKO's own settings, the same for every game. Read when a game starts.";
+        const char* tip = "MAKO's own settings, the same for every game. Read when a game starts.";
         ImGui::AlignTextToFramePadding();
         caption("MAKO", "all games", tip);
         if (!readMakoOnce())
@@ -651,19 +650,17 @@ namespace vkBasalt
         const char* action = nullptr;
         if (makoDll->found)
         {
-            ImGui::TextColored(palette.ok, "Found");
-            ImGui::SetItemTooltip("%s", makoDll->path->c_str());
+            ui::badge(Badge{Tone::Ok, std::nullopt, "Found"}, makoDll->path->c_str(), true);
         }
         else if (makoDll->inSteamLibrary)
         {
-            ImGui::TextColored(palette.warn, "In a Steam library");
-            ImGui::SetItemTooltip("%s, in a Steam library MAKO does not search: Set writes it into MAKO's file", makoDll->inSteamLibrary->c_str());
+            const std::string tip = *makoDll->inSteamLibrary + ", in a Steam library MAKO does not search: Set writes it into MAKO's file";
+            ui::badge(Badge{Tone::Warn, Icon::Warning, "In a Steam library"}, tip.c_str(), true);
             action = "Set";
         }
         else
         {
-            ImGui::TextColored(palette.muted, "Not found");
-            ImGui::SetItemTooltip("Install Lossless Scaling in Steam");
+            ui::badge(Badge{Tone::Muted, std::nullopt, "Not found"}, "Install Lossless Scaling in Steam", true);
             action = "Look again";
         }
         const bool dllWaits = makoGlobalAtStart && global.dll != makoGlobalAtStart->dll;
