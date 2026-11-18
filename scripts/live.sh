@@ -3103,6 +3103,25 @@ drive_effects() {
         ui_result "$ui_log" FAIL "Effects: a row's actions button" "its ... button and Move down left $(grep -m1 '^effects' "$profile")"
     fi
     ui_state "$map" fx-01-rows-moved "$ui_log"
+    local undoReloads
+    undoReloads=$(count 'hot-reloading config and effects' "$log")
+    ui_click "$map" "Undo##profile" 1 "$log" || true
+    if ! file_says "$profile" '^effects = smaa:cas:half_precision:every_param_type:pack_ui$'; then
+        ui_result "$ui_log" FAIL "Effects: Undo takes back the latest change first" "Undo left $(grep -m1 '^effects =' "$profile"), not the order before the last move"
+    elif ! wait_for_count 'hot-reloading config and effects' "$((undoReloads + 1))" "$log"; then
+        ui_result "$ui_log" FAIL "Effects: Undo takes back the latest change first" "Undo wrote the order before the last move, but the layer never reloaded it"
+    else
+        DISPLAY="$PRIVATE_DISPLAY" xdotool keydown ctrl || true
+        sleep 0.1
+        DISPLAY="$PRIVATE_DISPLAY" xdotool key z || true
+        sleep 0.2
+        DISPLAY="$PRIVATE_DISPLAY" xdotool keyup ctrl || true
+        if file_says "$profile" '^effects = cas:smaa:half_precision:every_param_type:pack_ui$'; then
+            ui_result "$ui_log" PASS "Effects: Undo takes back the latest change first" "Undo put the rows back to before the last move and the layer reloaded them, then Ctrl+Z to before the move before it"
+        else
+            ui_result "$ui_log" FAIL "Effects: Undo takes back the latest change first" "after Undo, Ctrl+Z left $(grep -m1 '^effects =' "$profile")"
+        fi
+    fi
     ui_click "$map" "Effects###effectsswitch" 1 "$log" || true
     if wait_for_count 'effects off' 1 "$log"; then ui_state "$map" fx-02-effects-off "$ui_log" "the effects switch clicked off"; fi
     if wait_for_count 'effects off' 1 "$log" && ui_click "$map" "Effects###effectsswitch" 1 "$log" && wait_for_count 'effects on' 1 "$log"; then

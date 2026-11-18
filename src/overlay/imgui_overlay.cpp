@@ -10,6 +10,7 @@
 #include "keyboard_input.hpp"
 #include "input_blocker.hpp"
 #include "config_serializer.hpp"
+#include "profile_undo.hpp"
 #include "wayland_input_common.hpp"
 #include "overlay/hud.hpp"
 #include "util.hpp"
@@ -378,11 +379,36 @@ namespace vkBasalt
             profileSettings.frameGenerationLayer        = frameGenerationLayerChoice;
         }
 
+        const std::string before = readProfileText(activeProfilePath);
         if (ConfigSerializer::saveToPath(activeProfilePath, effects, disabledEffects, params, effectPaths, allDefs, profileSettings, liveParameterKeys))
         {
             profileDirty = false;
             Logger::debug("Auto-saved profile: " + activeProfilePath);
+            if (profileUndoPath != activeProfilePath)
+            {
+                profileUndo.clear();
+                profileUndoPath = activeProfilePath;
+            }
+            rememberProfileState(profileUndo, before, readProfileText(activeProfilePath));
         }
+    }
+
+    void ImGuiOverlay::undoProfileChange()
+    {
+        if (profileUndo.empty() || profileUndoPath != activeProfilePath)
+            return;
+        std::ofstream file(activeProfilePath, std::ios::binary | std::ios::trunc);
+        file << profileUndo.back();
+        file.close();
+        if (!file)
+        {
+            Logger::warn("Undo could not write " + activeProfilePath + " back");
+            return;
+        }
+        profileUndo.pop_back();
+        profileDirty = false;
+        paramsDirty  = false;
+        Logger::info("Undo wrote the profile back to its state before the last saved change: " + activeProfilePath);
     }
 
     void ImGuiOverlay::markLiveValuesChanged()
@@ -611,6 +637,7 @@ namespace vkBasalt
             if (keyboard.home) { io.AddKeyEvent(ImGuiKey_Home, true); io.AddKeyEvent(ImGuiKey_Home, false); }
             if (keyboard.end) { io.AddKeyEvent(ImGuiKey_End, true); io.AddKeyEvent(ImGuiKey_End, false); }
             if (keyboard.tab) { io.AddKeyEvent(ImGuiKey_Tab, true); io.AddKeyEvent(ImGuiKey_Tab, false); }
+            if (keyboard.z) { io.AddKeyEvent(ImGuiKey_Z, true); io.AddKeyEvent(ImGuiKey_Z, false); }
             io.AddKeyEvent(ImGuiMod_Ctrl, keyboard.ctrl);
             io.AddKeyEvent(ImGuiMod_Shift, keyboard.shift);
             io.AddKeyEvent(ImGuiMod_Alt, keyboard.alt);

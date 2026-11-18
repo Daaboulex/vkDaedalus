@@ -492,6 +492,8 @@ namespace vkBasalt
         std::string activeProfileName;
         std::string activeProfilePath;
         bool profileDirty = false;
+        std::vector<std::string> profileUndo;
+        std::string              profileUndoPath;
         bool saveFailed = false;
         std::vector<std::string>                         profileList;
         std::map<std::string, std::vector<std::string>> profileGames;
@@ -499,6 +501,7 @@ namespace vkBasalt
         void                                             refreshProfileList();
 
         void autoSaveProfile();
+        void undoProfileChange();
         void markLiveValuesChanged();
         void markEffectValuesChanged(const std::string& effectName);
         void collectSaveData(

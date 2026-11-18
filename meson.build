@@ -102,6 +102,11 @@ if get_option('with_so')
     test('mako-config', mako_config_test,
         args : [meson.current_build_dir() / 'test-mako-config'])
 
+    profile_undo_test = executable('profile-undo-test',
+        'test/profile_undo_test.cpp', 'src/profile_undo.cpp',
+        include_directories : include_directories('src'))
+    test('profile-undo', profile_undo_test)
+
     mako_status_test = executable('mako-status-test',
         'test/mako_status_test.cpp', 'src/mako_status.cpp',
         include_directories : include_directories('src'))

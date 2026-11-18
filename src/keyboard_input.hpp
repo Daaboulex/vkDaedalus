@@ -17,6 +17,7 @@ namespace vkBasalt
         bool home = false;
         bool end = false;
         bool tab = false;
+        bool z = false;
         bool ctrl = false;
         bool shift = false;
         bool alt = false;

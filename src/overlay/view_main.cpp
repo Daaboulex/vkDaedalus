@@ -7,6 +7,7 @@
 #include "effects/effect_registry.hpp"
 #include "settings_manager.hpp"
 #include "config_serializer.hpp"
+#include "profile_undo.hpp"
 #include "params/field_editor.hpp"
 #include "input_blocker.hpp"
 #include "logger.hpp"
@@ -1065,19 +1066,30 @@ namespace vkBasalt
             ui::notef("Profile %s, %zu %s", activeProfileName.c_str(), games, games == 1 ? "game" : "games");
         }
         const float applyWidth  = std::max(ui::px(96.0f), ui::buttonWidth("Apply", ui::Kind::Primary));
+        const bool  canUndo     = !profileUndo.empty() && profileUndoPath == activeProfilePath;
+        const float undoWidth   = ui::buttonWidth("Undo", ui::Kind::Secondary) + style.ItemSpacing.x;
         const bool  justApplied = appliedAt && std::chrono::steady_clock::now() - *appliedAt < std::chrono::milliseconds(1600);
         if (justApplied)
         {
             const Badge done{Tone::Ok, std::nullopt, "Applied"};
-            ui::alignRight(ui::badgeWidth(done) + style.ItemSpacing.x + applyWidth);
+            ui::alignRight(ui::badgeWidth(done) + style.ItemSpacing.x + undoWidth + applyWidth);
             ui::badge(done);
         }
         else if (waitingForApply || (paramsDirty && !settingsManager.getAutoApply()))
         {
             const Badge waiting{Tone::Warn, Icon::Warning, "Waits for Apply"};
-            ui::alignRight(ui::badgeWidth(waiting) + style.ItemSpacing.x + applyWidth);
+            ui::alignRight(ui::badgeWidth(waiting) + style.ItemSpacing.x + undoWidth + applyWidth);
             ui::badge(waiting, nullptr, false, "Waits for Apply");
         }
+        ui::alignRight(undoWidth + applyWidth);
+        ImGui::BeginDisabled(!canUndo);
+        const bool undo = ui::button("Undo##profile", ui::Kind::Secondary);
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", canUndo ? (profileUndoWords(readProfileText(activeProfilePath), profileUndo.back()) + " (Ctrl+Z)").c_str()
+                                            : "Nothing saved to undo yet: each saved change can be taken back here, the latest first");
+        if (undo || (canUndo && !ImGui::GetIO().WantTextInput && ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Z)))
+            undoProfileChange();
         ui::alignRight(applyWidth);
         if (ui::button("Apply", ui::Kind::Primary, applyWidth))
         {

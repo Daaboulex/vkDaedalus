@@ -30,6 +30,7 @@ namespace vkBasalt
     static bool homePressed = false;
     static bool endPressed = false;
     static bool tabPressed = false;
+    static bool zPressed = false;
 
     static void initKeyboardX11()
     {
@@ -128,6 +129,7 @@ namespace vkBasalt
                 lastKeyNameAccumulator = keyName;
         }
 
+        if (keysym == XK_z) zPressed = true;
         if (keysym == XK_BackSpace) backspacePressed = true;
         else if (keysym == XK_Delete) deletePressed = true;
         else if (keysym == XK_Return || keysym == XK_KP_Enter) enterPressed = true;
@@ -217,6 +219,7 @@ namespace vkBasalt
         state.home = homePressed;
         state.end = endPressed;
         state.tab = tabPressed;
+        state.z = zPressed;
 
         typedCharsAccumulator.clear();
         lastKeyNameAccumulator.clear();
@@ -228,6 +231,7 @@ namespace vkBasalt
         homePressed = false;
         endPressed = false;
         tabPressed = false;
+        zPressed = false;
 
         return state;
     }

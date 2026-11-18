@@ -37,6 +37,7 @@ namespace vkBasalt
     static bool homePressed = false;
     static bool endPressed = false;
     static bool tabPressed = false;
+    static bool zPressed = false;
 
     static bool keyboardLogged = false;
     static bool noKeyboardWarned = false;
@@ -72,6 +73,8 @@ namespace vkBasalt
                 lastKeyNameAccumulator = nameBuf;
         }
 
+        if (keysym == XKB_KEY_z || keysym == XKB_KEY_Z)
+            zPressed = true;
         if (keysym == XKB_KEY_BackSpace)
             backspacePressed = true;
         else if (keysym == XKB_KEY_Delete)
@@ -305,6 +308,7 @@ namespace vkBasalt
         state.home = homePressed;
         state.end = endPressed;
         state.tab = tabPressed;
+        state.z = zPressed;
 
         typedCharsAccumulator.clear();
         lastKeyNameAccumulator.clear();
@@ -316,6 +320,7 @@ namespace vkBasalt
         homePressed = false;
         endPressed = false;
         tabPressed = false;
+        zPressed = false;
 
         return state;
     }

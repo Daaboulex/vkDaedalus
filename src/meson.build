@@ -77,6 +77,7 @@ vkBasalt_src = [
     'lut_cube.cpp',
     'mako_config.cpp',
     'mako_status.cpp',
+    'profile_undo.cpp',
     'memory.cpp',
     'renderpass.cpp',
     'reshade_uniforms.cpp',
