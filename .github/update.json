@@ -10,7 +10,7 @@
     "args": null,
     "check": "wrapper"
   },
-  "description": "vkDaedalus: Vulkan post-processing with an in-game overlay, frame generation control and multi-GPU offload",
+  "description": "Vulkan layer forked from vkBasalt: in-game overlay for ReShade effects, frame generation, scaling and a second GPU",
   "topics": [
     "nix",
     "nixos",
@@ -24,6 +24,9 @@
     "wayland",
     "overlay",
     "imgui",
-    "gaming"
+    "gaming",
+    "frame-generation",
+    "lsfg-vk",
+    "mako"
   ]
 }
