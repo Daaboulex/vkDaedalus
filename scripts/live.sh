@@ -6498,6 +6498,14 @@ mako_other_gpu_case() {
                     record FAIL "$name" "$verdict, but vkDaedalus said: ${claim:-nothing}"
                     continue
                 fi
+            elif [ "$(count '^status' "$log.live")" -eq 0 ]; then
+                verdict="MAKO generated none with its gpu on $id and wrote no status file: $(grep -m1 -o -E 'failed[^:]*: .*|initialization failed.*' "$log" | head -1 | cut -c1-120)"
+                if [ -n "$claim" ]; then
+                    record FAIL "$name" "$verdict, so vkDaedalus has nothing to read, but it said: $claim"
+                    continue
+                fi
+                record PASS "$name" "$verdict, and vkDaedalus, with nothing to read, claimed nothing"
+                continue
             else
                 verdict="MAKO generated none with its gpu on $id: $(grep -m1 -o -E 'failed[^:]*: .*|initialization failed.*' "$log" | head -1 | cut -c1-120)"
                 if [[ "$claim" != "MAKO's file names GPU "* ]]; then
