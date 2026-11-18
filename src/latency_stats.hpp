@@ -83,8 +83,9 @@ namespace vkBasalt
 
     struct AdaptiveTarget
     {
-        uint32_t fps     = 0;
-        bool     refresh = false;
+        uint32_t fps           = 0;
+        bool     refresh       = false;
+        uint32_t maxMultiplier = 0;
 
         bool operator==(const AdaptiveTarget&) const = default;
     };
@@ -92,6 +93,21 @@ namespace vkBasalt
     inline std::string adaptiveWords(const AdaptiveTarget& target)
     {
         return target.refresh ? "adaptive to the refresh" : "adaptive to " + std::to_string(target.fps) + " FPS";
+    }
+
+    inline double adaptiveReachFps(double gameFps, const AdaptiveTarget& target)
+    {
+        return gameFps * target.maxMultiplier;
+    }
+
+    inline std::optional<std::string> adaptiveCeilingWords(double gameFps, const AdaptiveTarget& target)
+    {
+        const double reach = adaptiveReachFps(gameFps, target);
+        if (target.refresh || reach >= target.fps)
+            return std::nullopt;
+        char text[64];
+        std::snprintf(text, sizeof(text), "%.0f FPS x %u reaches %.0f", gameFps, target.maxMultiplier, reach);
+        return text;
     }
 
     inline std::string rateLine(double timedFps, std::optional<uint32_t> multiplier, const std::optional<AdaptiveTarget>& adaptive, bool effectsAfterFrameGeneration)

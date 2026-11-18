@@ -237,6 +237,16 @@ int main(int argc, char** argv)
         check(vkBasalt::plotCeilingMs(hitched.averageMs, hitched.slowestAverageMs) < 200.0,
               "one long hitch does not stretch the plot so far that every other frame lies flat at the bottom");
     }
+    {
+        const vkBasalt::AdaptiveTarget aim{238, false, 3};
+        check(vkBasalt::adaptiveReachFps(60.0, aim) == 180.0, "at 60 FPS with at most 3x MAKO reaches 180 frames shown");
+        check(vkBasalt::adaptiveCeilingWords(60.0, aim) == "60 FPS x 3 reaches 180",
+              "a target of 238 above the 180 that 60 FPS times a 3x ceiling reach is named with the reach");
+        check(!vkBasalt::adaptiveCeilingWords(80.0, aim) && !vkBasalt::adaptiveCeilingWords(60.0, vkBasalt::AdaptiveTarget{180, false, 3}),
+              "a ceiling that reaches the target or passes it leaves nothing to say");
+        check(!vkBasalt::adaptiveCeilingWords(60.0, vkBasalt::AdaptiveTarget{238, true, 3}),
+              "a target that follows a refresh the layer does not know is not compared");
+    }
     if (argc == 2)
         checkDocument(argv[1]);
     return failures == 0 ? 0 : 1;

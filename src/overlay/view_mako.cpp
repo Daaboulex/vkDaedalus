@@ -13,6 +13,7 @@
 
 #include "config_serializer.hpp"
 #include "frame_generation_place.hpp"
+#include "latency_stats.hpp"
 #include "logger.hpp"
 #include "logical_device.hpp"
 #include "overlay/frame_draw.hpp"
@@ -220,7 +221,7 @@ namespace vkBasalt
         const MakoSettings* now = makoGeneratingHere();
         if (now == nullptr || !now->adaptive)
             return std::nullopt;
-        return AdaptiveTarget{now->targetFps, now->adaptiveTargetRefreshRate && underGamescope()};
+        return AdaptiveTarget{now->targetFps, now->adaptiveTargetRefreshRate && underGamescope(), static_cast<uint32_t>(now->adaptiveMaxMultiplier)};
     }
 
     MakoSettings ImGuiOverlay::makoSettingsAtStart() const
@@ -430,6 +431,16 @@ namespace vkBasalt
                     slide("Target", "##Target", set.targetFps, MakoLimits::lowestTargetFps, MakoLimits::highestTargetFps, std::to_string(set.targetFps) + " FPS",
                           "The frame rate MAKO aims to show");
                 });
+                const std::optional<AdaptiveTarget> running = frameGenerationAdaptiveHere();
+                const FrameStats                    game    = frameStats(latency.lastSecondMs);
+                if (running && game.count > 0 && (!tuned.power || edited == powerSupplies.source) && !effectsRunAfterFrameGeneration(pLogicalDevice->frameGenerationPlace))
+                    if (const std::optional<std::string> ceiling = adaptiveCeilingWords(game.fps, *running))
+                    {
+                        ui::note(ceiling->c_str());
+                        ImGui::SetItemTooltip("The game's own rate, measured, times Max multiplier, the most frames MAKO shows per real frame.\n"
+                                              "Below the target of %u FPS, this ceiling decides how many frames MAKO shows.",
+                                              running->fps);
+                    }
                 greyed(!greyedWhy.displayRefresh.empty(), greyedWhy.displayRefresh.c_str(), [&] {
                     flag("Display refresh", set.adaptiveTargetRefreshRate, "Use the display's refresh rate as the target, following it when it changes", false);
                 });
