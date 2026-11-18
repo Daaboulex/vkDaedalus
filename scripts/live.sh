@@ -343,6 +343,19 @@ first_match() {
     sed -n -E "s/$1/\\1/p" <<<"$2" | sed -n 1p
 }
 
+mako_alone_reports() {
+    local own
+    own="$(dirname "$1")/mako-alone.ids"
+    touch "$own"
+    sort -u -o "$own" "$own" <(report_ids "$1.stdout")
+}
+
+mako_own_reports() {
+    local own
+    own="$(dirname "$1")/mako-alone.ids"
+    if [ -f "$own" ] && [ "$(count '^MAKO Renderer: render layer active' "$1")" -ne 0 ]; then cat "$own"; fi
+}
+
 report_ids() {
     if [ -f "$1" ]; then
         sed -n -E 's/^Validation (Error|Warning): \[ ([^ ]+) \].*/\2/p' "$1" | sort -u
@@ -452,7 +465,7 @@ validation_verdict() {
         echo "validation is not under the layer in the loader chain"
         return 1
     fi
-    new=$(comm -23 <(report_ids "$log.stdout") <(report_ids "$control.stdout") | paste -sd ' ' -)
+    new=$(comm -23 <(report_ids "$log.stdout") <(sort -u <(report_ids "$control.stdout") <(mako_own_reports "$log")) | paste -sd ' ' -)
     if [ -n "$new" ]; then
         echo "validation errors or warnings the layer introduced: $new"
         return 1
@@ -941,6 +954,7 @@ mako_live_case() {
     background drive_mako_live_alone "$control" "$chome/.config/mako-render/conf.toml" "$log.steps"
     driver=$!
     run "$control" "$chome" "$icd" "$VALIDATION" 0 1 -- env ENABLE_MAKO=1 VK_ADD_IMPLICIT_LAYER_PATH="$MAKO_DIR" vkcube --c 1200 --wsi xcb --width 1280 --height 720
+    mako_alone_reports "$control"
     driver_finished "drive_mako_live_alone"
     if ! why=$(mako_ran "$control"); then
         record FAIL "MAKO alone scales and takes a live change" "$why"
@@ -1100,9 +1114,15 @@ mako_cases() {
     mkdir -p "$chome/.config/mako-render"
     cp "$dir/mako-scaling.toml" "$chome/.config/mako-render/conf.toml"
     run "$control" "$chome" "$icd" "$MAKO:$VALIDATION" 0 1 -- vkcube --c "$FRAMES" --wsi xcb --width 1280 --height 720
+    mako_alone_reports "$control"
     if ! why=$(mako_ran "$control"); then
         record FAIL "MAKO alone" "$why"
         return 0
+    fi
+    if absent=$(mako_fg_absent); then
+        for order in before after; do record SKIP "MAKO frame generation, effects $order" "$absent"; done
+    else
+        for order in before after; do mako_frames_case "$icd" "$dir" "$order"; done
     fi
     if [ ! -x "$VKB_LAYER/bin/vkdaedalus-run" ]; then
         for order in before after; do record SKIP "vkdaedalus-run loads MAKO alone, effects $order" "this build has no vkdaedalus-run (a plain meson build installs none)"; done
@@ -1117,11 +1137,6 @@ mako_cases() {
         for kind in factor-one no-status; do mako_unscaled_case "$icd" "$dir" "$kind"; done
         mako_kept_case "$icd" "$dir" "$control"
     fi
-    if absent=$(mako_fg_absent); then
-        for order in before after; do record SKIP "MAKO frame generation, effects $order" "$absent"; done
-        return 0
-    fi
-    for order in before after; do mako_frames_case "$icd" "$dir" "$order"; done
 }
 
 mako_frames_step() {
@@ -1206,6 +1221,7 @@ mako_frames_case() {
     background drive_mako_frames "$control" "$chome/.config/mako-render/conf.toml" 0
     driver=$!
     run "$control" "$chome" "$icd" "$alone" 0 1 -- env FAULT_INJECT_COUNT_PRESENTS=each vkcube --c 2000 --wsi xcb
+    mako_alone_reports "$control"
     driver_finished "drive_mako_frames"
     if ! why=$(mako_ran "$control"); then
         record FAIL "MAKO frame generation alone, effects $order" "$why"
@@ -6339,6 +6355,7 @@ mako_offload_case() {
     cp "$mako_manifest" "$MAKO_DIR/"
     mako_offload_home "$dir/offload-mako-control-home"
     run "$control" "$dir/offload-mako-control-home" "$icd" "$MAKO:$VALIDATION" 0 1 -- gpu-choice-probe "$FRAMES" "$LANE_GPU_ID"
+    mako_alone_reports "$control"
     if ! why=$(mako_ran "$control"); then
         record FAIL "$name" "MAKO alone: $why"
         return 0
