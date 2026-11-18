@@ -48,10 +48,13 @@ and the game's own rate is it divided by the multiplier, estimated. At multiplie
 lsfg-vk in the game, both are the measured rate.
 
 MAKO counts the same way at a fixed multiplier. In Adaptive it changes how many frames it shows per
-real frame as it goes, so only the rate the layer times is given, the game's own with the effects
-before frame generation and the frames shown with the effects after it, beside the target: the FPS
-MAKO aims at, or the display's refresh, which MAKO takes from gamescope and replaces with that FPS
-while gamescope reports none.
+real frame as it goes, up to its Max multiplier, to reach a target: the FPS MAKO aims at, or the
+display's refresh, which MAKO takes from gamescope and replaces with that FPS while gamescope reports
+none. With the effects after frame generation the layer times the frames shown, and the game's own
+rate is not worked out. With the effects before it the game's rate is measured, and the frames shown
+are estimated as the target, or the game's rate times Max multiplier when that is lower, and never
+below the game's own rate, since MAKO lets native frames above its target through. While MAKO
+follows gamescope's refresh, which the layer does not read, no shown rate is given.
 
 ```example
 rates: 60.00 FPS timed, multiplier 3, effects before
@@ -63,6 +66,11 @@ shown: 180 FPS, estimated
 rates after: 180.00 FPS timed, multiplier 3, effects after
 game after: 60 FPS, estimated
 shown after: 180 FPS, measured
+```
+
+```example
+rates adaptive: 60.00 FPS timed, target 238, max multiplier 3, effects before
+shown adaptive: 180 FPS, estimated
 ```
 
 The frame time plot reaches up to twice the average or 1.1 times the slowest 1%, whichever is

@@ -126,6 +126,18 @@ namespace
             checkPrinted(doc, "shown" + suffix, printed("%.0f FPS, %s", computed.shownFps, computed.shownMeasured ? "measured" : "estimated"));
         }
 
+        const auto adaptive = doc.find("rates adaptive");
+        check(adaptive != doc.end(), "LATENCY.md has no rates adaptive example");
+        if (adaptive != doc.end())
+        {
+            double   timed  = 0.0;
+            unsigned target = 0, ceiling = 0;
+            check(std::sscanf(adaptive->second.c_str(), "%lf FPS timed, target %u, max multiplier %u, effects before", &timed, &target, &ceiling) == 3,
+                  "unreadable rates adaptive line");
+            const std::optional<double> shown = adaptiveShownFps(timed, AdaptiveTarget{target, false, ceiling});
+            checkPrinted(doc, "shown adaptive", shown ? printed("%.0f FPS, estimated", *shown) : "none");
+        }
+
         const auto smoothing = doc.find("smoothing");
         check(smoothing != doc.end(), "LATENCY.md has no smoothing example");
         if (smoothing != doc.end())
@@ -246,6 +258,12 @@ int main(int argc, char** argv)
               "a ceiling that reaches the target or passes it leaves nothing to say");
         check(!vkBasalt::adaptiveCeilingWords(60.0, vkBasalt::AdaptiveTarget{238, true, 3}),
               "a target that follows a refresh the layer does not know is not compared");
+        check(vkBasalt::adaptiveShownFps(60.0, aim) == 180.0 && vkBasalt::adaptiveShownFps(60.0, vkBasalt::AdaptiveTarget{90, false, 3}) == 90.0,
+              "the frames shown in Adaptive are estimated as the target or the game's rate times Max multiplier, whichever is lower");
+        check(vkBasalt::adaptiveShownFps(150.0, vkBasalt::AdaptiveTarget{120, false, 3}) == 150.0,
+              "a game faster than the target is not estimated below its own rate, as MAKO lets native frames above its target through");
+        check(!vkBasalt::adaptiveShownFps(60.0, vkBasalt::AdaptiveTarget{238, true, 3}),
+              "while MAKO follows a refresh the layer does not know, no shown rate is estimated");
     }
     if (argc == 2)
         checkDocument(argv[1]);

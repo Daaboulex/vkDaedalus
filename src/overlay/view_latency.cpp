@@ -135,6 +135,19 @@ namespace vkBasalt
                                       timed.windowMs / 1000.0, timed.count, timed.count == 1 ? "" : "s");
             if (adaptive)
             {
+                const std::optional<double> shown = after ? std::nullopt : adaptiveShownFps(timed.fps, *adaptive);
+                if (shown)
+                {
+                    ImGui::SameLine();
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextColored(palette.warn, "~");
+                    ImGui::SameLine(0.0f, 0.0f);
+                    ImGui::TextColored(palette.muted, "%.0f shown", *shown);
+                    ImGui::SetItemTooltip("vkDaedalus sees only the game's own frames. The frames shown are estimated as MAKO's target, %u FPS,\n"
+                                          "or the game's rate times Max multiplier, %ux, when that is lower, and never below the game's own rate.\n"
+                                          "LATENCY.md has the formulas.",
+                                          adaptive->fps, adaptive->maxMultiplier);
+                }
                 ImGui::SameLine();
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextColored(palette.muted, "%s", adaptiveWords(*adaptive).c_str());
@@ -142,6 +155,9 @@ namespace vkBasalt
                     ImGui::SetItemTooltip("MAKO aims at the display's refresh as gamescope reports it, or at %u FPS while it reports none,\n"
                                           "and changes how many frames it shows per real frame to reach it, so no shown rate is worked out here.",
                                           adaptive->fps);
+                else if (shown)
+                    ImGui::SetItemTooltip("MAKO aims at %u FPS and changes how many frames it shows per real frame, up to %ux, to reach it.", adaptive->fps,
+                                          adaptive->maxMultiplier);
                 else
                     ImGui::SetItemTooltip("MAKO aims at %u FPS and changes how many frames it shows per real frame to reach it,\n"
                                           "so no shown rate is worked out here.",

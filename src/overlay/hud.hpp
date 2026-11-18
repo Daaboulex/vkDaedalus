@@ -103,7 +103,14 @@ namespace vkBasalt
         {
             lines.push_back(rateLine(lastSecond.fps, multiplier, adaptive, effectsAfterFrameGeneration));
             if (adaptive)
+            {
+                if (const std::optional<double> shown = effectsAfterFrameGeneration ? std::nullopt : adaptiveShownFps(lastSecond.fps, *adaptive))
+                {
+                    std::snprintf(text, sizeof(text), "%.0f shown", *shown);
+                    lines.push_back(text);
+                }
                 lines.push_back(adaptiveWords(*adaptive));
+            }
             else if (multiplier && *multiplier >= 2)
             {
                 std::snprintf(text, sizeof(text), "%.0f shown", frameRatesOf(lastSecond.fps, multiplier, effectsAfterFrameGeneration).shownFps);

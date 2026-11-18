@@ -110,6 +110,13 @@ namespace vkBasalt
         return text;
     }
 
+    inline std::optional<double> adaptiveShownFps(double gameFps, const AdaptiveTarget& target)
+    {
+        if (target.refresh)
+            return std::nullopt;
+        return std::max(gameFps, std::min(static_cast<double>(target.fps), adaptiveReachFps(gameFps, target)));
+    }
+
     inline std::string rateLine(double timedFps, std::optional<uint32_t> multiplier, const std::optional<AdaptiveTarget>& adaptive, bool effectsAfterFrameGeneration)
     {
         char text[48];

@@ -2528,8 +2528,12 @@ namespace vkBasalt
         const bool                          after      = effectsRunAfterFrameGeneration(device.frameGenerationPlace);
         const FrameRates                    rates      = frameRatesOf(timed, multiplier, after);
         const std::string                   place      = frameGenerationPlaceWords(device.frameGenerationPlace, loadedFrameGenerationLayerName());
+        const std::optional<double>         shown      = adaptive && !after ? adaptiveShownFps(timed, *adaptive) : std::nullopt;
         char                                line[320];
-        if (adaptive)
+        if (shown)
+            std::snprintf(line, sizeof(line), "frame rates %s: game %.1f FPS measured, shown %.1f FPS estimated; %s, %s", over.c_str(), timed, *shown, place.c_str(),
+                          adaptiveWords(*adaptive).c_str());
+        else if (adaptive)
             std::snprintf(line, sizeof(line), "frame rates %s: %s %.1f FPS measured; %s, %s", over.c_str(), after ? "shown" : "game", timed, place.c_str(),
                           adaptiveWords(*adaptive).c_str());
         else

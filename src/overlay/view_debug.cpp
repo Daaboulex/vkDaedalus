@@ -228,7 +228,7 @@ namespace vkBasalt
                 };
                 figure("FPS", adaptive && after ? ui::Mark::Absent : rates.gameMeasured ? ui::Mark::Measured : ui::Mark::Estimated);
                 if (adaptive)
-                    figure("FPS shown", after ? ui::Mark::Measured : ui::Mark::Absent);
+                    figure("FPS shown", after ? ui::Mark::Measured : adaptive->refresh ? ui::Mark::Absent : ui::Mark::Estimated);
                 else if (multiplier)
                     figure("FPS shown", rates.shownMeasured ? ui::Mark::Measured : ui::Mark::Estimated);
                 figure("Frame times", ui::Mark::Measured);
