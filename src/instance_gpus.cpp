@@ -60,4 +60,34 @@ namespace vkBasalt
         }
         return gpus;
     }
+
+    std::vector<NumberedGpu> numberedInstanceGpus(const std::vector<InstanceGpu>& gpus, VkPhysicalDevice game, const std::vector<GpuListEntry>& list)
+    {
+        std::vector<GpuCandidate> candidates;
+        std::vector<bool>         offerable;
+        size_t                    gameIndex = gpus.size();
+        for (size_t i = 0; i < gpus.size(); i++)
+        {
+            candidates.push_back(gpus[i].id);
+            offerable.push_back(gpus[i].properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU);
+            if (gpus[i].physical == game)
+                gameIndex = i;
+        }
+        return numberedGpus(candidates, gameIndex, list, offerable);
+    }
+
+    MakoGpus makoGpusOf(const std::vector<InstanceGpu>& gpus, VkPhysicalDevice game, const std::vector<GpuListEntry>& list)
+    {
+        MakoGpus out;
+        for (const NumberedGpu& numbered : numberedInstanceGpus(gpus, game, list))
+        {
+            const InstanceGpu& gpu = gpus[numbered.index];
+            const MakoGpu      named{gpu.properties.deviceName, gpu.id.vendor, gpu.id.device, gpu.id.pci};
+            if (numbered.number == gameGpu)
+                out.game = named;
+            else
+                out.others.push_back({numbered.number, named});
+        }
+        return out;
+    }
 }

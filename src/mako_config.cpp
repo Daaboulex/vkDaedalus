@@ -632,12 +632,7 @@ namespace vkBasalt
 
     bool makoGpuNamesAnother(const std::string& gpu, const MakoGpu& game)
     {
-        const auto idText = [](uint32_t id) {
-            char text[8];
-            std::snprintf(text, sizeof(text), "0x%04X", id & 0xFFFFu);
-            return std::string(text);
-        };
-        if (gpu == game.name || gpu == idText(game.vendorId) + ":" + idText(game.deviceId))
+        if (gpu == game.name || gpu == makoGpuIdText(game.vendorId, game.deviceId))
             return false;
         unsigned int bus = 0, device = 0, function = 0;
         int          read = 0;

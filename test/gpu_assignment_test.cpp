@@ -108,6 +108,24 @@ int main()
     expect(matchGpu(*parseGpuId("10de:21c4@0000:05:00.0"), noPci, 0).kind == GpuMatchKind::NotFound,
            "a PCI address cannot match a card that reports none");
 
+    const std::vector<GpuCandidate> instance = {{0x1002, 0x13c0, PciAddress{0, 0x7c, 0, 0}}, {0x10de, 0x21c4, PciAddress{0, 5, 0, 0}},
+                                                {0x10005, 0x0000, std::nullopt}, {0x1002, 0x7550, PciAddress{0, 3, 0, 0}}, {0x1002, 0x7550, PciAddress{0, 0x73, 0, 0}}};
+    const std::vector<bool>         offerable = {true, true, false, true, true};
+    const std::vector<GpuListEntry> listed    = parseGpuList("1002:7550@0000:73:00.0, ffff:ffff, x, 1002:7550@0000:73:00.0");
+    const std::vector<NumberedGpu>  numbered  = numberedGpus(instance, 0, listed, offerable);
+    std::vector<std::pair<uint32_t, size_t>> pairs;
+    for (const NumberedGpu& gpu : numbered)
+        pairs.emplace_back(gpu.number, gpu.index);
+    expect(pairs == std::vector<std::pair<uint32_t, size_t>>{{1, 0}, {2, 4}, {6, 1}, {7, 3}},
+           "the game's GPU is 1, a listed GPU keeps its number, one listed again or not found leaves its number empty, and every other GPU but a CPU follows the list in the instance's order");
+    expect(numbered.size() == 4 && numbered[2].id == GpuId{0x10de, 0x21c4, std::nullopt} && numbered[3].id == GpuId{0x1002, 0x7550, PciAddress{0, 3, 0, 0}},
+           "a GPU not listed is named by vendor:device, with its PCI address only when another GPU shares them");
+    const std::vector<GpuCandidate> twinsWithoutPci = {{0x1002, 0x13c0, std::nullopt}, {0x1002, 0x7550, std::nullopt}, {0x1002, 0x7550, std::nullopt}};
+    const std::vector<GpuCandidate> twoDrivers      = {{0x1002, 0x13c0, std::nullopt}, {0x1002, 0x7550, PciAddress{0, 3, 0, 0}}, {0x1002, 0x7550, PciAddress{0, 3, 0, 0}}};
+    expect(numberedGpus(twinsWithoutPci, 0, {}, {true, true, true}).size() == 2 && numberedGpus(twoDrivers, 0, {}, {true, true, true}).size() == 2,
+           "identical cards that report no PCI address, and one card two drivers list, are numbered once, as nothing tells them apart");
+    expect(numberedGpus(instance, instance.size(), listed, offerable).empty(), "a game whose GPU is not in the instance numbers none");
+
     expect(otherGpusUsed({0, 2, 0, 1, 3}) == std::vector<uint32_t>{2, 3}, "the other GPUs a chain uses are listed once each, in order");
     expect(otherGpusUsed({0, 1}).empty(), "a chain on the game's GPU uses no other GPU");
 

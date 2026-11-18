@@ -15,6 +15,7 @@
 #include "overlay/swapchain_overlay.hpp"
 #include "gpu_chain.hpp"
 #include "latency_stats.hpp"
+#include "mako_status.hpp"
 #include "present_counter.hpp"
 
 namespace vkBasalt
@@ -59,6 +60,7 @@ namespace vkBasalt
         bool                                shownBaselineTaken     = false;
         std::optional<PresentTotals>        shownAtStart;
         std::optional<PresentTotals>        shownReported;
+        std::optional<MakoGpuClaim>         makoGpuClaimLogged;
         std::vector<bool>                   timingSamplesPending;
         bool                                timingEnabled = false;
         bool                                timingReadErrorLogged = false;

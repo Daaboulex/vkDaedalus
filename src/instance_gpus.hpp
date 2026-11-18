@@ -6,6 +6,7 @@
 #include "vulkan_include.hpp"
 #include "vkdispatch.hpp"
 #include "gpu_assignment.hpp"
+#include "mako_gpu.hpp"
 
 namespace vkBasalt
 {
@@ -21,6 +22,10 @@ namespace vkBasalt
     bool offersExtension(const std::vector<VkExtensionProperties>& offered, const char* name);
 
     std::vector<InstanceGpu> listInstanceGpus(const InstanceDispatch& vki, VkInstance instance);
+
+    std::vector<NumberedGpu> numberedInstanceGpus(const std::vector<InstanceGpu>& gpus, VkPhysicalDevice game, const std::vector<GpuListEntry>& list);
+
+    MakoGpus makoGpusOf(const std::vector<InstanceGpu>& gpus, VkPhysicalDevice game, const std::vector<GpuListEntry>& list);
 }
 
 #endif

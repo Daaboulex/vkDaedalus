@@ -226,6 +226,12 @@ check's message or a test already says is not repeated here.
 - MAKO generates frames only on the game's GPU, so the card offers no GPU and never writes MAKO's
   `gpu` key; it offers to clear one that names another GPU. The card names the GPU in a row of its
   own: read from a tooltip alone, the card looked as if it lacked a GPU choice.
+- Where MAKO generates frames is read from its status file, never from its settings: the GPU its
+  applied profile names and the error it wrote. That GPU is matched by MAKO's own rule, so a name
+  two GPUs share is claimed as either. The layer also reads the file without the overlay, at a low
+  rate, and logs the claim when it changes, so every run records where its frames were generated.
+- Every GPU of the instance has a number, a listed one its place in the profile's list and the rest
+  the numbers after it, so a GPU MAKO names has a number before anyone lists it.
 - What MAKO scales is read from the status file MAKO writes per swapchain, never from its settings:
   with Scaling on MAKO still scales nothing at factor 1 or for a game that asks for the window's full
   size. The file is named by the process and holds no swapchain handle, so the game's own is the one

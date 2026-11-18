@@ -93,6 +93,17 @@ int main(int argc, char** argv)
     expect(matched && matched->appliedTargetFps == 144u,
            "the target MAKO applies, which it matches to gamescope's refresh when Display refresh is on, is read from the applied profile");
     expect(generating && !generating->appliedTargetFps, "a status naming no applied target leaves it unknown rather than zero");
+    const std::string appliedHead   = "\"applied\":{\"name\":\"vkdaedalus \\\"default\\\"\",\"gpu\":null";
+    const std::string requestedHead = "\"requested\":{\"name\":\"vkdaedalus \\\"default\\\"\",\"gpu\":null";
+    const std::string elsewhereText = swapped(swapped(scalingText, appliedHead, "\"applied\":{\"name\":\"vkdaedalus \\\"default\\\"\",\"gpu\":\"0xABCD:0x2684\""),
+                                              "\"error\":null", "\"error\":\"failed to create swapchain context\"");
+    const std::optional<MakoStatus> elsewhere = parseMakoStatus(elsewhereText, problem);
+    expect(scaling && !scaling->appliedGpu && !scaling->error, "a status whose applied GPU and error are null names no GPU and no error");
+    expect(elsewhere && elsewhere->appliedGpu == "0xABCD:0x2684" && elsewhere->error == "failed to create swapchain context",
+           "the GPU MAKO's applied profile names and MAKO's error are read as MAKO wrote them");
+    const std::optional<MakoStatus> requestedOnly =
+        parseMakoStatus(swapped(scalingText, requestedHead, "\"requested\":{\"name\":\"vkdaedalus \\\"default\\\"\",\"gpu\":\"0xABCD:0x2684\""), problem);
+    expect(requestedOnly && !requestedOnly->appliedGpu, "a GPU only requested, which MAKO reads at the next start, is not the one it applies");
     const std::string nativeText =
         statusText("frame-generation", 2, "lossless-scaling", true, false, "application-extent-mismatch", sizesText(1280, 720, 1280, 720), "native");
     const std::optional<MakoStatus> native = parseMakoStatus(nativeText, problem);
@@ -104,7 +115,10 @@ int main(int argc, char** argv)
                                       statusText("frame-generation", 1, "mako-fg", true, true, "", sizesText(853, 480, 1280, -720), "mako"),
                                       swapped(scalingText, "\"frame_generation_active\":false,", ""),
                                       swapped(scalingText, "\"frame_generation_unavailable\":{\"reason\":\"offscreen-x11-window\"}", "\"frame_generation_unavailable\":3"),
-                                      swapped(scalingText, "{\"reason\":\"offscreen-x11-window\"}", "{\"reason\":3}")})
+                                      swapped(scalingText, "{\"reason\":\"offscreen-x11-window\"}", "{\"reason\":3}"),
+                                      swapped(scalingText, appliedHead, "\"applied\":{\"name\":\"vkdaedalus \\\"default\\\"\",\"gpu\":3"),
+                                      swapped(scalingText, appliedHead, "\"applied\":{\"name\":\"vkdaedalus \\\"default\\\"\""),
+                                      swapped(scalingText, "\"error\":null", "\"error\":3"), swapped(scalingText, ",\"error\":null", "")})
     {
         problem.clear();
         expect(!parseMakoStatus(broken, problem) && !problem.empty(), "a file that is no whole status is refused with a reason: " + broken.substr(0, 40));
@@ -199,6 +213,72 @@ int main(int argc, char** argv)
                    == MakoScalingShown{MakoScalingRun::NotScaling, "MAKO does not scale, and names no reason", ""},
                "inactive with no reason from MAKO, it says so");
     }
+    expect(!makoStatusReadDue(0) && !makoStatusReadDue(119) && makoStatusReadDue(120) && !makoStatusReadDue(121) && !makoStatusReadDue(719)
+               && makoStatusReadDue(720) && makoStatusReadDue(1320) && !makoStatusReadDue(1321),
+           "without the overlay MAKO's status is read once a swapchain has presented 120 times, then every 600 presents");
+
+    expect(makoGpuIdText(0xabcd, 0x2684) == "0xABCD:0x2684" && makoGpuIdText(0x1234, 0xa2) == "0x1234:0x00A2",
+           "a GPU is written into MAKO's file as MAKO writes vendor and device: 0x and four upper-case hex digits each");
+    expect(makoGpusWords({2}, "") == "GPU 2" && makoGpusWords({2, 3}, "") == "GPU 2 or GPU 3" && makoGpusWords({1, 2, 3}, "") == "GPU 1, GPU 2 or GPU 3"
+               && makoGpusWords({}, "Another GPU") == "\"Another GPU\"",
+           "the GPUs MAKO's file names are said by number, and a name no GPU has as MAKO's file gives it");
+    if (generating)
+    {
+        const MakoGpus gpus{{"Game GPU", 0x1234, 0x0001, PciAddress{0, 0xc4, 0, 0}},
+                            {{2, {"Second GPU", 0x1234, 0x00a2, PciAddress{0, 3, 0, 0}}}, {3, {"Third GPU", 0xabcd, 0x2684, PciAddress{0, 1, 0, 0}}}}};
+        const MakoGpus twins{{"Game GPU", 0x1234, 0x0001, std::nullopt},
+                             {{2, {"Twin GPU", 0x1234, 0x00a2, PciAddress{0, 3, 0, 0}}}, {3, {"Twin GPU", 0x1234, 0x00a2, PciAddress{0, 4, 0, 0}}}}};
+        expect(!makoGpusHaveTwins(gpus) && makoGpusHaveTwins(twins), "two GPUs of one vendor and device are a pair MAKO's vendor and device form cannot tell apart");
+        expect(makoGpusNamedBy("0x1234:0x00A2", gpus) == std::vector<uint32_t>{2} && makoGpusNamedBy("Third GPU", gpus) == std::vector<uint32_t>{3}
+                   && makoGpusNamedBy("1:0.0", gpus) == std::vector<uint32_t>{3} && makoGpusNamedBy("0x1234:0x0001", gpus) == std::vector<uint32_t>{1},
+               "MAKO's file names a GPU as MAKO matches it: by device name, by vendor and device, or by PCI bus, device and function in decimal");
+        expect(makoGpusNamedBy("0x1234:0x00a2", gpus).empty() && makoGpusNamedBy("0000:01:00.0", gpus).empty() && makoGpusNamedBy("Third", gpus).empty(),
+               "lower-case hex, a PCI address with its domain and part of a name match no GPU, as in MAKO");
+        expect(makoGpusNamedBy("0x1234:0x00A2", twins) == std::vector<uint32_t>{2, 3}, "MAKO's vendor and device form names both GPUs of a pair");
+
+        MakoStatus onGame = *generating;
+        expect(makoGpuClaim({onGame}, gpus) == MakoGpuClaim{true, {1}, "", ""}, "generating with no GPU in MAKO's file, it generates on the game's GPU");
+        expect(makoGpuClaimLine(MakoGpuClaim{true, {1}, "", ""}) == "MAKO generates frames on the game's GPU", "and says so");
+        onGame.appliedGpu = "0x1234:0x0001";
+        expect(makoGpuClaim({onGame}, gpus) == MakoGpuClaim{true, {1}, "0x1234:0x0001", ""}, "generating with the game's GPU named, it generates on the game's GPU");
+
+        MakoStatus other = *generating;
+        other.appliedGpu = "0x1234:0x00A2";
+        expect(makoGpuClaim({other}, gpus) == MakoGpuClaim{true, {2}, "0x1234:0x00A2", ""}, "generating with another GPU named, it generates on that GPU");
+        expect(makoGpuClaimLine(makoGpuClaim({other}, gpus).value_or(MakoGpuClaim{})) == "MAKO generates frames on GPU 2", "and names it by its number");
+        expect(makoGpuClaimLine(makoGpuClaim({other}, twins).value_or(MakoGpuClaim{})) == "MAKO generates frames on GPU 2 or GPU 3",
+               "a pair MAKO's form cannot tell apart is named as either, never as the one MAKO may not have opened");
+
+        MakoStatus refused       = *generating;
+        refused.generationActive = false;
+        refused.appliedGpu       = "Third GPU";
+        refused.error            = "failed to create swapchain context";
+        expect(makoGpuClaim({refused}, gpus) == MakoGpuClaim{false, {3}, "Third GPU", "failed to create swapchain context"},
+               "generating none with another GPU named and an error, MAKO named that GPU and failed there");
+        expect(makoGpuClaimLine(makoGpuClaim({refused}, gpus).value_or(MakoGpuClaim{}))
+                   == "MAKO's file names GPU 3 for frame generation, but MAKO generates none: failed to create swapchain context",
+               "and says so with MAKO's error");
+        MakoStatus unknown = refused;
+        unknown.appliedGpu = "Another GPU";
+        unknown.error      = "no suitable physical device found";
+        expect(makoGpuClaimLine(makoGpuClaim({unknown}, gpus).value_or(MakoGpuClaim{}))
+                   == "MAKO's file names \"Another GPU\" for frame generation, but MAKO generates none: no suitable physical device found",
+               "a GPU name no GPU of the game's Vulkan has is said as MAKO's file gives it");
+
+        MakoStatus off = refused;
+        off.error.reset();
+        MakoStatus failedOnGame = refused;
+        failedOnGame.appliedGpu.reset();
+        MakoStatus scalerOnly = other;
+        scalerOnly.role       = "spatial-scaling";
+        expect(!makoGpuClaim({off}, gpus) && !makoGpuClaim({failedOnGame}, gpus),
+               "generating none with no error, as when switched off, or on the game's GPU, it claims nothing about the GPU");
+        expect(!makoGpuClaim({}, gpus) && !makoGpuClaim({scalerOnly}, gpus), "with no status file, or only the scaling role's, it claims nothing");
+        MakoStatus newer = other;
+        newer.context    = refused.context + 1;
+        expect(makoGpuClaim({refused, newer}, gpus) == MakoGpuClaim{true, {2}, "0x1234:0x00A2", ""}, "of two swapchains of the same size the newer one's status is taken");
+    }
+
     expect(makoScalingInactiveWords("factor-not-upscaling") == "MAKO does not scale: the factor is 1x, which scales nothing"
                && makoScalingInactiveWords("application-extent-override-no-source-presentation-split")
                       == "MAKO does not scale: the game asks for the window's full size, not the smaller size MAKO offers it"

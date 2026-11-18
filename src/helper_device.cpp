@@ -101,6 +101,14 @@ namespace vkBasalt
         return {};
     }
 
+    const std::vector<InstanceGpu>& instanceGpusOf(const LogicalDevice& device)
+    {
+        std::vector<InstanceGpu>& gpus = device.offload->instanceGpus;
+        if (gpus.empty())
+            gpus = listInstanceGpus(device.vki, device.instance);
+        return gpus;
+    }
+
     HelperDevice::~HelperDevice()
     {
         if (device.device == VK_NULL_HANDLE || !destroy)

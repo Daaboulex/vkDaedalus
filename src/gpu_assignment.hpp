@@ -213,6 +213,45 @@ namespace vkBasalt
         return {GpuMatchKind::Found, hits.front()};
     }
 
+    struct NumberedGpu
+    {
+        uint32_t number = 0;
+        size_t   index  = 0;
+        GpuId    id;
+    };
+
+    inline std::vector<NumberedGpu> numberedGpus(const std::vector<GpuCandidate>& candidates, size_t gameIndex, const std::vector<GpuListEntry>& list,
+                                                 const std::vector<bool>& offerable)
+    {
+        std::vector<NumberedGpu> numbered;
+        if (gameIndex >= candidates.size())
+            return numbered;
+        const auto taken = [&](size_t index) {
+            return std::any_of(numbered.begin(), numbered.end(), [&](const NumberedGpu& gpu) { return gpu.index == index; });
+        };
+        const GpuCandidate& game = candidates[gameIndex];
+        numbered.push_back({gameGpu, gameIndex, {game.vendor, game.device, std::nullopt}});
+        for (size_t k = 0; k < list.size(); k++)
+            if (const GpuMatch match = list[k].id ? matchGpu(*list[k].id, candidates, gameIndex) : GpuMatch{};
+                match.kind == GpuMatchKind::Found && !taken(match.index))
+                numbered.push_back({static_cast<uint32_t>(k) + firstListedGpu, match.index, *list[k].id});
+        const uint32_t firstUnlisted = static_cast<uint32_t>(list.size()) + firstListedGpu;
+        uint32_t       next          = firstUnlisted;
+        for (size_t i = 0; i < candidates.size(); i++)
+        {
+            if (taken(i) || i >= offerable.size() || !offerable[i])
+                continue;
+            const GpuCandidate& gpu  = candidates[i];
+            const bool          twin = std::count_if(candidates.begin(), candidates.end(), [&](const GpuCandidate& other) {
+                                  return other.vendor == gpu.vendor && other.device == gpu.device;
+                              }) > 1;
+            const GpuId         id{gpu.vendor, gpu.device, twin ? gpu.pci : std::nullopt};
+            if (std::none_of(numbered.begin(), numbered.end(), [&](const NumberedGpu& shown) { return shown.number >= firstUnlisted && shown.id == id; }))
+                numbered.push_back({next++, i, id});
+        }
+        return numbered;
+    }
+
     inline std::vector<uint32_t> gpusOfRows(const std::vector<std::string>& rows, const std::vector<uint32_t>& ownNumbers,
                                             const std::vector<std::string>& chosen)
     {

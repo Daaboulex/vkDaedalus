@@ -249,6 +249,19 @@ namespace vkBasalt
             return false;
         }
 
+        bool wordsOrNull(const Json& root, std::initializer_list<std::string_view> path, std::optional<std::string>& out, std::string& problem)
+        {
+            const Json* value = found(root, path);
+            if (value == nullptr || (value->kind != JsonKind::Null && value->kind != JsonKind::String))
+            {
+                problem = "MAKO's status file holds neither text nor null at " + named(path);
+                return false;
+            }
+            if (value->kind == JsonKind::String)
+                out = value->text;
+            return true;
+        }
+
         bool truth(const Json& root, std::initializer_list<std::string_view> path, bool& out, std::string& problem)
         {
             const Json* value = found(root, path);
@@ -307,14 +320,9 @@ namespace vkBasalt
                 return std::nullopt;
             status.generationUnavailableReason = why;
         }
-        const Json* reason = found(root, {"spatial_scaling", "inactive_reason"});
-        if (reason == nullptr || (reason->kind != JsonKind::Null && reason->kind != JsonKind::String))
-        {
-            problem = "MAKO's status file holds neither text nor null at spatial_scaling.inactive_reason";
+        if (!wordsOrNull(root, {"spatial_scaling", "inactive_reason"}, status.scalingInactiveReason, problem)
+            || !wordsOrNull(root, {"applied", "gpu"}, status.appliedGpu, problem) || !wordsOrNull(root, {"error"}, status.error, problem))
             return std::nullopt;
-        }
-        if (reason->kind == JsonKind::String)
-            status.scalingInactiveReason = reason->text;
         return status;
     }
 
@@ -452,5 +460,57 @@ namespace vkBasalt
         if (!status->appliedScalingEnabled)
             return {MakoScalingRun::NotStarted, "", ""};
         return {MakoScalingRun::NotScaling, "MAKO does not scale, and names no reason", ""};
+    }
+
+    bool makoStatusReadDue(uint64_t presents)
+    {
+        return presents >= makoStatusFirstPresent && (presents - makoStatusFirstPresent) % makoStatusPresentInterval == 0;
+    }
+
+    std::vector<uint32_t> makoGpusNamedBy(std::string_view named, const MakoGpus& gpus)
+    {
+        std::vector<uint32_t> numbers;
+        if (makoGpuMatches(named, gpus.game))
+            numbers.push_back(gameGpu);
+        for (const MakoGpuChoice& other : gpus.others)
+            if (makoGpuMatches(named, other.gpu))
+                numbers.push_back(other.number);
+        return numbers;
+    }
+
+    std::string makoGpusWords(const std::vector<uint32_t>& gpus, std::string_view named)
+    {
+        if (gpus.empty())
+            return "\"" + std::string(named) + "\"";
+        std::string words;
+        for (size_t i = 0; i < gpus.size(); i++)
+            words += (i == 0 ? "" : i + 1 == gpus.size() ? " or " : ", ") + std::string("GPU ") + std::to_string(gpus[i]);
+        return words;
+    }
+
+    std::optional<MakoGpuClaim> makoGpuClaim(const std::vector<MakoStatus>& ofSwapchain, const MakoGpus& gpus)
+    {
+        const MakoStatus* generation = makoGenerationStatus(ofSwapchain);
+        if (generation == nullptr)
+            return std::nullopt;
+        MakoGpuClaim claim{generation->generationActive, {gameGpu}, generation->appliedGpu.value_or(""), ""};
+        if (generation->appliedGpu)
+            claim.gpus = makoGpusNamedBy(*generation->appliedGpu, gpus);
+        if (claim.generating)
+            return claim;
+        if (claim.gpus == std::vector<uint32_t>{gameGpu} || !generation->error)
+            return std::nullopt;
+        claim.error = *generation->error;
+        return claim;
+    }
+
+    std::string makoGpuClaimLine(const MakoGpuClaim& claim)
+    {
+        if (claim.generating && claim.gpus == std::vector<uint32_t>{gameGpu})
+            return "MAKO generates frames on the game's GPU";
+        const std::string where = makoGpusWords(claim.gpus, claim.named);
+        if (claim.generating)
+            return "MAKO generates frames on " + where;
+        return "MAKO's file names " + where + " for frame generation, but MAKO generates none: " + claim.error;
     }
 }

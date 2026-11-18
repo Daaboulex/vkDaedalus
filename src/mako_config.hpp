@@ -12,6 +12,7 @@
 
 #include "frame_generation.hpp"
 #include "gpu_assignment.hpp"
+#include "mako_gpu.hpp"
 
 namespace vkBasalt
 {
@@ -162,14 +163,6 @@ namespace vkBasalt
     {
         bool            battery = false;
         MakoPowerSource source  = MakoPowerSource::Unknown;
-    };
-
-    struct MakoGpu
-    {
-        std::string               name;
-        uint32_t                  vendorId = 0;
-        uint32_t                  deviceId = 0;
-        std::optional<PciAddress> pci;
     };
 
     struct MakoGreyedWhy

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <sys/stat.h>
 #include <dlfcn.h>
+#include <unistd.h>
 
 #include "util.hpp"
 #include "keyboard_input.hpp"
@@ -38,6 +39,7 @@
 #include "frame_generation.hpp"
 #include "frame_generation_place.hpp"
 #include "mako_config.hpp"
+#include "mako_status.hpp"
 #include "latency_stats.hpp"
 
 #include "image_view.hpp"
@@ -874,13 +876,10 @@ namespace vkBasalt
 
     void fillGpuState(LogicalDevice* pLogicalDevice, OverlayState& overlayState, bool rowTimes)
     {
-        const std::shared_ptr<DeviceOffload> offload   = pLogicalDevice->offload;
-        const LayerInstance*                 pInstance = findInstance(GetKey(pLogicalDevice->instance));
-        if (!offload || !pInstance)
+        const std::shared_ptr<DeviceOffload> offload = pLogicalDevice->offload;
+        if (!offload)
             return;
-        if (offload->instanceGpus.empty())
-            offload->instanceGpus = listInstanceGpus(pInstance->vki, pInstance->handle);
-        const std::vector<InstanceGpu>& gpus = offload->instanceGpus;
+        const std::vector<InstanceGpu>& gpus = instanceGpusOf(*pLogicalDevice);
         std::vector<GpuCandidate>       candidates;
         size_t                          gameIndex = gpus.size();
         for (size_t i = 0; i < gpus.size(); i++)
@@ -895,7 +894,6 @@ namespace vkBasalt
         overlayState.gpus.push_back({gameGpu, formatGpuId({gpus[gameIndex].id.vendor, gpus[gameIndex].id.device, std::nullopt}),
                                      gpus[gameIndex].properties.deviceName, "the game draws on this GPU"});
         const GpuPlan      plan = effectRegistry.gpuPlan();
-        std::set<size_t>   listed;
         const std::vector<uint32_t> used = otherGpusAmong(gpusOfRows(plan.rows, plan.ownGpus, effectRegistry.getActiveEffects()));
         for (size_t k = 0; k < plan.list.size(); k++)
         {
@@ -918,7 +916,6 @@ namespace vkBasalt
                     shown.status = "is GPU 1, the one the game draws on";
                 else
                 {
-                    listed.insert(match.index);
                     const VkPhysicalDevice physical = gpus[match.index].physical;
                     shown.name                      = gpus[match.index].properties.deviceName;
                     GpuStatusFacts facts;
@@ -940,18 +937,9 @@ namespace vkBasalt
             }
             overlayState.gpus.push_back(shown);
         }
-        for (size_t i = 0; i < gpus.size(); i++)
-        {
-            if (i == gameIndex || listed.count(i) || gpus[i].properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
-                continue;
-            const bool twin = std::count_if(gpus.begin(), gpus.end(), [&](const InstanceGpu& other) {
-                                  return other.id.vendor == gpus[i].id.vendor && other.id.device == gpus[i].id.device;
-                              }) > 1;
-            const GpuId id{gpus[i].id.vendor, gpus[i].id.device, twin ? gpus[i].id.pci : std::nullopt};
-            const std::string offered = formatGpuId(id);
-            if (std::none_of(overlayState.addableGpus.begin(), overlayState.addableGpus.end(), [&](const OverlayGpu& g) { return g.id == offered; }))
-                overlayState.addableGpus.push_back({0, offered, gpus[i].properties.deviceName, ""});
-        }
+        for (const NumberedGpu& numbered : numberedInstanceGpus(gpus, pLogicalDevice->physicalDevice, plan.list))
+            if (numbered.number >= firstListedGpu + plan.list.size())
+                overlayState.addableGpus.push_back({numbered.number, formatGpuId(numbered.id), gpus[numbered.index].properties.deviceName, ""});
         for (const auto& [_, swapchain] : swapchainMap)
         {
             if (rowTimes && swapchain && swapchain->pLogicalDevice == pLogicalDevice && swapchain->chain && !swapchain->chain->failed)
@@ -2554,6 +2542,24 @@ namespace vkBasalt
         Logger::info(line);
     }
 
+    static void logMakoGpuClaim(LogicalDevice& device, LogicalSwapchain& swapchain, uint64_t presents)
+    {
+        if (!makoStatusReadDue(presents) || !makoLayerLoaded() || !device.offload)
+            return;
+        static const uint64_t startTicks = thisProcessStartTicks();
+        const MakoStatusRead  read       = readMakoStatus(makoStatusFolder(makoConfigPath()), static_cast<uint64_t>(getpid()), startTicks,
+                                                          swapchain.imageExtent.width, swapchain.imageExtent.height);
+        const std::optional<MakoGpuClaim> claim =
+            makoGpuClaim(read.ofSwapchain, makoGpusOf(instanceGpusOf(device), device.physicalDevice, effectRegistry.gpuPlan().list));
+        if (claim == swapchain.makoGpuClaimLogged)
+            return;
+        swapchain.makoGpuClaimLogged = claim;
+        if (claim && claim->generating)
+            Logger::info(makoGpuClaimLine(*claim));
+        else if (claim)
+            Logger::warn(makoGpuClaimLine(*claim));
+    }
+
     VKAPI_ATTR VkResult VKAPI_CALL vkBasalt_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo)
     {
         const auto                  presentedAt = std::chrono::steady_clock::now();
@@ -2596,6 +2602,7 @@ namespace vkBasalt
                     pLogicalSwapchain->shownReported      = pLogicalSwapchain->shownAtStart;
                 }
                 seen.record(presentedAt);
+                logMakoGpuClaim(*pLogicalSwapchain->pLogicalDevice, *pLogicalSwapchain, seen.intervalCount() + 1);
                 const double window = seen.intervalSumMs() - pLogicalSwapchain->ratesReportedMs;
                 if (window >= frameRatesReportMs)
                 {

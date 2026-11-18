@@ -46,6 +46,8 @@ namespace vkBasalt
         std::vector<InstanceGpu>                                  instanceGpus;
     };
 
+    const std::vector<InstanceGpu>& instanceGpusOf(const LogicalDevice& device);
+
     struct HelperRequest
     {
         InstanceDispatch         vki;

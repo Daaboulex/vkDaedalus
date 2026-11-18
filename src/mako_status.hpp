@@ -7,9 +7,13 @@
 #include <string_view>
 #include <vector>
 
+#include "mako_gpu.hpp"
+
 namespace vkBasalt
 {
-    inline constexpr std::string_view makoGenerationRole = "frame-generation";
+    inline constexpr std::string_view makoGenerationRole        = "frame-generation";
+    inline constexpr uint64_t         makoStatusFirstPresent    = 120;
+    inline constexpr uint64_t         makoStatusPresentInterval = 600;
 
     struct MakoStatus
     {
@@ -27,6 +31,8 @@ namespace vkBasalt
         uint32_t                   sourceHeight       = 0;
         uint32_t                   presentationWidth  = 0;
         uint32_t                   presentationHeight = 0;
+        std::optional<std::string> appliedGpu;
+        std::optional<std::string> error;
 
         bool operator==(const MakoStatus&) const = default;
     };
@@ -55,6 +61,16 @@ namespace vkBasalt
         bool operator==(const MakoScalingShown&) const = default;
     };
 
+    struct MakoGpuClaim
+    {
+        bool                  generating = false;
+        std::vector<uint32_t> gpus;
+        std::string           named;
+        std::string           error;
+
+        bool operator==(const MakoGpuClaim&) const = default;
+    };
+
     std::optional<MakoStatus> parseMakoStatus(const std::string& text, std::string& problem);
     std::string               makoStatusFolder(const std::string& configPath);
     bool                      isMakoStatusFileOf(std::string_view fileName, uint64_t pid, uint64_t startTicks);
@@ -69,6 +85,12 @@ namespace vkBasalt
     std::string       makoScalingSizes(const MakoStatus& status);
     std::string       makoScalingInactiveWords(std::string_view reason);
     MakoScalingShown  makoScalingShown(bool onInFile, bool makoRunsTheProfile, const MakoStatusRead& read);
+    bool              makoStatusReadDue(uint64_t presents);
+
+    std::vector<uint32_t>       makoGpusNamedBy(std::string_view named, const MakoGpus& gpus);
+    std::string                 makoGpusWords(const std::vector<uint32_t>& gpus, std::string_view named);
+    std::optional<MakoGpuClaim> makoGpuClaim(const std::vector<MakoStatus>& ofSwapchain, const MakoGpus& gpus);
+    std::string                 makoGpuClaimLine(const MakoGpuClaim& claim);
 }
 
 #endif
